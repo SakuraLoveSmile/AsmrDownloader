@@ -12,6 +12,7 @@ final asmrApiProvider = Provider<AsmrApi>((ref) {
   return AsmrApi(
     name: 'REDACTED_LOGIN_NAME',
     password: 'REDACTED_LOGIN_PASSWORD',
+    proxy: '127.0.0.1:7890',
   );
 });
 
