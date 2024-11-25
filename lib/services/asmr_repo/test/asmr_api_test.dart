@@ -17,7 +17,7 @@ void main() {
   late final AsmrApi asmrApi;
 
   setUpAll(() async {
-    Log.d('set up');
+    Log.debug('set up');
     asmrApi = AsmrApi(
       name: 'REDACTED_LOGIN_NAME',
       password: 'REDACTED_LOGIN_PASSWORD',
