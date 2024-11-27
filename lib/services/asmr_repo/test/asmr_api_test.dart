@@ -18,10 +18,7 @@ void main() {
 
   setUpAll(() async {
     Log.debug('set up');
-    asmrApi = AsmrApi(
-      name: 'REDACTED_LOGIN_NAME',
-      password: 'REDACTED_LOGIN_PASSWORD',
-    );
+    asmrApi = AsmrApi();
 
     // await asmrApi.login();
   });
