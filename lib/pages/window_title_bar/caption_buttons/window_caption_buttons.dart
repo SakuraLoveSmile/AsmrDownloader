@@ -93,22 +93,7 @@ class _MaximizeButtonState extends ConsumerState<MaximizeButton>
     super.dispose();
   }
 
-  @override
-  void onWindowMaximize() {
-    setState(() {});
-  }
-
-  @override
-  void onWindowUnmaximize() {
-    setState(() {});
-  }
-
-  @override
-  void onWindowFocus() {
-    // Make sure to call once.
-    setState(() {});
-  }
-
+  // 监听窗口事件：https://leanflutter.dev/documentation/window_manager/quick-start#%E7%9B%91%E5%90%AC%E4%BA%8B%E4%BB%B6
   @override
   void onWindowClose() {
     ref.read(uiServiceProvider).onExit(context);
