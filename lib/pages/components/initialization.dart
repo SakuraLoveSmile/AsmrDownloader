@@ -1,5 +1,7 @@
 import 'package:asmr_downloader/common/config_providers.dart';
+import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
+import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +19,11 @@ class _InitializationState extends ConsumerState<Initialization> {
   void initState() {
     super.initState();
     // init
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // startup search
+      await Future.delayed(const Duration(milliseconds: PASTE_SEARCH_DELAY_MS));
+      ref.read(uiServiceProvider).pasteAndSearch();
+    });
   }
 
   @override

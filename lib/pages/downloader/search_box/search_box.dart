@@ -1,3 +1,4 @@
+import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
@@ -17,6 +18,21 @@ class SearchBoxState extends ConsumerState<SearchBox> {
   String _inputText = '';
 
   @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(
+          const Duration(milliseconds: PASTE_SEARCH_DELAY_MS + 20));
+      final currentSearchText = ref.read(searchTextProvider);
+      if (currentSearchText != null) {
+        _controller.text = currentSearchText;
+        _inputText = currentSearchText;
+      }
+    });
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -26,6 +42,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
   Widget build(BuildContext context) {
     final downloading =
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
+
     return SizedBox(
       height: 50.0,
       child: Padding(
