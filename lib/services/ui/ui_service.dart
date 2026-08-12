@@ -100,6 +100,15 @@ class UIService {
     Log.info('dlCover: $value');
   }
 
+  void onAutoOrganizeChanged(bool? value) {
+    if (value == null) return;
+
+    ref
+      ..read(autoOrganizeProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'autoOrganize': value});
+    Log.info('autoOrganize: $value');
+  }
+
   Future<void> pickDlPath() async {
     final dlPath = await FilePicker.platform.getDirectoryPath();
     if (dlPath == null) return;
@@ -120,29 +129,26 @@ class UIService {
     Log.info('navidromePath: $navidromePath');
   }
 
-  /// 整理当前作品到 Navidrome 媒体库结构
-  Future<void> organizeToNavidrome(BuildContext context) async {
-    // 整理路径未设置时先选择
+  /// 执行整理（不依赖 UI），返回整理结果；未执行成功返回 null
+  /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器（手动整理时 true，自动整理时 false）
+  Future<OrganizeResult?> organizeCurrentWork(
+      {bool pickPathIfEmpty = false}) async {
     var navidromePath = ref.read(navidromePathProvider);
     if (navidromePath.isEmpty) {
+      if (!pickPathIfEmpty) {
+        Log.warning('organize skipped: navidromePath not set');
+        return null;
+      }
       await pickNavidromePath();
-      if (!context.mounted) return;
       navidromePath = ref.read(navidromePathProvider);
-      if (navidromePath.isEmpty) return;
+      if (navidromePath.isEmpty) return null;
     }
 
     final sourceId = ref.read(sourceIdProvider);
-    if (sourceId == null) {
-      _showSnack(context, '请先搜索作品');
-      return;
-    }
+    if (sourceId == null) return null;
 
-    final voiceWorkPath = ref.read(voiceWorkPathProvider);
-    final sourceDir = p.join(voiceWorkPath, sourceId);
-    if (!Directory(sourceDir).existsSync()) {
-      _showSnack(context, '作品尚未下载');
-      return;
-    }
+    final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
+    if (!Directory(sourceDir).existsSync()) return null;
 
     // 复用封面下载功能获取封面字节（不依赖本地 *_cover.jpg 文件）
     Uint8List? coverBytes;
@@ -153,7 +159,6 @@ class UIService {
       final coverUrl = ref.read(coverUrlProvider);
       if (coverUrl.isNotEmpty) {
         coverBytes = await ref.read(asmrApiProvider).getCoverBytes(coverUrl);
-        if (!context.mounted) return;
       }
     }
 
@@ -165,7 +170,7 @@ class UIService {
       fetchWorkInfo: (id) => ref.read(asmrApiProvider).getWorkInfo(id),
     );
 
-    final result = await NavidromeOrganizer.organize(
+    return NavidromeOrganizer.organize(
       sourceDir: sourceDir,
       targetRoot: navidromePath,
       circleName: circleName,
@@ -174,8 +179,17 @@ class UIService {
       title: ref.read(titleProvider),
       coverBytes: coverBytes,
     );
+  }
+
+  /// 手动整理当前作品到 Navidrome 媒体库结构
+  Future<void> organizeToNavidrome(BuildContext context) async {
+    final result = await organizeCurrentWork(pickPathIfEmpty: true);
 
     if (!context.mounted) return;
+    if (result == null) {
+      _showSnack(context, '整理失败：请先搜索并下载作品');
+      return;
+    }
     _showSnack(context,
         '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
   }

@@ -14,6 +14,9 @@ final downloadPathProvider = StateProvider<String>((ref) => '');
 /// Navidrome 媒体库根目录（整理功能的目标路径）
 final navidromePathProvider = StateProvider<String>((ref) => '');
 
+/// 下载完成后自动整理到 Navidrome
+final autoOrganizeProvider = StateProvider<bool>((ref) => false);
+
 final dlCoverProvider = StateProvider<bool>((ref) => false);
 
 final proxyProvider = StateProvider<String>((ref) => 'DIRECT');
