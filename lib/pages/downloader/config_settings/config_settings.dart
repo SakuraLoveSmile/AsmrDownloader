@@ -2,6 +2,7 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/navidrome_path_picker.dart';
 import 'package:flutter/widgets.dart';
 
 class ConfigSettings extends StatelessWidget {
@@ -12,6 +13,7 @@ class ConfigSettings extends StatelessWidget {
     return Row(
       children: [
         DownloadPathPicker(),
+        NavidromePathPicker(),
         DlCoverCheck(),
         AsmrProxy(),
         AsmrApiChannel(),

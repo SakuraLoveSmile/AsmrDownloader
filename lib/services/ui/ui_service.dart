@@ -6,6 +6,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:asmr_downloader/utils/log.dart';
@@ -107,6 +108,75 @@ class UIService {
       ..read(downloadPathProvider.notifier).state = dlPath
       ..read(configFileProvider).addOrUpdate({'dlPath': dlPath});
     Log.info('dlPath: $dlPath');
+  }
+
+  Future<void> pickNavidromePath() async {
+    final navidromePath = await FilePicker.platform.getDirectoryPath();
+    if (navidromePath == null) return;
+
+    ref
+      ..read(navidromePathProvider.notifier).state = navidromePath
+      ..read(configFileProvider).addOrUpdate({'navidromePath': navidromePath});
+    Log.info('navidromePath: $navidromePath');
+  }
+
+  /// 整理当前作品到 Navidrome 媒体库结构
+  Future<void> organizeToNavidrome(BuildContext context) async {
+    // 整理路径未设置时先选择
+    var navidromePath = ref.read(navidromePathProvider);
+    if (navidromePath.isEmpty) {
+      await pickNavidromePath();
+      if (!context.mounted) return;
+      navidromePath = ref.read(navidromePathProvider);
+      if (navidromePath.isEmpty) return;
+    }
+
+    final sourceId = ref.read(sourceIdProvider);
+    if (sourceId == null) {
+      _showSnack(context, '请先搜索作品');
+      return;
+    }
+
+    final voiceWorkPath = ref.read(voiceWorkPathProvider);
+    final sourceDir = p.join(voiceWorkPath, sourceId);
+    if (!Directory(sourceDir).existsSync()) {
+      _showSnack(context, '作品尚未下载');
+      return;
+    }
+
+    // 复用封面下载功能获取封面字节（不依赖本地 *_cover.jpg 文件）
+    Uint8List? coverBytes;
+    final coverAsync = ref.read(coverBytesProvider);
+    if (coverAsync is AsyncData && coverAsync.value != null) {
+      coverBytes = coverAsync.value;
+    } else {
+      final coverUrl = ref.read(coverUrlProvider);
+      if (coverUrl.isNotEmpty) {
+        coverBytes = await ref.read(asmrApiProvider).getCoverBytes(coverUrl);
+        if (!context.mounted) return;
+      }
+    }
+
+    final result = await NavidromeOrganizer.organize(
+      sourceDir: sourceDir,
+      targetRoot: navidromePath,
+      circleName: ref.read(circleNameProvider),
+      sourceId: sourceId,
+      cvNames: ref.read(cvLsProvider).join('&'),
+      title: ref.read(titleProvider),
+      coverBytes: coverBytes,
+    );
+
+    if (!context.mounted) return;
+    _showSnack(context,
+        '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
+  }
+
+  void _showSnack(BuildContext context, String message) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void openFolder() async {
