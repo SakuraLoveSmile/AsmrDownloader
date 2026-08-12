@@ -83,6 +83,8 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
     savedDlPath = downloadsDir?.path ?? '';
   }
   ref.read(downloadPathProvider.notifier).state = savedDlPath;
+  ref.read(navidromePathProvider.notifier).state =
+      config['navidromePath'] as String? ?? '';
   ref.read(dlCoverProvider.notifier).state =
       config['dlCover'] as bool? ?? false;
 });

@@ -11,6 +11,9 @@ final configFileProvider = Provider<JsonStorage>((ref) {
 
 final downloadPathProvider = StateProvider<String>((ref) => '');
 
+/// Navidrome 媒体库根目录（整理功能的目标路径）
+final navidromePathProvider = StateProvider<String>((ref) => '');
+
 final dlCoverProvider = StateProvider<bool>((ref) => false);
 
 final proxyProvider = StateProvider<String>((ref) => 'DIRECT');
