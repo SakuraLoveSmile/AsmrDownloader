@@ -1,4 +1,8 @@
-import 'package:asmr_downloader/pages/downloader/config_settings/config_settings.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_api_channel.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
 import 'package:flutter/material.dart';
@@ -12,13 +16,25 @@ class Downloader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 窗口较窄时横向滚动，避免设置项溢出
+          // 第一行：搜索 + 下载路径 + API channel
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 SearchBox(),
-                ConfigSettings(),
+                DownloadPathPicker(),
+                AsmrApiChannel(),
+              ],
+            ),
+          ),
+          // 第二行：下载封面 + 启用代理 + 整理
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                DlCoverCheck(),
+                AsmrProxy(),
+                OrganizeButton(),
               ],
             ),
           ),
