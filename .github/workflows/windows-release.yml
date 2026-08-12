@@ -108,12 +108,7 @@ jobs:
           path: dist/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: "${{ env.APP_NAME }} ${{ env.VERSION }}"
-          files: "dist/*.zip"
-          generate_release_notes: false
-          draft: false
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # gh release create 在 tag 不存在时会自动创建（workflow_dispatch 场景）
+        run: gh release create "$VERSION" dist/*.zip --title "$APP_NAME $VERSION"
