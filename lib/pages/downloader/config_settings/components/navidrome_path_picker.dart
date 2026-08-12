@@ -18,7 +18,7 @@ class NavidromePathPicker extends ConsumerWidget {
         child: Row(
           children: [
             SizedBox(
-              width: 250,
+              width: 180,
               child: TextField(
                 enabled: false,
                 cursorColor: _color,

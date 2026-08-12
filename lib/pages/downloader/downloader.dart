@@ -12,11 +12,15 @@ class Downloader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              SearchBox(),
-              ConfigSettings(),
-            ],
+          // 窗口较窄时横向滚动，避免设置项溢出
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                SearchBox(),
+                ConfigSettings(),
+              ],
+            ),
           ),
           SizedBox(height: 20),
           SearchResult(),

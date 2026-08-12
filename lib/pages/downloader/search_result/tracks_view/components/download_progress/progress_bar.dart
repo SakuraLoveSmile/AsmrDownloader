@@ -8,11 +8,9 @@ class ProgressBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appWidth = MediaQuery.of(context).size.width;
     final process = ref.watch(processProvider);
     final currentFileName = ref.watch(currentFileNameProvider);
-    return SizedBox(
-      width: appWidth * 0.35,
+    return Expanded(
       child: Stack(children: [
         LinearProgressIndicator(
           minHeight: 30,
