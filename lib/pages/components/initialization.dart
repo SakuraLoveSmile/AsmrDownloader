@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
@@ -5,6 +7,7 @@ import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 class Initialization extends ConsumerStatefulWidget {
   const Initialization({super.key, required this.child});
@@ -73,8 +76,13 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
 
   // misc
 
-  ref.read(downloadPathProvider.notifier).state =
-      config['dlPath'] as String? ?? '';
+  // macOS 默认下载到 ~/Downloads；Windows 保持应用目录（相对路径）
+  var savedDlPath = config['dlPath'] as String? ?? '';
+  if (savedDlPath.isEmpty && Platform.isMacOS) {
+    final downloadsDir = await getDownloadsDirectory();
+    savedDlPath = downloadsDir?.path ?? '';
+  }
+  ref.read(downloadPathProvider.notifier).state = savedDlPath;
   ref.read(dlCoverProvider.notifier).state =
       config['dlCover'] as bool? ?? false;
 });

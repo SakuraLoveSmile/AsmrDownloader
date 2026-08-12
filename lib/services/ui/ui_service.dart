@@ -28,7 +28,9 @@ class UIService {
       ..read(currentDlNoProvider.notifier).state = 0
       ..read(totalTaskCntProvider.notifier).state = 0
       ..read(currentFileNameProvider.notifier).state = '';
-    await WindowsTaskbar.setProgress(0, 0);
+    if (Platform.isWindows) {
+      await WindowsTaskbar.setProgress(0, 0);
+    }
   }
 
   String normalizeInput(String sourceId) {
@@ -115,7 +117,11 @@ class UIService {
         ? vkSourceIdPath
         : ref.read(downloadPathProvider);
 
-    Process.run('explorer "$path"', []);
+    if (Platform.isWindows) {
+      Process.run('explorer "$path"', []);
+    } else {
+      Process.run('open', [path]);
+    }
     Log.info('open folder: "$path"');
   }
 

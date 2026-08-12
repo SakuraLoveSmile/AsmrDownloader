@@ -1,4 +1,4 @@
-name: AsmrDownloader Windows Release Build
+name: AsmrDownloader Release Build
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
 
     env:
@@ -33,15 +33,71 @@ jobs:
       - name: Compress Release Folder
         shell: pwsh
         run: |
-          if (!(Test-Path -Path "dist")) {
-            New-Item -ItemType Directory -Path "dist"
-          }
-
           $ZipFileName = "${{ env.APP_NAME }}-${{ env.VERSION }}-Windows.zip"
-
           Compress-Archive `
             -Path build/windows/x64/runner/Release/* `
-            -DestinationPath "dist/$ZipFileName"
+            -DestinationPath "$ZipFileName"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: "*.zip"
+          if-no-files-found: error
+
+  build-macos:
+    runs-on: macos-latest
+
+    env:
+      APP_NAME: "${{ github.event.repository.name }}"
+      VERSION: "${{ github.ref_name }}"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.3'
+          channel: stable
+          cache: true
+
+      - name: Build macOS Release
+        run: flutter build macos --release
+
+      - name: Compress Release Folder
+        run: |
+          ZipFileName="${{ env.APP_NAME }}-${{ env.VERSION }}-macOS.zip"
+          ditto -c -k --keepParent "build/macos/Build/Products/Release/AsmrDownloader.app" "$ZipFileName"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: "*.zip"
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos]
+
+    env:
+      APP_NAME: "${{ github.event.repository.name }}"
+      VERSION: "${{ github.ref_name }}"
+
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist/
+
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-release
+          path: dist/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 
@@ -27,7 +28,7 @@ class Log {
   }
 
   File _getLogFile() {
-    final logFilePath = p.join('debug', 'asmr_downloader.log');
+    final logFilePath = p.join(getAppDataDir(), 'debug', 'asmr_downloader.log');
     final logFile = File(logFilePath);
 
     if (!logFile.existsSync()) {

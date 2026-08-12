@@ -70,11 +70,13 @@ class DownloadManager {
     // download completed
 
     ref.read(dlStatusProvider.notifier).state = DownloadStatus.completed;
-    await WindowsTaskbar.setFlashTaskbarAppIcon(
-      mode: TaskbarFlashMode.all | TaskbarFlashMode.timernofg,
-      flashCount: 5,
-      timeout: const Duration(milliseconds: 500),
-    );
+    if (Platform.isWindows) {
+      await WindowsTaskbar.setFlashTaskbarAppIcon(
+        mode: TaskbarFlashMode.all | TaskbarFlashMode.timernofg,
+        flashCount: 5,
+        timeout: const Duration(milliseconds: 500),
+      );
+    }
   }
 
   int countTotalTask(Folder rootFolder) {
@@ -113,8 +115,10 @@ class DownloadManager {
 
         // set download completed state
         ref.read(processProvider.notifier).state = 1;
-        await WindowsTaskbar.setProgress(
-            ref.read(currentDlNoProvider), ref.read(totalTaskCntProvider));
+        if (Platform.isWindows) {
+          await WindowsTaskbar.setProgress(
+              ref.read(currentDlNoProvider), ref.read(totalTaskCntProvider));
+        }
 
         Log.info('save cover completed: $coverName' 'savePath: $savePath');
       } catch (e) {
@@ -193,8 +197,10 @@ class DownloadManager {
       // task.progress = 1;
 
       ref.read(processProvider.notifier).state = 1;
-      await WindowsTaskbar.setProgress(
-          ref.read(currentDlNoProvider), ref.read(totalTaskCntProvider));
+      if (Platform.isWindows) {
+        await WindowsTaskbar.setProgress(
+            ref.read(currentDlNoProvider), ref.read(totalTaskCntProvider));
+      }
     }
   }
 
