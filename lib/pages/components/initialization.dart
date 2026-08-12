@@ -87,4 +87,6 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['navidromePath'] as String? ?? '';
   ref.read(dlCoverProvider.notifier).state =
       config['dlCover'] as bool? ?? false;
+  ref.read(autoOrganizeProvider.notifier).state =
+      config['autoOrganize'] as bool? ?? false;
 });

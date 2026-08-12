@@ -77,6 +77,17 @@ class DownloadManager {
         timeout: const Duration(milliseconds: 500),
       );
     }
+
+    // auto organize to navidrome
+    if (ref.read(autoOrganizeProvider)) {
+      final result = await ref.read(uiServiceProvider).organizeCurrentWork();
+      if (result != null) {
+        Log.info('auto organize completed: copied ${result.copied}, '
+            'skipped ${result.skipped}');
+      } else {
+        Log.warning('auto organize failed or skipped');
+      }
+    }
   }
 
   int countTotalTask(Folder rootFolder) {
