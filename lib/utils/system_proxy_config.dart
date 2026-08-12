@@ -1,6 +1,5 @@
 // ignore_for_file: non_constant_identifier_names, camel_case_types
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -99,13 +98,10 @@ class SystemProxyConfig {
   }
 
   /// macOS 通过 `scutil --proxy` 读取系统代理。
-  /// 输出为 plist 文本，用 `plutil -convert json` 转成 JSON 再解析。
+  /// 输出为 `key : value` 文本格式（如 `HTTPSProxy : 127.0.0.1`），直接解析。
   static String getMacOSSystemProxy() {
     try {
-      final result = Process.runSync(
-        'sh',
-        ['-c', 'scutil --proxy | plutil -convert json -o - -'],
-      );
+      final result = Process.runSync('scutil', ['--proxy']);
       if (result.exitCode != 0) {
         Log.error('failed to get system proxy config.\n'
             'error: scutil exit code ${result.exitCode}\n'
@@ -113,17 +109,25 @@ class SystemProxyConfig {
         return 'DIRECT';
       }
 
-      final data =
-          json.decode(result.stdout as String) as Map<String, dynamic>;
+      final lines = (result.stdout as String).split('\n');
+      String? getValue(String key) {
+        for (final line in lines) {
+          final match = RegExp('^$key\\s*:\\s*(.+)\$').firstMatch(line.trim());
+          if (match != null) {
+            return match.group(1)?.trim();
+          }
+        }
+        return null;
+      }
 
       String? host;
-      int? port;
-      if (data['HTTPSEnable'] == 1) {
-        host = data['HTTPSProxy'] as String?;
-        port = data['HTTPSPort'] as int?;
-      } else if (data['HTTPEnable'] == 1) {
-        host = data['HTTPProxy'] as String?;
-        port = data['HTTPPort'] as int?;
+      String? port;
+      if (getValue('HTTPSEnable') == '1') {
+        host = getValue('HTTPSProxy');
+        port = getValue('HTTPSPort');
+      } else if (getValue('HTTPEnable') == '1') {
+        host = getValue('HTTPProxy');
+        port = getValue('HTTPPort');
       }
 
       if (host == null || host.isEmpty || port == null) {
