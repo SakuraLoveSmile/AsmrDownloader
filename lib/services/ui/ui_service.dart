@@ -157,10 +157,18 @@ class UIService {
       }
     }
 
+    // 汉化版作品的 circle 是汉化组名，跟踪到原版取真实社团名
+    final workInfo = ref.read(workInfoProvider).value;
+    final circleName = await NavidromeOrganizer.resolveCircleName(
+      workInfo: workInfo,
+      fallbackCircle: ref.read(circleNameProvider),
+      fetchWorkInfo: (id) => ref.read(asmrApiProvider).getWorkInfo(id),
+    );
+
     final result = await NavidromeOrganizer.organize(
       sourceDir: sourceDir,
       targetRoot: navidromePath,
-      circleName: ref.read(circleNameProvider),
+      circleName: circleName,
       sourceId: sourceId,
       cvNames: ref.read(cvLsProvider).join('&'),
       title: ref.read(titleProvider),

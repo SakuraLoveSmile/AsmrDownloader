@@ -16,6 +16,47 @@ class OrganizeResult {
 /// `<targetRoot>/<circleName>/<sourceId> - <cvNames> - <title>/<sourceId>/`
 /// 音轨/字幕/歌词文件扁平化复制，保留原名；封面保存为 cover.jpg（Navidrome 自动识别）。
 class NavidromeOrganizer {
+  /// 解析整理用的社团名。
+  /// 汉化版作品的 circle 是汉化组名，需要跟踪到原版（original_workno）取真实社团名。
+  /// [workInfo] 当前作品的 workInfo；[fallbackCircle] 当前作品返回的 circle 名
+  /// [fetchWorkInfo] 按数字 id 拉取作品信息（可注入 mock 便于测试）
+  static Future<String> resolveCircleName({
+    required Map<String, dynamic>? workInfo,
+    required String fallbackCircle,
+    required Future<Map<String, dynamic>?> Function(String id)
+        fetchWorkInfo,
+  }) async {
+    if (workInfo == null) return fallbackCircle;
+
+    final translationInfo =
+        workInfo['translation_info'] as Map<String, dynamic>?;
+    // 原版作品直接用当前 circle
+    if (translationInfo?['is_original'] == true) {
+      return fallbackCircle;
+    }
+
+    // 汉化版：从其他语言版本中找原版，取原版 circle
+    try {
+      final editions =
+          workInfo['other_language_editions_in_db'] as List? ?? const [];
+      for (final edition in editions) {
+        final e = edition as Map<String, dynamic>;
+        if (e['is_original'] == true && e['id'] != null) {
+          final originalInfo = await fetchWorkInfo(e['id'].toString());
+          final originalCircle =
+              originalInfo?['circle']?['name']?.toString();
+          if (originalCircle != null && originalCircle.isNotEmpty) {
+            return originalCircle;
+          }
+        }
+      }
+    } catch (e) {
+      Log.error('resolve original circle failed\n' 'error: $e');
+    }
+
+    return fallbackCircle;
+  }
+
   /// [sourceDir] 下载的作品目录（`<voiceWorkPath>/<sourceId>`）
   /// [targetRoot] Navidrome 媒体库根目录
   /// [coverBytes] 封面字节，非空时保存为 `cover.jpg`
