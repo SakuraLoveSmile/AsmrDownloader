@@ -69,6 +69,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Test
+        run: flutter test test/system_proxy_config_test.dart
+
       - name: Build macOS Release
         run: flutter build macos --release
 
