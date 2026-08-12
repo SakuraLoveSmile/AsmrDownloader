@@ -20,7 +20,7 @@ jobs:
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
-      VERSION: "${{ github.event_name == 'push' ? github.ref_name : inputs.version }}"
+      VERSION: "${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
 
     steps:
       - name: Checkout
@@ -56,7 +56,7 @@ jobs:
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
-      VERSION: "${{ github.event_name == 'push' ? github.ref_name : inputs.version }}"
+      VERSION: "${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
 
     steps:
       - name: Checkout
@@ -92,7 +92,7 @@ jobs:
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
-      VERSION: "${{ github.event_name == 'push' ? github.ref_name : inputs.version }}"
+      VERSION: "${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
 
     steps:
       - name: Download Windows Artifact
