@@ -158,4 +158,65 @@ void main() {
     );
     expect(File(p.join(workDir, 'cover.jpg')).existsSync(), false);
   });
+
+  group('resolveCircleName', () {
+    // 汉化版数据结构（与 asmr API 实际返回一致）
+    Map<String, dynamic> translatedWork({String circle = '汉化组'}) => {
+          'title': '【简体中文版】测试',
+          'circle': {'id': 999, 'name': circle},
+          'translation_info': {
+            'is_original': false,
+            'original_workno': 'RJ01618607',
+          },
+          'other_language_editions_in_db': [
+            {'id': 1618607, 'source_id': 'RJ01618607', 'is_original': true},
+          ],
+        };
+
+    Map<String, dynamic> originalWork() => {
+          'title': '【日本語】テスト',
+          'circle': {'id': 35667, 'name': '空心菜館'},
+          'translation_info': {'is_original': true},
+          'other_language_editions_in_db': <Object>[],
+        };
+
+    test('原版作品直接用当前 circle', () async {
+      final circle = await NavidromeOrganizer.resolveCircleName(
+        workInfo: originalWork(),
+        fallbackCircle: '空心菜館',
+        fetchWorkInfo: (_) async => null,
+      );
+      expect(circle, '空心菜館');
+    });
+
+    test('汉化版跟踪到原版取真实社团名', () async {
+      final circle = await NavidromeOrganizer.resolveCircleName(
+        workInfo: translatedWork(),
+        fallbackCircle: '汉化组',
+        fetchWorkInfo: (id) async {
+          expect(id, '1618607');
+          return originalWork();
+        },
+      );
+      expect(circle, '空心菜館');
+    });
+
+    test('原版信息获取失败时 fallback 当前 circle', () async {
+      final circle = await NavidromeOrganizer.resolveCircleName(
+        workInfo: translatedWork(),
+        fallbackCircle: '汉化组',
+        fetchWorkInfo: (_) async => null,
+      );
+      expect(circle, '汉化组');
+    });
+
+    test('workInfo 为 null 时 fallback', () async {
+      final circle = await NavidromeOrganizer.resolveCircleName(
+        workInfo: null,
+        fallbackCircle: '汉化组',
+        fetchWorkInfo: (_) async => null,
+      );
+      expect(circle, '汉化组');
+    });
+  });
 }
