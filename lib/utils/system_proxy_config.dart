@@ -1,6 +1,9 @@
 // ignore_for_file: non_constant_identifier_names, camel_case_types
 
+import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
+
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:ffi/ffi.dart';
 
@@ -83,11 +86,54 @@ class SystemProxyConfig {
 
   /// 返回代理配置 PROXY host:port; PROXY host2:port2; DIRECT, 如果代理地址获取失败则直接返回 DIRECT
   static String get systemProxy {
+    if (Platform.isMacOS) {
+      return getMacOSSystemProxy();
+    }
+
     final proxy = SystemProxyConfig.getConfig().proxy;
     if (proxy == null || proxy.isEmpty) {
       return 'DIRECT';
     }
 
     return '${proxy.split(';').map((e) => 'PROXY ${e.trim()}').join('; ')}; DIRECT';
+  }
+
+  /// macOS 通过 `scutil --proxy` 读取系统代理。
+  /// 输出为 plist 文本，用 `plutil -convert json` 转成 JSON 再解析。
+  static String getMacOSSystemProxy() {
+    try {
+      final result = Process.runSync(
+        'sh',
+        ['-c', 'scutil --proxy | plutil -convert json -o - -'],
+      );
+      if (result.exitCode != 0) {
+        Log.error('failed to get system proxy config.\n'
+            'error: scutil exit code ${result.exitCode}\n'
+            'stderr: ${result.stderr}');
+        return 'DIRECT';
+      }
+
+      final data =
+          json.decode(result.stdout as String) as Map<String, dynamic>;
+
+      String? host;
+      int? port;
+      if (data['HTTPSEnable'] == 1) {
+        host = data['HTTPSProxy'] as String?;
+        port = data['HTTPSPort'] as int?;
+      } else if (data['HTTPEnable'] == 1) {
+        host = data['HTTPProxy'] as String?;
+        port = data['HTTPPort'] as int?;
+      }
+
+      if (host == null || host.isEmpty || port == null) {
+        return 'DIRECT';
+      }
+
+      return 'PROXY $host:$port; DIRECT';
+    } catch (e) {
+      Log.error('failed to get system proxy config.\n' 'error: $e');
+      return 'DIRECT';
+    }
   }
 }

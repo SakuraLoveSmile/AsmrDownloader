@@ -1,8 +1,6 @@
 import 'package:asmr_downloader/pages/window_title_bar/caption_buttons/window_button_color_theme.dart';
 import 'package:asmr_downloader/pages/window_title_bar/caption_buttons/window_caption_button_icon.dart';
-import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
 const _kIconChromeClose = 'icon_chrome_close';
@@ -36,7 +34,7 @@ const _closeButtonIconColorScheme = ButtonIconColorScheme(
   disabled: Color.fromRGBO(255, 255, 255, 0.5),
 );
 
-class MinimizeButton extends ConsumerWidget {
+class MinimizeButton extends StatelessWidget {
   const MinimizeButton({
     super.key,
     this.minWidth = 46.0,
@@ -46,7 +44,7 @@ class MinimizeButton extends ConsumerWidget {
   final double minWidth;
   final double minHeight;
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return WindowButton(
       iconName: _kIconChromeMinimize,
       onPressed: () async {
@@ -65,7 +63,7 @@ class MinimizeButton extends ConsumerWidget {
   }
 }
 
-class MaximizeButton extends ConsumerStatefulWidget {
+class MaximizeButton extends StatefulWidget {
   const MaximizeButton({
     super.key,
     this.minWidth = 46.0,
@@ -76,28 +74,11 @@ class MaximizeButton extends ConsumerStatefulWidget {
   final double minHeight;
 
   @override
-  ConsumerState<MaximizeButton> createState() => _MaximizeButtonState();
+  State<MaximizeButton> createState() => _MaximizeButtonState();
 }
 
-class _MaximizeButtonState extends ConsumerState<MaximizeButton>
-    with WindowListener {
-  @override
-  void initState() {
-    super.initState();
-    windowManager.addListener(this);
-  }
-
-  @override
-  void dispose() {
-    windowManager.removeListener(this);
-    super.dispose();
-  }
-
-  // 监听窗口事件：https://leanflutter.dev/documentation/window_manager/quick-start#%E7%9B%91%E5%90%AC%E4%BA%8B%E4%BB%B6
-  @override
-  void onWindowClose() {
-    ref.read(uiServiceProvider).onExit(context);
-  }
+class _MaximizeButtonState extends State<MaximizeButton> {
+  // 窗口关闭确认由全局 WindowCloseHandler 统一监听
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +107,7 @@ class _MaximizeButtonState extends ConsumerState<MaximizeButton>
   }
 }
 
-class CloseBtn extends ConsumerWidget {
+class CloseBtn extends StatelessWidget {
   const CloseBtn({
     super.key,
     this.minWidth = 46.0,
@@ -137,7 +118,7 @@ class CloseBtn extends ConsumerWidget {
   final double minHeight;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return WindowButton(
       iconName: _kIconChromeClose,
       onPressed: () => windowManager.close(),
