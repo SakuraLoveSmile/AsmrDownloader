@@ -20,6 +20,8 @@ class AudioTagWriter {
   /// 写标签，失败返回 false（不抛出，避免阻断整理流程）
   /// [lyrics] 内嵌歌词（LRC 文本，mp3→USLT / flac→LYRICS；wav 不支持）
   /// [coverBytes] 内嵌封面（mp3→APIC / flac→PICTURE；wav 不支持）
+  /// [year] 发行年份（mp3→TYER / flac→YEAR / wav→TYER）
+  /// [genre] 流派（mp3→TCON / flac→GENRE / wav→TCON）
   static Future<bool> writeTags(
     String filePath, {
     required String title,
@@ -29,6 +31,8 @@ class AudioTagWriter {
     String? track,
     String? lyrics,
     Uint8List? coverBytes,
+    String? year,
+    String? genre,
   }) async {
     try {
       final ext = filePath.split('.').last.toLowerCase();
@@ -41,7 +45,9 @@ class AudioTagWriter {
               albumArtist: albumArtist,
               track: track,
               lyrics: lyrics,
-              coverBytes: coverBytes);
+              coverBytes: coverBytes,
+              year: year,
+              genre: genre);
         case 'mp3':
         case 'flac':
           return _writeTaglibTags(filePath,
@@ -51,7 +57,9 @@ class AudioTagWriter {
               albumArtist: albumArtist,
               track: track,
               lyrics: lyrics,
-              coverBytes: coverBytes);
+              coverBytes: coverBytes,
+              year: year,
+              genre: genre);
         default:
           return false;
       }
@@ -71,6 +79,8 @@ class AudioTagWriter {
     String? track,
     String? lyrics,
     Uint8List? coverBytes,
+    String? year,
+    String? genre,
   }) async {
     final file = File(filePath);
     final bytes = await file.readAsBytes();
@@ -80,7 +90,9 @@ class AudioTagWriter {
       ..setArtist(artist)
       ..setAlbum(album)
       ..setAlbumArtist(albumArtist)
-      ..setTrack(track);
+      ..setTrack(track)
+      ..setYear(year)
+      ..setGenre(genre);
     if (lyrics != null && lyrics.isNotEmpty) {
       audioFile.setLyric(lyrics);
     }
@@ -104,6 +116,8 @@ class AudioTagWriter {
     String? track,
     String? lyrics,
     Uint8List? coverBytes,
+    String? year,
+    String? genre,
   }) async {
     final file = File(filePath);
     if (!await _isValidWav(file)) {
@@ -131,6 +145,8 @@ class AudioTagWriter {
         track: track,
         lyrics: lyrics,
         coverBytes: coverBytes,
+        year: year,
+        genre: genre,
       );
       chunks
         ..add('id3 '.codeUnits)
@@ -191,6 +207,8 @@ class AudioTagWriter {
     String? track,
     String? lyrics,
     Uint8List? coverBytes,
+    String? year,
+    String? genre,
   }) {
     final frames = BytesBuilder();
 
@@ -212,6 +230,8 @@ class AudioTagWriter {
     addTextFrame('TALB', album);
     addTextFrame('TPE2', albumArtist);
     addTextFrame('TRCK', track ?? '');
+    addTextFrame('TYER', year ?? '');
+    addTextFrame('TCON', genre ?? '');
 
     // USLT 歌词帧：encoding + lang(3) + 描述(UTF-16 空) + 歌词
     if (lyrics != null && lyrics.isNotEmpty) {

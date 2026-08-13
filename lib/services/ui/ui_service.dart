@@ -184,6 +184,9 @@ class UIService {
       // 标签字段：artist = 社团名，albumartist = CV 名
       artist: circleName,
       albumArtist: ref.read(cvLsProvider).join('&'),
+      // 发行日期与流派标签
+      releaseDate: ref.read(releaseDateProvider),
+      genres: ref.read(tagLsProvider),
     );
   }
 
