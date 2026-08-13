@@ -89,4 +89,6 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['dlCover'] as bool? ?? false;
   ref.read(autoOrganizeProvider.notifier).state =
       config['autoOrganize'] as bool? ?? false;
+  ref.read(onlyOrganizeUnorganizedProvider.notifier).state =
+      config['onlyOrganizeUnorganized'] as bool? ?? true;
 });

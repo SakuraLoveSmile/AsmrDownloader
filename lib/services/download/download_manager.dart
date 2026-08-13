@@ -5,6 +5,8 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
+import 'package:asmr_downloader/services/organize/organize_providers.dart';
+import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -72,6 +74,20 @@ class DownloadManager {
     // download completed
 
     ref.read(dlStatusProvider.notifier).state = DownloadStatus.completed;
+
+    // 写入下载注册表（批量整理的数据源）；
+    // 自动整理成功后会由 organizeCurrentWork 补录 organizedAt
+    await ref.read(worksIndexProvider).upsert(WorkEntry(
+      sourceId: sourceId,
+      dlPath: ref.read(downloadPathProvider),
+      dirName: p.basename(voiceWorkPath),
+      title: ref.read(titleProvider),
+      cvNames: ref.read(cvLsProvider).join('&'),
+      circleName: ref.read(circleNameProvider),
+      releaseDate: ref.read(releaseDateProvider),
+      tags: ref.read(tagLsProvider),
+      coverUrl: ref.read(coverUrlProvider),
+    ));
     if (Platform.isWindows) {
       await WindowsTaskbar.setFlashTaskbarAppIcon(
         mode: TaskbarFlashMode.all | TaskbarFlashMode.timernofg,

@@ -6,6 +6,8 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/organize/organize_providers.dart';
+import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
@@ -178,37 +180,37 @@ class UIService {
       }
     }
 
-    // 汉化版作品的 circle 是汉化组名，跟踪到原版取真实社团名
+    // 走统一整理编排层（手动/自动/批量共用），含汉化 circle 跟踪与 artist 保底
     final workInfo = ref.read(workInfoProvider).value;
-    final circleName = await NavidromeOrganizer.resolveCircleName(
-      workInfo: workInfo,
-      fallbackCircle: ref.read(circleNameProvider),
-      fetchWorkInfo: (id) => ref.read(asmrApiProvider).getWorkInfo(id),
-    );
-
     final cvNames = ref.read(cvLsProvider).join('&');
-
-    // 降级模式：work info 获取失败时 circle/cv 均为空，
-    // artist（社团目录名与标签）保底到 CV 名、再保底到 sourceId，
-    // 保证整理目录与音乐标签不落空。sourceId 已判空，必为非空。
-    final artist =
-        [circleName, cvNames, sourceId].firstWhere((name) => name.isNotEmpty);
-
-    return NavidromeOrganizer.organize(
+    final result = await ref.read(organizeServiceProvider).organizeWork(
+      sourceId: sourceId,
       sourceDir: sourceDir,
       targetRoot: navidromePath,
-      circleName: artist,
-      sourceId: sourceId,
-      cvNames: cvNames,
-      title: ref.read(titleProvider),
+      workInfo: workInfo,
+      fallbackTitle: ref.read(titleProvider),
+      fallbackCvNames: cvNames,
+      fallbackCircle: ref.read(circleNameProvider),
       coverBytes: coverBytes,
-      // 标签字段：artist = 社团名（降级保底 CV / sourceId），albumartist = CV 名
-      artist: artist,
-      albumArtist: cvNames,
-      // 发行日期与流派标签
-      releaseDate: ref.read(releaseDateProvider),
-      genres: ref.read(tagLsProvider),
     );
+
+    // 补录注册表（含整理时间），批量整理依赖它
+    if (result != null) {
+      await ref.read(worksIndexProvider).upsert(WorkEntry(
+        sourceId: sourceId,
+        dlPath: ref.read(downloadPathProvider),
+        dirName: p.basename(ref.read(voiceWorkPathProvider)),
+        title: ref.read(titleProvider),
+        cvNames: cvNames,
+        circleName: ref.read(circleNameProvider),
+        releaseDate: ref.read(releaseDateProvider),
+        tags: ref.read(tagLsProvider),
+        coverUrl: ref.read(coverUrlProvider),
+        organizedAt: DateTime.now().toIso8601String(),
+      ));
+    }
+
+    return result;
   }
 
   /// 手动整理当前作品到 Navidrome 媒体库结构
