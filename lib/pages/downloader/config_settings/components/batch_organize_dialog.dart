@@ -26,6 +26,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
   BatchOrganizeResult? _result;
   int _totalEntries = 0;
   int _missingEntries = 0;
+  int _discoveredCount = 0;
 
   @override
   void initState() {
@@ -39,6 +40,20 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
       if (mounted) {
         setState(() => _missingEntries = missing.length);
       }
+    });
+    // 预扫描下载目录：统计未注册但可自动识别的 RJ 号作品数
+    ref.read(organizeServiceProvider).discoverWorks(
+      dlRoot: ref.read(downloadPathProvider),
+      excludeRoot: ref.read(navidromePathProvider),
+    ).then((discovered) async {
+      final registered =
+          (await ref.read(worksIndexProvider).list())
+              .map((e) => e.sourceId)
+              .toSet();
+      final count = discovered
+          .where((e) => !registered.contains(e.sourceId))
+          .length;
+      if (mounted) setState(() => _discoveredCount = count);
     });
   }
 
@@ -120,6 +135,9 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         Text('注册表条目：$_totalEntries', style: Theme.of(context).textTheme.bodySmall),
         Text('下载目录缺失：$_missingEntries（可稍后清理）',
             style: Theme.of(context).textTheme.bodySmall),
+        if (ref.read(downloadPathProvider).isNotEmpty)
+          Text('自动识别未注册作品：$_discoveredCount（按 RJ 号扫描下载目录）',
+              style: Theme.of(context).textTheme.bodySmall),
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(_error!,
@@ -242,7 +260,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         child: const Text('关闭'),
       ),
       FilledButton(
-        onPressed: _totalEntries == 0 ? null : _start,
+        onPressed: (_totalEntries == 0 && _discoveredCount == 0) ? null : _start,
         child: const Text('开始整理'),
       ),
     ];

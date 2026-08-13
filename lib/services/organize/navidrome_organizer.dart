@@ -14,9 +14,22 @@ class OrganizeResult {
   const OrganizeResult({required this.copied, required this.skipped});
 }
 
+/// 专辑目录名（`<sourceId> - <cvNames> - <title>`）最大码点数
+const int kMaxAlbumDirChars = 80;
+
+/// 专辑目录名最大 UTF-8 字节数（防 emoji 等 4 字节字符突破 macOS 255 字节组件限制）
+const int kMaxAlbumDirUtf8Bytes = 240;
+
+/// circle 目录名最大码点数
+const int kMaxCircleDirChars = 50;
+
+/// circle 目录名最大 UTF-8 字节数
+const int kMaxCircleDirUtf8Bytes = 150;
+
 /// 将下载的作品整理成 Navidrome 媒体库结构：
 /// `<targetRoot>/<circleName>/<sourceId> - <cvNames> - <title>/<sourceId>/`
 /// 音轨/字幕/歌词文件扁平化复制，保留原名；封面保存为 cover.jpg（Navidrome 自动识别）。
+/// 目录名过长时按字符/字节上限智能截断（保留 sourceId，尾部加 …）。
 class NavidromeOrganizer {
   /// 解析整理用的社团名。
   /// 汉化版作品的 circle 是汉化组名，需要跟踪到原版（original_workno）取真实社团名。
@@ -88,11 +101,19 @@ class NavidromeOrganizer {
     }
 
     // 目标目录：<targetRoot>/<circle>/<sourceId> - <cv> - <title>/<sourceId>
-    final circleDirName =
-        getLegalWindowsName(circleName.isEmpty ? cvNames : circleName);
+    // 目录名过长时智能截断（保留 sourceId，按字符/字节双上限，尾部加 …）
+    var circleDirName = getLegalWindowsName(smartTruncate(
+        circleName.isEmpty ? cvNames : circleName,
+        maxChars: kMaxCircleDirChars,
+        maxUtf8Bytes: kMaxCircleDirUtf8Bytes));
+    if (circleDirName.isEmpty) circleDirName = sourceId;
     // 空字段省略，降级模式下 cv/title 缺失时不会出现 "RJ -  - " 残留分隔符
-    final albumDirName = getLegalWindowsName(
-        [sourceId, cvNames, title].where((s) => s.isNotEmpty).join(' - '));
+    var albumDirName = getLegalWindowsName(smartTruncate(
+        [sourceId, cvNames, title].where((s) => s.isNotEmpty).join(' - '),
+        maxChars: kMaxAlbumDirChars,
+        maxUtf8Bytes: kMaxAlbumDirUtf8Bytes));
+    // 极端情况兜底（截断后为空时）至少保留 sourceId
+    if (albumDirName.isEmpty) albumDirName = sourceId;
     final targetDir = p.join(targetRoot, circleDirName, albumDirName, sourceId);
 
     int copied = 0;

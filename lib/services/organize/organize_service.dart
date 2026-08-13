@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -53,6 +55,17 @@ class BatchOrganizeResult {
     required this.missing,
     required this.cancelled,
     required this.results,
+  });
+}
+
+/// 单条注册表/自动识别条目的整理结果（含解析后的元数据，供入库回写）。
+class OrganizeEntryOutcome {
+  final OrganizeResult? result;
+  final WorkEntry resolvedEntry;
+
+  const OrganizeEntryOutcome({
+    required this.result,
+    required this.resolvedEntry,
   });
 }
 
@@ -153,12 +166,31 @@ class OrganizeService {
     );
   }
 
-  /// 从注册表条目整理（离线优先：直接使用注册表元数据，不现场调 API；
-  /// 封面只用本地下载时保存的 {sourceId}_cover.jpg）。
-  Future<OrganizeResult?> organizeEntry(WorkEntry entry,
-      {required String targetRoot}) async {
+  /// 从注册表条目整理（注册表条目离线优先：直接使用注册表元数据，不现场调 API；
+  /// [fetchWorkInfo] 为 true 时（批量整理自动识别出的作品）在线拉取元数据，
+  /// 失败则降级到目录名解析；封面优先本地 {sourceId}_cover.jpg，发现的作品无本地
+  /// 封面时从 workInfo.mainCoverUrl 在线拉取（失败非致命）。
+  Future<OrganizeEntryOutcome> organizeEntry(WorkEntry entry,
+      {required String targetRoot, bool fetchWorkInfo = false}) async {
+    Map<String, dynamic>? workInfo;
+    if (fetchWorkInfo) {
+      final digits = entry.sourceId.replaceAll(RegExp(r'[^0-9]'), '');
+      try {
+        workInfo = await ref.read(asmrApiProvider).getWorkInfo(digits);
+      } catch (e) {
+        Log.warning('fetch workInfo failed: ${entry.sourceId}\n' 'error: $e');
+      }
+    }
+
+    // 降级：自动识别出的作品元数据为空时按目录名解析（"cv&cv-标题"）
+    final parsed = parseDirName(entry.dirName);
+    final fallbackTitle = entry.title.isNotEmpty ? entry.title : parsed.title;
+    final fallbackCvNames =
+        entry.cvNames.isNotEmpty ? entry.cvNames : parsed.cvNames;
+
     Uint8List? coverBytes;
-    final localCover = File(p.join(entry.sourceDir, '${entry.sourceId}_cover.jpg'));
+    final localCover =
+        File(p.join(entry.sourceDir, '${entry.sourceId}_cover.jpg'));
     if (await localCover.exists()) {
       try {
         coverBytes = await localCover.readAsBytes();
@@ -166,17 +198,110 @@ class OrganizeService {
         Log.warning('read local cover failed: ${localCover.path}\n' 'error: $e');
       }
     }
+    // 自动识别的作品通常没有本地封面，从 workInfo 在线拉取
+    if (coverBytes == null && workInfo != null) {
+      final coverUrl = workInfo['mainCoverUrl']?.toString() ?? '';
+      if (coverUrl.isNotEmpty) {
+        try {
+          coverBytes = await ref.read(asmrApiProvider).getCoverBytes(coverUrl);
+        } catch (e) {
+          Log.warning('fetch cover failed: ${entry.sourceId}\n' 'error: $e');
+        }
+      }
+    }
 
-    return organizeWork(
+    final result = await organizeWork(
       sourceId: entry.sourceId,
       sourceDir: entry.sourceDir,
       targetRoot: targetRoot,
-      workInfo: null,
-      fallbackTitle: entry.title,
-      fallbackCvNames: entry.cvNames,
+      workInfo: workInfo,
+      fallbackTitle: fallbackTitle,
+      fallbackCvNames: fallbackCvNames,
       fallbackCircle: entry.circleName,
       coverBytes: coverBytes,
     );
+
+    // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段）
+    final resolved = WorkEntry(
+      sourceId: entry.sourceId,
+      dlPath: entry.dlPath,
+      dirName: entry.dirName,
+      title:
+          workInfo != null ? resolveTitle(workInfo, fallbackTitle) : fallbackTitle,
+      cvNames: workInfo != null
+          ? resolveCvNames(workInfo, fallbackCvNames)
+          : fallbackCvNames,
+      circleName:
+          workInfo != null ? resolveCircle(workInfo, entry.circleName) : entry.circleName,
+      releaseDate: workInfo != null ? resolveRelease(workInfo) : entry.releaseDate,
+      tags: workInfo != null ? resolveTags(workInfo) : entry.tags,
+      coverUrl: workInfo != null
+          ? (workInfo['mainCoverUrl']?.toString() ?? entry.coverUrl)
+          : entry.coverUrl,
+      organizedAt: entry.organizedAt,
+    );
+    return OrganizeEntryOutcome(result: result, resolvedEntry: resolved);
+  }
+
+  // ---------- 自动识别（批量整理） ----------
+
+  /// 扫描下载根目录，识别带 RJ/VJ/BJ 号的子目录（不依赖注册表）。
+  /// 返回合成 WorkEntry（title/cvNames/circleName 为空，整理时按目录名降级解析/在线拉取）。
+  /// [excludeRoot] 整理目标根目录，位于其下的目录不作为源扫描（防止把整理产物再整理）。
+  /// 同一 sourceId 多处出现时取最浅路径；跳过隐藏目录。
+  Future<List<WorkEntry>> discoverWorks({
+    required String dlRoot,
+    String? excludeRoot,
+    int maxDepth = 4,
+  }) async {
+    if (dlRoot.isEmpty) return const [];
+
+    final found = <String,
+        ({String sourceId, String dlPath, String dirName, int depth})>{};
+
+    Future<void> walk(Directory dir, int depth) async {
+      if (depth > maxDepth) return;
+      try {
+        await for (final entity in dir.list()) {
+          if (entity is! Directory) continue;
+          final name = p.basename(entity.path);
+          if (name.startsWith('.')) continue;
+          if (excludeRoot != null && p.equals(entity.path, excludeRoot)) {
+            continue;
+          }
+          final sourceId = matchSourceIdFromDirName(name);
+          if (sourceId != null) {
+            final prev = found[sourceId];
+            if (prev == null || depth < prev.depth) {
+              // 目录结构 <dlRoot>/<dirName>/<sourceId>（dirName 可为空）
+              final parentPath = p.dirname(entity.path);
+              final isFlat = p.equals(parentPath, dlRoot);
+              found[sourceId] = (
+                sourceId: sourceId,
+                dlPath: isFlat ? dlRoot : p.dirname(parentPath),
+                // RJ 目录直接平铺在下载根下时 dirName 为空（p.join 自动跳过空段）
+                dirName: isFlat ? '' : p.basename(parentPath),
+                depth: depth,
+              );
+            }
+          }
+          await walk(entity, depth + 1);
+        }
+      } catch (e) {
+        Log.warning('scan download dir failed: ${dir.path}\n' 'error: $e');
+      }
+    }
+
+    await walk(Directory(dlRoot), 1);
+    return found.values
+        .map((f) => WorkEntry(
+              sourceId: f.sourceId,
+              dlPath: f.dlPath,
+              dirName: f.dirName,
+              title: '',
+              cvNames: '',
+            ))
+        .toList();
   }
 
   // ---------- 批量整理 ----------
@@ -192,9 +317,44 @@ class OrganizeService {
   }) async {
     final index = ref.read(worksIndexProvider);
     var entries = await index.list();
+    // 全量注册表（用于自动识别去重与目录移动修正，不随 onlyUnorganized 过滤）
+    final registeredAll = {for (final e in entries) e.sourceId: e};
     entries.sort((a, b) => a.sourceId.compareTo(b.sourceId));
     if (onlyUnorganized) {
       entries = entries.where((e) => e.organizedAt == null).toList();
+    }
+
+    // 自动识别下载目录中带 RJ/VJ/BJ 号的目录：
+    // - 未注册的加入待整理列表（在线拉取元数据，失败降级目录名）；
+    // - 注册表路径过期但发现新路径时修正注册表；
+    // - 目标目录与下载目录重叠时跳过扫描（防止把整理产物再整理）。
+    final discoveredIds = <String>{};
+    final dlRoot = ref.read(downloadPathProvider);
+    final canScan = dlRoot.isNotEmpty &&
+        !p.equals(targetRoot, dlRoot) &&
+        !p.isWithin(targetRoot, dlRoot);
+    if (canScan) {
+      final discovered =
+          await discoverWorks(dlRoot: dlRoot, excludeRoot: targetRoot);
+      for (final d in discovered) {
+        final existing = registeredAll[d.sourceId];
+        if (existing == null) {
+          discoveredIds.add(d.sourceId);
+          entries.add(d);
+        } else if (!Directory(existing.sourceDir).existsSync() &&
+            Directory(d.sourceDir).existsSync()) {
+          // 目录被移动：修正注册表路径，本次按新路径整理
+          final fixed = existing.copyWith(dlPath: d.dlPath, dirName: d.dirName);
+          await index.upsert(fixed);
+          final idx = entries.indexWhere((e) => e.sourceId == d.sourceId);
+          if (idx >= 0) entries[idx] = fixed;
+        }
+      }
+      entries.sort((a, b) => a.sourceId.compareTo(b.sourceId));
+      if (discoveredIds.isNotEmpty) {
+        Log.info('batch organize: discovered ${discoveredIds.length} '
+            'unregistered works: ${discoveredIds.join(', ')}');
+      }
     }
 
     final results = <BatchItemResult>[];
@@ -225,7 +385,10 @@ class OrganizeService {
       }
 
       try {
-        final result = await organizeEntry(entry, targetRoot: targetRoot);
+        final outcome = await organizeEntry(entry,
+            targetRoot: targetRoot,
+            fetchWorkInfo: discoveredIds.contains(entry.sourceId));
+        final result = outcome.result;
         if (result == null) {
           failed++;
           results.add(BatchItemResult(
@@ -236,14 +399,16 @@ class OrganizeService {
               sourceId: entry.sourceId,
               success: true,
               message: '已是最新（复制 0 跳过 ${result.skipped}）'));
-          await index.markOrganized(entry.sourceId);
+          await index.upsert(outcome.resolvedEntry
+              .copyWith(organizedAt: DateTime.now().toIso8601String()));
         } else {
           success++;
           results.add(BatchItemResult(
               sourceId: entry.sourceId,
               success: true,
               message: '复制 ${result.copied} 跳过 ${result.skipped}'));
-          await index.markOrganized(entry.sourceId);
+          await index.upsert(outcome.resolvedEntry
+              .copyWith(organizedAt: DateTime.now().toIso8601String()));
         }
       } catch (e) {
         failed++;

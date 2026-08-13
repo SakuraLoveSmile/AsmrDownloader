@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -354,6 +355,88 @@ void main() {
         fetchWorkInfo: (_) async => null,
       );
       expect(circle, '汉化组');
+    });
+  });
+
+  group('文件夹名智能截断', () {
+    test('超长标题：专辑目录名保留 RJ 前缀、截断加 …、目录创建成功', () async {
+      createMockDownload();
+      final longTitle = '这是一个非常长的作品标题' * 20; // 240 字符
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: longTitle,
+        coverBytes: null,
+      );
+
+      expect(result.copied, 3);
+
+      final circleDir = Directory(p.join(targetRoot.path, '测试社团'));
+      final albumDir = circleDir.listSync().whereType<Directory>().first;
+      final albumName = p.basename(albumDir.path);
+      expect(albumName.startsWith('RJ12345678 - CV1&CV2 - '), true);
+      expect(albumName.endsWith('…'), true);
+      expect(albumName.runes.length, lessThanOrEqualTo(81));
+      expect(utf8.encode(albumName).length, lessThanOrEqualTo(240));
+      // 音轨已复制进截断目录（目录真实创建成功）
+      expect(
+        File(p.join(albumDir.path, 'RJ12345678', 'e01_01_『舔耳』.wav'))
+            .existsSync(),
+        true,
+      );
+    });
+
+    test('超长 circle：circle 目录名截断加 …', () async {
+      createMockDownload();
+      final longCircle = '超长社团名' * 20; // 100 字符
+
+      await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: longCircle,
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      final circleDir = targetRoot.listSync().whereType<Directory>().first;
+      final name = p.basename(circleDir.path);
+      expect(name.startsWith('超长社团名'), true);
+      expect(name.endsWith('…'), true);
+      expect(name.runes.length, lessThanOrEqualTo(51));
+      expect(utf8.encode(name).length, lessThanOrEqualTo(150));
+    });
+
+    test('截断后重复整理幂等（copied=0）', () async {
+      createMockDownload();
+      final longTitle = '这是一个非常长的作品标题' * 20;
+
+      await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: longTitle,
+        coverBytes: null,
+      );
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: longTitle,
+        coverBytes: null,
+      );
+
+      expect(result.copied, 0);
+      expect(result.skipped, 3);
     });
   });
 }
