@@ -241,18 +241,20 @@ class AudioTagWriter {
     addTextFrame('TYER', year ?? '');
     addTextFrame('TCON', genre ?? '');
 
-    // USLT 歌词帧：encoding + lang(3) + 描述(UTF-16 空) + 歌词
+    // USLT 歌词帧：encoding + lang(3) + 描述(UTF-16 空，含 null 终止符) + 歌词
+    // 描述字段缺少终止符会导致解析器把歌词内容误读为描述（见 ffprobe 验证）
     if (lyrics != null && lyrics.isNotEmpty) {
       final data = <int>[
         0x01,
         ...'eng'.codeUnits,
-        ..._utf16Le(''), // 空描述（含 BOM 即终止）
+        ..._utf16LeTerminated(''),
         ..._utf16Le(lyrics),
       ];
       addFrame('USLT', data);
     }
 
-    // APIC 封面帧：encoding + mime + \0 + 类型(3=cover front) + 描述 + 图片
+    // APIC 封面帧：encoding + mime + \0 + 类型(3=cover front) + 描述(含终止符) + 图片
+    // 描述字段必须 null 终止，否则解析器找不到图片数据起始位置，封面读取失败
     if (coverBytes != null && coverBytes.isNotEmpty) {
       final mime = _imageMime(coverBytes);
       final data = <int>[
@@ -260,7 +262,7 @@ class AudioTagWriter {
         ...mime.codeUnits,
         0x00,
         0x03, // picture type: cover (front)
-        ..._utf16Le(''),
+        ..._utf16LeTerminated(''),
         ...coverBytes,
       ];
       addFrame('APIC', data);
@@ -286,6 +288,13 @@ class AudioTagWriter {
     }
     return bytes;
   }
+
+  /// UTF-16 LE 编码 + null 终止符（ID3v2.3 中 USLT/APIC 的描述字段要求）
+  static List<int> _utf16LeTerminated(String text) => [
+        ..._utf16Le(text),
+        0x00,
+        0x00,
+      ];
 
   static String _imageMime(Uint8List bytes) {
     if (bytes.length >= 8 &&

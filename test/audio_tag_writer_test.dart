@@ -230,6 +230,12 @@ void main() {
       ...'[00:01.00]测试歌词'.codeUnits.expand((u) => [u & 0xFF, u >> 8]),
     ];
     expect(bytes, containsAllInOrder(lyricsUtf16));
+    // USLT/APIC 描述字段必须含 null 终止符（BOM ff fe + 00 00），
+    // 否则解析器会把后续数据误读为描述，封面/歌词读取失败
+    // USLT：描述终止符后紧跟歌词的 UTF-16 BOM
+    expect(bytes, containsAllInOrder([0xFF, 0xFE, 0x00, 0x00, 0xFF, 0xFE]));
+    // APIC：描述终止符后紧跟封面数据（测试用 0x01 填充）
+    expect(bytes, containsAllInOrder([0xFF, 0xFE, 0x00, 0x00, 0x01, 0x01]));
   });
 
   test('wav 写发行年份（TYER）和流派（TCON）帧', () async {
