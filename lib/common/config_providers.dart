@@ -22,3 +22,6 @@ final dlCoverProvider = StateProvider<bool>((ref) => false);
 final proxyProvider = StateProvider<String>((ref) => 'DIRECT');
 
 final apiChannelProvider = StateProvider<String>((ref) => 'asmr-200');
+
+/// 批量整理时仅处理未整理过的作品
+final onlyOrganizeUnorganizedProvider = StateProvider<bool>((ref) => true);

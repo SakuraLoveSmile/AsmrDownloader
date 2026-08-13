@@ -4,6 +4,7 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/auto
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/navidrome_path_picker.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_all_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
@@ -39,6 +40,8 @@ class Downloader extends StatelessWidget {
                 AsmrProxy(),
                 AutoOrganizeCheck(),
                 OrganizeButton(),
+                OrganizeAllButton(),
+                WorksIndexButton(),
               ],
             ),
           ),
