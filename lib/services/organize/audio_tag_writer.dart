@@ -105,8 +105,10 @@ class AudioTagWriter {
 
   /// wav 写标签：
   /// 1. ID3v2 chunk（'id3 '，TagLib/Navidrome/ffmpeg 原生读取）— 歌词 USLT / 封面 APIC
-  /// 2. LIST/INFO chunk（老播放器兼容）
-  /// 文件末尾追加 chunk 并更新 RIFF size；已存在标签则跳过（幂等）。
+  /// 2. LIST/INFO chunk（老播放器兼容）；文件原本已带 LIST/INFO 时不追加第二个
+  /// 文件末尾追加 chunk 并更新 RIFF size。
+  /// 幂等：已有 'id3 ' chunk 或 LIST/INFO 含 INAM（曲名）视为已打音乐标签则跳过；
+  /// 只带 ICRD/ISFT 等技术元数据的 LIST/INFO 照常写入。
   static Future<bool> _writeWavTags(
     String filePath, {
     required String title,
@@ -127,9 +129,11 @@ class AudioTagWriter {
 
     final raf = await file.open(mode: FileMode.append);
     try {
-      // 已存在 ID3 或 LIST INFO chunk 则跳过（避免重复追加）
-      if (await _hasTagChunks(raf)) {
-        Log.info('wav already has tags, skip: $filePath');
+      // 已有音乐标签（本工具写的 'id3 ' chunk，或他人写的 LIST/INFO 曲名 INAM）
+      // 则跳过；只带 ICRD/ISFT 等技术元数据的 LIST/INFO 不视为已打标签
+      final scan = await _scanWavTagChunks(raf);
+      if (scan.hasId3 || scan.hasListInam) {
+        Log.info('wav already has music tags, skip: $filePath');
         return false;
       }
 
@@ -154,30 +158,34 @@ class AudioTagWriter {
         ..add(id3)
         ..add(List.filled(id3.length.isOdd ? 1 : 0, 0));
 
-      // LIST INFO chunk（老播放器兼容）
-      final subChunks = BytesBuilder();
-      void addSubChunk(String id, String value) {
-        if (value.isEmpty) return;
-        final data = utf8.encode(value);
-        subChunks
-          ..add(id.codeUnits)
-          ..add(_uint32Le(data.length))
-          ..add(data)
-          // chunk 数据奇数长度时补 1 字节
-          ..add(List.filled(data.length.isOdd ? 1 : 0, 0));
+      // LIST INFO chunk（老播放器兼容）；
+      // 文件原本已带 LIST/INFO（如 ICRD/ISFT 技术元数据）时不追加第二个，
+      // 避免部分老播放器只读第一个 LIST 导致看不到标签
+      if (!scan.hasListInfo) {
+        final subChunks = BytesBuilder();
+        void addSubChunk(String id, String value) {
+          if (value.isEmpty) return;
+          final data = utf8.encode(value);
+          subChunks
+            ..add(id.codeUnits)
+            ..add(_uint32Le(data.length))
+            ..add(data)
+            // chunk 数据奇数长度时补 1 字节
+            ..add(List.filled(data.length.isOdd ? 1 : 0, 0));
+        }
+
+        addSubChunk('INAM', title);
+        addSubChunk('IART', artist);
+        addSubChunk('IPRD', album);
+        addSubChunk('IPRT', track ?? '');
+
+        final subData = subChunks.toBytes();
+        chunks
+          ..add('LIST'.codeUnits)
+          ..add(_uint32Le(subData.length + 4)) // +4 是 'INFO' 标识
+          ..add('INFO'.codeUnits)
+          ..add(subData);
       }
-
-      addSubChunk('INAM', title);
-      addSubChunk('IART', artist);
-      addSubChunk('IPRD', album);
-      addSubChunk('IPRT', track ?? '');
-
-      final subData = subChunks.toBytes();
-      chunks
-        ..add('LIST'.codeUnits)
-        ..add(_uint32Le(subData.length + 4)) // +4 是 'INFO' 标识
-        ..add('INFO'.codeUnits)
-        ..add(subData);
 
       final newChunks = chunks.toBytes();
 
@@ -318,9 +326,16 @@ class AudioTagWriter {
     }
   }
 
-  /// 遍历 RIFF chunk 列表，检查是否已有标签（'id3 ' 或 LIST INFO）
+  /// 扫描 RIFF chunk，返回标签 chunk 存在情况：
+  /// - hasId3：已有 'id3 ' chunk（本工具写入的标志）
+  /// - hasListInfo：已有 LIST/INFO chunk（可能只含 ICRD/ISFT 等技术元数据）
+  /// - hasListInam：LIST/INFO 中含 INAM（曲名）子 chunk，即已被其他工具写过音乐标签
   /// 注意：不关闭传入的 raf（由调用方管理）
-  static Future<bool> _hasTagChunks(RandomAccessFile raf) async {
+  static Future<({bool hasId3, bool hasListInfo, bool hasListInam})>
+      _scanWavTagChunks(RandomAccessFile raf) async {
+    var hasId3 = false;
+    var hasListInfo = false;
+    var hasListInam = false;
     var offset = 12;
     while (offset + 8 <= await raf.length()) {
       await raf.setPosition(offset);
@@ -328,14 +343,40 @@ class AudioTagWriter {
       if (chunkHeader.length < 8) break;
       final chunkId = String.fromCharCodes(chunkHeader.sublist(0, 4));
       final chunkSize = _leUint32(chunkHeader.sublist(4, 8));
-      if (chunkId == 'id3 ' || chunkId == 'ID3 ') return true;
-      if (chunkId == 'LIST') {
+      if (chunkId == 'id3 ' || chunkId == 'ID3 ') {
+        hasId3 = true;
+      } else if (chunkId == 'LIST') {
         await raf.setPosition(offset + 8);
         final listType = String.fromCharCodes(
             Uint8List.fromList(await raf.read(4)));
-        if (listType == 'INFO') return true;
+        if (listType == 'INFO') {
+          hasListInfo = true;
+          hasListInam =
+              await _listInfoHasInam(raf, offset + 12, chunkSize - 4) ||
+              hasListInam;
+        }
       }
       offset += 8 + chunkSize + (chunkSize.isOdd ? 1 : 0);
+    }
+    return (
+        hasId3: hasId3, hasListInfo: hasListInfo, hasListInam: hasListInam);
+  }
+
+  /// 检查 LIST/INFO chunk 数据区（offset+12 起、长度 [length]）是否含 INAM 子 chunk。
+  /// 注意：不关闭传入的 raf（由调用方管理）
+  static Future<bool> _listInfoHasInam(
+      RandomAccessFile raf, int start, int length) async {
+    if (length < 8) return false;
+    var pos = start;
+    final end = start + length;
+    while (pos + 8 <= end) {
+      await raf.setPosition(pos);
+      final header = Uint8List.fromList(await raf.read(8));
+      if (header.length < 8) break;
+      final subId = String.fromCharCodes(header.sublist(0, 4));
+      final subSize = _leUint32(header.sublist(4, 8));
+      if (subId == 'INAM') return true;
+      pos += 8 + subSize + (subSize.isOdd ? 1 : 0);
     }
     return false;
   }

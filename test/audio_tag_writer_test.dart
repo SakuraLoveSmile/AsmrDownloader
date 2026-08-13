@@ -43,6 +43,63 @@ Uint8List _u32le(int v) => Uint8List.fromList(
 String _ascii(Uint8List bytes, int start, int len) =>
     String.fromCharCodes(bytes.sublist(start, start + len));
 
+/// 构造 LIST chunk（listType 如 'INFO'/'adtl'），子 chunk 为 id -> 值
+Uint8List buildListChunk(String listType, Map<String, String> subs) {
+  final subChunks = <int>[];
+  subs.forEach((id, value) {
+    final data = utf8.encode(value);
+    subChunks
+      ..addAll(id.codeUnits)
+      ..addAll(_u32le(data.length))
+      ..addAll(data)
+      ..addAll(List.filled(data.length.isOdd ? 1 : 0, 0));
+  });
+  return Uint8List.fromList([
+    ...'LIST'.codeUnits,
+    ..._u32le(subChunks.length + 4), // +4 是 listType 标识
+    ...listType.codeUnits,
+    ...subChunks,
+  ]);
+}
+
+/// 在最小合法 wav 末尾追加自定义 chunk 并重建 RIFF size
+Uint8List appendChunkToWav(Uint8List chunk) {
+  final base = buildMinimalWav();
+  final oldSize = (base[4] |
+          (base[5] << 8) |
+          (base[6] << 16) |
+          (base[7] << 24)) &
+      0x7FFFFFFF;
+  return Uint8List.fromList([
+    ...base.sublist(0, 4),
+    ..._u32le(oldSize + chunk.length),
+    ...base.sublist(8),
+    ...chunk,
+  ]);
+}
+
+/// 构造带指定 LIST/INFO 子 chunk 的合法 wav（如 ICRD/ISFT 技术元数据）
+Uint8List buildWavWithListInfo(Map<String, String> subs) =>
+    appendChunkToWav(buildListChunk('INFO', subs));
+
+/// 统计文件中指定 4 字节 chunk id 的数量
+int countChunks(File file, String chunkId) {
+  final bytes = file.readAsBytesSync();
+  var count = 0;
+  var offset = 12;
+  while (offset + 8 <= bytes.length) {
+    final id = _ascii(bytes, offset, 4);
+    final size = (bytes[offset + 4] |
+            (bytes[offset + 5] << 8) |
+            (bytes[offset + 6] << 16) |
+            (bytes[offset + 7] << 24)) &
+        0x7FFFFFFF;
+    if (id == chunkId) count++;
+    offset += 8 + size + (size.isOdd ? 1 : 0);
+  }
+  return count;
+}
+
 /// 读取 wav 文件，返回 'LIST' chunk 内容（含 'INFO' 标识）
 Map<String, String>? _readListInfo(File file) {
   final bytes = file.readAsBytesSync();
@@ -228,9 +285,117 @@ void main() {
       track: '2',
     );
 
-    expect(ok, false); // 已存在 LIST 时跳过
+    expect(ok, false); // 已存在音乐标签时跳过
     expect(wavFile.lengthSync(), lenAfterFirst);
     // 标签内容保持第一次写入的
+    final info = _readListInfo(wavFile);
+    expect(info!['INAM'], 't');
+  });
+
+  test('带 ICRD/ISFT 技术元数据的 wav：照常写入 id3，不追加第二个 LIST INFO', () async {
+    // 模拟 asmr.one 广播 WAV（如 舔耳ONLY音轨 目录下的文件）
+    final wavFile = File('${tmpDir.path}/broadcast.wav')
+      ..writeAsBytesSync(buildWavWithListInfo({
+        'ICRD': '2026-04-18T13:14:55+09:00',
+        'ISFT': 'Adobe Audition 25.0 (Windows)',
+      }));
+
+    final ok = await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: '双耳舔舐',
+      artist: '空心菜館',
+      album: '测试专辑',
+      albumArtist: '古都ことり',
+      track: '1',
+    );
+
+    expect(ok, true);
+    // id3 chunk 写入成功
+    expect(countChunks(wavFile, 'id3 '), 1);
+    // LIST 仍只有一个（不追加第二个 LIST INFO）
+    expect(countChunks(wavFile, 'LIST'), 1);
+    // 原有技术元数据保留，未混入 INAM
+    final info = _readListInfo(wavFile);
+    expect(info, isNotNull);
+    expect(info!['ICRD'], '2026-04-18T13:14:55+09:00');
+    expect(info['ISFT'], 'Adobe Audition 25.0 (Windows)');
+    expect(info.containsKey('INAM'), false);
+    // RIFF size = 文件长 - 8
+    final bytes = wavFile.readAsBytesSync();
+    final riffSize = (bytes[4] |
+            (bytes[5] << 8) |
+            (bytes[6] << 16) |
+            (bytes[7] << 24)) &
+        0x7FFFFFFF;
+    expect(riffSize + 8, bytes.length);
+  });
+
+  test('带技术元数据的 wav：重复写入幂等跳过', () async {
+    final wavFile = File('${tmpDir.path}/broadcast2.wav')
+      ..writeAsBytesSync(buildWavWithListInfo({'ICRD': '2026-04-18'}));
+
+    await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: 't',
+      artist: 'a',
+      album: 'al',
+      albumArtist: 'aa',
+      track: '1',
+    );
+    final lenAfterFirst = wavFile.lengthSync();
+
+    final ok = await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: 't2',
+      artist: 'a2',
+      album: 'al2',
+      albumArtist: 'aa2',
+      track: '2',
+    );
+
+    expect(ok, false); // 已有 id3 chunk 时跳过
+    expect(wavFile.lengthSync(), lenAfterFirst);
+  });
+
+  test('LIST INFO 已含 INAM：视为已有音乐标签，跳过', () async {
+    final wavFile = File('${tmpDir.path}/tagged.wav')
+      ..writeAsBytesSync(buildWavWithListInfo({
+        'INAM': '已有标题',
+        'IART': '某人',
+      }));
+    final len = wavFile.lengthSync();
+
+    final ok = await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: 't',
+      artist: 'a',
+      album: 'al',
+      albumArtist: 'aa',
+      track: '1',
+    );
+
+    expect(ok, false);
+    expect(wavFile.lengthSync(), len);
+    expect(countChunks(wavFile, 'id3 '), 0);
+  });
+
+  test('LIST 类型非 INFO（adtl）：正常写入 id3 与 LIST INFO', () async {
+    final wavFile = File('${tmpDir.path}/adtl.wav')
+      ..writeAsBytesSync(appendChunkToWav(buildListChunk('adtl', {'labl': 'cue1'})));
+
+    final ok = await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: 't',
+      artist: 'a',
+      album: 'al',
+      albumArtist: 'aa',
+      track: '1',
+    );
+
+    expect(ok, true);
+    expect(countChunks(wavFile, 'id3 '), 1);
+    // 原有 adtl LIST + 新写的 INFO LIST
+    expect(countChunks(wavFile, 'LIST'), 2);
     final info = _readListInfo(wavFile);
     expect(info!['INAM'], 't');
   });
