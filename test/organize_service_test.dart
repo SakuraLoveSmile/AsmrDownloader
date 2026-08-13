@@ -1,12 +1,37 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:asmr_downloader/common/config_providers.dart';
+import 'package:asmr_downloader/services/asmr_repo/asmr_api.dart';
+import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+/// 测试用 API 替身：按数字 id 返回 workInfo，可配置抛异常。
+class FakeAsmrApi extends AsmrApi {
+  final Map<String, Map<String, dynamic>> works;
+  final Map<String, Uint8List> covers;
+  final bool throws;
+
+  FakeAsmrApi({
+    this.works = const {},
+    this.covers = const {},
+    this.throws = false,
+  });
+
+  @override
+  Future<Map<String, dynamic>?> getWorkInfo(String id) async {
+    if (throws) throw Exception('network error');
+    return works[id];
+  }
+
+  @override
+  Future<Uint8List?> getCoverBytes(String url) async => covers[url];
+}
 
 void main() {
   late Directory testBase;
@@ -45,9 +70,16 @@ void main() {
     testBase.deleteSync(recursive: true);
   });
 
-  ProviderContainer makeContainer() {
+  ProviderContainer makeContainer({
+    Map<String, Map<String, dynamic>> works = const {},
+    Map<String, Uint8List> covers = const {},
+    bool apiThrows = false,
+  }) {
     return ProviderContainer(overrides: [
       worksIndexProvider.overrideWith((ref) => index),
+      asmrApiProvider.overrideWith(
+          (ref) => FakeAsmrApi(works: works, covers: covers, throws: apiThrows)),
+      downloadPathProvider.overrideWith((ref) => dlPath.path),
     ]);
   }
 
@@ -215,6 +247,202 @@ void main() {
 
       expect(result.success, 0);
       expect(result.skipped, 1);
+    });
+  });
+
+  group('自动识别 RJ 号（批量整理）', () {
+    /// 在下载目录创建 <dlPath>/<dirName>/<rj>/e01_舔耳.wav
+    void createWork(String rj, {String dirName = 'CV1&CV2-测试标题'}) {
+      final workDir = Directory(p.join(dlPath.path, dirName, rj))
+        ..createSync(recursive: true);
+      File(p.join(workDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+    }
+
+    test('空注册表：发现未注册作品并整理入库', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      createWork('RJ100001');
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      expect(result.failed, 0);
+      expect(result.missing, 0);
+      // 注册表新增条目并标记整理
+      final entry = await index.get('RJ100001');
+      expect(entry, isNotNull);
+      expect(entry!.organizedAt, isNotNull);
+      expect(entry.dirName, 'CV1&CV2-测试标题');
+      expect(entry.dlPath, dlPath.path);
+      // API 无数据 → 目录名降级（cv=CV1&CV2，title=测试标题，circle 兜底 CV）
+      final workDir = p.join(
+        targetRoot.path,
+        'CV1&CV2',
+        'RJ100001 - CV1&CV2 - 测试标题',
+        'RJ100001',
+      );
+      expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
+    });
+
+    test('API 元数据成功时使用真实标题/CV/社团并回写注册表', () async {
+      final container = makeContainer(works: {
+        '100001': {
+          'title': '真实标题',
+          'circle': {'name': '真实社团'},
+          'vas': [
+            {'name': 'CV_A'},
+            {'name': 'CV_B'},
+          ],
+          'release': '2026-06-09',
+          'tags': [
+            {'i18n': {'zh-cn': {'name': '舔耳'}}},
+          ],
+          'mainCoverUrl': '',
+        },
+      });
+      addTearDown(container.dispose);
+      createWork('RJ100001');
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      final entry = await index.get('RJ100001');
+      expect(entry!.title, '真实标题');
+      expect(entry.circleName, '真实社团');
+      expect(entry.cvNames, 'CV_A&CV_B');
+      expect(entry.releaseDate, '2026-06-09');
+      expect(entry.tags, ['舔耳']);
+      // 目标目录用 API 元数据
+      final workDir = p.join(
+        targetRoot.path,
+        '真实社团',
+        'RJ100001 - CV_A&CV_B - 真实标题',
+        'RJ100001',
+      );
+      expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
+    });
+
+    test('API 抛异常时仍按目录名降级整理成功', () async {
+      final container = makeContainer(apiThrows: true);
+      addTearDown(container.dispose);
+      createWork('RJ100001');
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      expect(result.failed, 0);
+    });
+
+    test('非 RJ 目录、位数不足、隐藏目录不识别', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      Directory(p.join(dlPath.path, '音声资料')).createSync(recursive: true);
+      Directory(p.join(dlPath.path, '2024')).createSync();
+      Directory(p.join(dlPath.path, 'RJ12345')).createSync(); // 位数不足
+      Directory(p.join(dlPath.path, '.hidden', 'RJ200001'))
+          .createSync(recursive: true);
+
+      final discovered = await container
+          .read(organizeServiceProvider)
+          .discoverWorks(dlRoot: dlPath.path, excludeRoot: targetRoot.path);
+      expect(discovered, isEmpty);
+    });
+
+    test('平铺 RJ 目录（下载根下直接放 RJ 号）也能识别整理', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final workDir = Directory(p.join(dlPath.path, 'RJ300001'))
+        ..createSync(recursive: true);
+      File(p.join(workDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      final entry = await index.get('RJ300001');
+      expect(entry!.dirName, '');
+      expect(entry.dlPath, dlPath.path);
+      expect(entry.sourceDir, p.join(dlPath.path, 'RJ300001'));
+    });
+
+    test('注册表路径过期但发现新路径：从新路径整理并修正注册表', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      // 注册表记录旧路径（目录不存在）
+      await index.upsert(WorkEntry(
+        sourceId: 'RJ400001',
+        dlPath: dlPath.path,
+        dirName: '旧目录',
+        title: '旧标题',
+        cvNames: 'CV1',
+      ));
+      // 实际目录在新位置
+      createWork('RJ400001', dirName: '新目录');
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      final entry = await index.get('RJ400001');
+      expect(entry!.dirName, '新目录');
+      expect(entry.dlPath, dlPath.path);
+      expect(entry.organizedAt, isNotNull);
+    });
+
+    test('targetRoot 位于下载目录内时其子树不作为源扫描', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final navRoot = Directory(p.join(dlPath.path, 'navidrome'))
+        ..createSync();
+      // 整理产物结构（circle/album/RJ）不应被识别
+      Directory(p.join(navRoot.path, '社团', 'RJ500001 - CV - 标题', 'RJ500001'))
+          .createSync(recursive: true);
+
+      final discovered = await container
+          .read(organizeServiceProvider)
+          .discoverWorks(dlRoot: dlPath.path, excludeRoot: navRoot.path);
+      expect(discovered, isEmpty);
+    });
+
+    test('同一 sourceId 多目录时取最浅路径', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      Directory(p.join(dlPath.path, '浅层', 'RJ600001'))
+          .createSync(recursive: true);
+      Directory(p.join(dlPath.path, '深层', '更深', 'RJ600001'))
+          .createSync(recursive: true);
+
+      final discovered = await container
+          .read(organizeServiceProvider)
+          .discoverWorks(dlRoot: dlPath.path, excludeRoot: targetRoot.path);
+      expect(discovered.length, 1);
+      expect(discovered.first.dirName, '浅层');
     });
   });
 }

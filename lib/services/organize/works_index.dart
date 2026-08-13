@@ -54,11 +54,16 @@ class WorkEntry {
   /// 下载目录：{dlPath}/{dirName}/{sourceId}
   String get sourceDir => p.join(dlPath, dirName, sourceId);
 
-  WorkEntry copyWith({String? organizedAt, bool clearOrganizedAt = false}) {
+  WorkEntry copyWith({
+    String? dlPath,
+    String? dirName,
+    String? organizedAt,
+    bool clearOrganizedAt = false,
+  }) {
     return WorkEntry(
       sourceId: sourceId,
-      dlPath: dlPath,
-      dirName: dirName,
+      dlPath: dlPath ?? this.dlPath,
+      dirName: dirName ?? this.dirName,
       title: title,
       cvNames: cvNames,
       circleName: circleName,
