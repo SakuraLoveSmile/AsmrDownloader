@@ -18,6 +18,8 @@ class AudioTagWriter {
   }
 
   /// 写标签，失败返回 false（不抛出，避免阻断整理流程）
+  /// [lyrics] 内嵌歌词（LRC 文本，mp3→USLT / flac→LYRICS；wav 不支持）
+  /// [coverBytes] 内嵌封面（mp3→APIC / flac→PICTURE；wav 不支持）
   static Future<bool> writeTags(
     String filePath, {
     required String title,
@@ -25,6 +27,8 @@ class AudioTagWriter {
     required String album,
     required String albumArtist,
     String? track,
+    String? lyrics,
+    Uint8List? coverBytes,
   }) async {
     try {
       final ext = filePath.split('.').last.toLowerCase();
@@ -43,7 +47,9 @@ class AudioTagWriter {
               artist: artist,
               album: album,
               albumArtist: albumArtist,
-              track: track);
+              track: track,
+              lyrics: lyrics,
+              coverBytes: coverBytes);
         default:
           return false;
       }
@@ -61,18 +67,24 @@ class AudioTagWriter {
     required String album,
     required String albumArtist,
     String? track,
+    String? lyrics,
+    Uint8List? coverBytes,
   }) async {
     final file = File(filePath);
     final bytes = await file.readAsBytes();
-    final format = filePath.endsWith('.flac')
-        ? Format.flac
-        : Format.mp3;
+    final format = filePath.endsWith('.flac') ? Format.flac : Format.mp3;
     final audioFile = AudioFile(bytes, format)
       ..setTitle(title)
       ..setArtist(artist)
       ..setAlbum(album)
       ..setAlbumArtist(albumArtist)
       ..setTrack(track);
+    if (lyrics != null && lyrics.isNotEmpty) {
+      audioFile.setLyric(lyrics);
+    }
+    if (coverBytes != null && coverBytes.isNotEmpty) {
+      audioFile.setCover(coverBytes);
+    }
     await file.writeAsBytes(audioFile.save());
     return true;
   }
