@@ -144,6 +144,37 @@ void main() {
     expect(_ascii(bytes, 12 + 8 + 16, 4), 'data');
   });
 
+  test('wav 写内嵌歌词（USLT 帧）和内嵌封面（APIC 帧）', () async {
+    final wavFile = File('${tmpDir.path}/track.wav')
+      ..writeAsBytesSync(buildMinimalWav());
+    final cover = Uint8List.fromList(List.filled(200, 1));
+
+    final ok = await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: 't',
+      artist: 'a',
+      album: 'al',
+      albumArtist: 'aa',
+      track: '1',
+      lyrics: '[00:01.00]测试歌词\n[00:02.00]第二行',
+      coverBytes: cover,
+    );
+
+    expect(ok, true);
+
+    final bytes = wavFile.readAsBytesSync();
+    final asStr = String.fromCharCodes(bytes);
+    expect(asStr.contains('USLT'), true);
+    expect(asStr.contains('APIC'), true);
+    // 歌词内容以 UTF-16 LE 存在
+    final lyricsUtf16 = [
+      0xFF,
+      0xFE,
+      ...'[00:01.00]测试歌词'.codeUnits.expand((u) => [u & 0xFF, u >> 8]),
+    ];
+    expect(bytes, containsAllInOrder(lyricsUtf16));
+  });
+
   test('幂等：已有 LIST INFO chunk 时跳过（不重复追加）', () async {
     final wavFile = File('${tmpDir.path}/track.wav')
       ..writeAsBytesSync(buildMinimalWav());
