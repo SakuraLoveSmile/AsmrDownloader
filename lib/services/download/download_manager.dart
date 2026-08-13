@@ -80,13 +80,7 @@ class DownloadManager {
 
     // auto organize to navidrome
     if (ref.read(autoOrganizeProvider)) {
-      final result = await ref.read(uiServiceProvider).organizeCurrentWork();
-      if (result != null) {
-        Log.info('auto organize completed: copied ${result.copied}, '
-            'skipped ${result.skipped}');
-      } else {
-        Log.warning('auto organize failed or skipped');
-      }
+      await ref.read(uiServiceProvider).autoOrganize();
     }
   }
 

@@ -19,6 +19,9 @@ import 'package:windows_taskbar/windows_taskbar.dart';
 
 import 'package:path/path.dart' as p;
 
+/// 全局 SnackBar 入口（供无 BuildContext 的下载流程提示）
+final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 class UIService {
   final Ref ref;
   UIService(this.ref);
@@ -187,17 +190,31 @@ class UIService {
 
     if (!context.mounted) return;
     if (result == null) {
-      _showSnack(context, '整理失败：请先搜索并下载作品');
+      _showSnack('整理失败：请先搜索并下载作品', context: context);
       return;
     }
-    _showSnack(context,
+    _showSnack(context: context,
         '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
   }
 
-  void _showSnack(BuildContext context, String message) {
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
+  /// 下载完成后的自动整理（路径未设置时弹目录选择器）
+  Future<void> autoOrganize() async {
+    final result = await organizeCurrentWork(pickPathIfEmpty: true);
+
+    if (result == null) {
+      _showSnack('自动整理未执行：未设置整理路径或作品未下载');
+      return;
+    }
+    _showSnack(
+        '自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
+  }
+
+  void _showSnack(String message, {BuildContext? context}) {
+    final messenger = context != null
+        ? ScaffoldMessenger.of(context)
+        : scaffoldMessengerKey.currentState;
+    messenger
+      ?..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 

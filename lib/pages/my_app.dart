@@ -6,6 +6,7 @@ import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_title_bar.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_close_handler.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -17,6 +18,7 @@ class MyApp extends StatelessWidget {
     return Initialization(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
+        scaffoldMessengerKey: scaffoldMessengerKey,
         localizationsDelegates: [
           GlobalMaterialLocalizations.delegate,
           GlobalWidgetsLocalizations.delegate,
