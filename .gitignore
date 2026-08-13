@@ -45,6 +45,8 @@ app.*.map.json
 /android/app/release
 
 asmr_dl_config.json
+.workflow/
+.zcode/
 
 _build.bat
 # 本地示例目录（含大体积音频，不提交）

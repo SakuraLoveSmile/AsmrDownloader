@@ -7,6 +7,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.da
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
+import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:asmr_downloader/utils/log.dart';
@@ -44,7 +45,19 @@ class UIService {
   Future<String?> search(String input) async {
     await resetProgress();
 
-    final searchText = normalizeInput(input);
+    // 支持直接粘贴 asmr.one 作品页 URL：
+    // https://asmr-200.com/work/RJ01619789?path=["RJ01619789","舔耳ONLY音轨"]#work-tree
+    // 提取 sourceId 与音轨树目录面包屑（path 参数），
+    // work info 获取失败时用作保底音乐标签。
+    final urlInfo = parseAsmrWorkUrl(input);
+    String searchText;
+    if (urlInfo != null) {
+      searchText = urlInfo.sourceId;
+      ref.read(workTreePathProvider.notifier).state = urlInfo.treePath;
+    } else {
+      ref.read(workTreePathProvider.notifier).state = const [];
+      searchText = normalizeInput(input);
+    }
     if (!isSourceIdValid(searchText)) return null;
 
     if (searchText == ref.read(searchTextProvider)) {
@@ -173,17 +186,25 @@ class UIService {
       fetchWorkInfo: (id) => ref.read(asmrApiProvider).getWorkInfo(id),
     );
 
+    final cvNames = ref.read(cvLsProvider).join('&');
+
+    // 降级模式：work info 获取失败时 circle/cv 均为空，
+    // artist（社团目录名与标签）保底到 CV 名、再保底到 sourceId，
+    // 保证整理目录与音乐标签不落空。sourceId 已判空，必为非空。
+    final artist =
+        [circleName, cvNames, sourceId].firstWhere((name) => name.isNotEmpty);
+
     return NavidromeOrganizer.organize(
       sourceDir: sourceDir,
       targetRoot: navidromePath,
-      circleName: circleName,
+      circleName: artist,
       sourceId: sourceId,
-      cvNames: ref.read(cvLsProvider).join('&'),
+      cvNames: cvNames,
       title: ref.read(titleProvider),
       coverBytes: coverBytes,
-      // 标签字段：artist = 社团名，albumartist = CV 名
-      artist: circleName,
-      albumArtist: ref.read(cvLsProvider).join('&'),
+      // 标签字段：artist = 社团名（降级保底 CV / sourceId），albumartist = CV 名
+      artist: artist,
+      albumArtist: cvNames,
       // 发行日期与流派标签
       releaseDate: ref.read(releaseDateProvider),
       genres: ref.read(tagLsProvider),

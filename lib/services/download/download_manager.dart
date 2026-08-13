@@ -29,8 +29,10 @@ class DownloadManager {
       return;
     }
 
+    // 标题/目录名为空（title 降级链尚未给出保底值）时拒绝下载
     final voiceWorkPath = ref.read(voiceWorkPathProvider);
-    if (p.basename(voiceWorkPath) == '-') {
+    if (p.basename(voiceWorkPath) == '-' ||
+        p.equals(voiceWorkPath, ref.read(downloadPathProvider))) {
       Log.error('download failed: $sourceId\n'
           'error: voiceWorkPath is invalid, which means you have to start downloading after work info is loaded');
       return;

@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
+import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
+import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -17,18 +19,50 @@ final workInfoProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   return api.getWorkInfo(id);
 });
 
+/// 标题降级链：work info → tracks 携带的 workTitle → URL 目录面包屑 → sourceId。
+/// work info 接口获取不到数据时仍有保底标题用于下载目录与音乐标签，
+/// 不会出现空标题（此前会退化成 "dlPath/-" 或空专辑标签）。
 final titleProvider = Provider<String>((ref) {
-  final workInfo = ref.watch(workInfoProvider);
-  return workInfo.maybeWhen(
-    data: (data) {
-      if (data == null) {
-        return '';
-      }
-      return data['title'].toString();
-    },
-    orElse: () => '',
-  );
+  final sourceId = ref.watch(sourceIdProvider) ?? '';
+
+  // 1. work info 标题
+  final workTitle = ref.watch(workInfoProvider).maybeWhen(
+        data: (data) => data?['title']?.toString() ?? '',
+        orElse: () => '',
+      );
+  if (workTitle.isNotEmpty) return workTitle;
+
+  // 2. tracks 数据里携带的 workTitle（work info 挂了但 tracks 成功时）
+  final tracksTitle = ref.watch(rawTracksProvider).maybeWhen(
+        data: (data) => findWorkTitleInTracks(data) ?? '',
+        orElse: () => '',
+      );
+  if (tracksTitle.isNotEmpty) return tracksTitle;
+
+  // 3. URL 目录面包屑（path 参数）
+  final urlTitle =
+      fallbackTitleFromTreePath(ref.watch(workTreePathProvider), sourceId);
+  if (urlTitle.isNotEmpty) return urlTitle;
+
+  // 4. 最后保底 sourceId
+  return sourceId;
 });
+
+/// 从 tracks 树中找第一个非空 workTitle（音轨节点都携带作品标题）。
+String? findWorkTitleInTracks(List<dynamic>? tracks) {
+  if (tracks == null) return null;
+  for (final node in tracks) {
+    if (node is! Map) continue;
+    final workTitle = node['workTitle'];
+    if (workTitle is String && workTitle.isNotEmpty) return workTitle;
+    final children = node['children'];
+    if (children is List) {
+      final found = findWorkTitleInTracks(children);
+      if (found != null) return found;
+    }
+  }
+  return null;
+}
 
 final circleNameProvider = Provider<String>((ref) {
   final workInfo = ref.watch(workInfoProvider);
