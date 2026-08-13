@@ -63,6 +63,8 @@ class NavidromeOrganizer {
   /// [coverBytes] 封面字节，非空时保存为 `cover.jpg`
   /// [artist] 标签 artist 字段（社团名）
   /// [albumArtist] 标签 albumartist 字段（CV 名）
+  /// [releaseDate] 发行日期（如 2026-06-18），年份写入标签
+  /// [genres] 流派标签列表
   static Future<OrganizeResult> organize({
     required String sourceDir,
     required String targetRoot,
@@ -73,6 +75,8 @@ class NavidromeOrganizer {
     Uint8List? coverBytes,
     String artist = '',
     String albumArtist = '',
+    String releaseDate = '',
+    List<String> genres = const [],
   }) async {
     final source = Directory(sourceDir);
     if (!await source.exists()) {
@@ -132,7 +136,7 @@ class NavidromeOrganizer {
         copied++;
       }
 
-      // 音频文件写标签（title/artist/album/albumartist/track/内嵌歌词/内嵌封面）
+      // 音频文件写标签（title/artist/album/albumartist/track/内嵌歌词/内嵌封面/年份/流派）
       if (AudioTagWriter.isAudioFile(targetFile.path)) {
         final track = _parseTrackNumber(p.basename(file.path));
         await AudioTagWriter.writeTags(
@@ -146,6 +150,10 @@ class NavidromeOrganizer {
           lyrics: lrcMap[p.basenameWithoutExtension(file.path)],
           // 专辑封面嵌入每首歌（wav 不支持则自动跳过）
           coverBytes: coverBytes,
+          // 发行年份（releaseDate 取前 4 位）
+          year: releaseDate.length >= 4 ? releaseDate.substring(0, 4) : null,
+          // 流派（前 3 个，防止字段过长）
+          genre: genres.take(3).join('; '),
         );
       }
     }

@@ -175,6 +175,36 @@ void main() {
     expect(bytes, containsAllInOrder(lyricsUtf16));
   });
 
+  test('wav 写发行年份（TYER）和流派（TCON）帧', () async {
+    final wavFile = File('${tmpDir.path}/track.wav')
+      ..writeAsBytesSync(buildMinimalWav());
+
+    final ok = await AudioTagWriter.writeTags(
+      wavFile.path,
+      title: 't',
+      artist: 'a',
+      album: 'al',
+      albumArtist: 'aa',
+      track: '1',
+      year: '2026',
+      genre: 'ASMR; 舔耳',
+    );
+
+    expect(ok, true);
+
+    final bytes = wavFile.readAsBytesSync();
+    final asStr = String.fromCharCodes(bytes);
+    expect(asStr.contains('TYER'), true);
+    expect(asStr.contains('TCON'), true);
+    // 年份内容以 UTF-16 LE 存在
+    final yearUtf16 = [
+      0xFF,
+      0xFE,
+      ...'2026'.codeUnits.expand((u) => [u & 0xFF, u >> 8]),
+    ];
+    expect(bytes, containsAllInOrder(yearUtf16));
+  });
+
   test('幂等：已有 LIST INFO chunk 时跳过（不重复追加）', () async {
     final wavFile = File('${tmpDir.path}/track.wav')
       ..writeAsBytesSync(buildMinimalWav());
