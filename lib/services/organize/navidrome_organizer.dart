@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:asmr_downloader/services/organize/audio_tag_writer.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:path/path.dart' as p;
@@ -60,6 +61,8 @@ class NavidromeOrganizer {
   /// [sourceDir] 下载的作品目录（`<voiceWorkPath>/<sourceId>`）
   /// [targetRoot] Navidrome 媒体库根目录
   /// [coverBytes] 封面字节，非空时保存为 `cover.jpg`
+  /// [artist] 标签 artist 字段（社团名）
+  /// [albumArtist] 标签 albumartist 字段（CV 名）
   static Future<OrganizeResult> organize({
     required String sourceDir,
     required String targetRoot,
@@ -68,6 +71,8 @@ class NavidromeOrganizer {
     required String cvNames,
     required String title,
     Uint8List? coverBytes,
+    String artist = '',
+    String albumArtist = '',
   }) async {
     final source = Directory(sourceDir);
     if (!await source.exists()) {
@@ -113,11 +118,31 @@ class NavidromeOrganizer {
         await file.copy(targetFile.path);
         copied++;
       }
+
+      // 音频文件写标签（title/artist/album/albumartist/track）
+      if (AudioTagWriter.isAudioFile(targetFile.path)) {
+        final track = _parseTrackNumber(p.basename(file.path));
+        await AudioTagWriter.writeTags(
+          targetFile.path,
+          title: p.basenameWithoutExtension(file.path),
+          artist: artist,
+          album: title,
+          albumArtist: albumArtist,
+          track: track,
+        );
+      }
     }
 
     Log.info('organize completed: copied $copied, skipped $skipped\n'
         'targetDir: $targetDir');
     return OrganizeResult(copied: copied, skipped: skipped);
+  }
+
+  /// 从文件名解析 track number（如 "01 xxx.wav" → "1"），无法解析返回 null
+  static String? _parseTrackNumber(String fileName) {
+    final match = RegExp(r'^(\d+)').firstMatch(fileName);
+    if (match == null) return null;
+    return int.parse(match.group(1)!).toString();
   }
 
   static Future<void> _collectFiles(Directory dir, List<File> result) async {

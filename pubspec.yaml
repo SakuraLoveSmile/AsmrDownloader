@@ -21,6 +21,7 @@ dependencies:
   logger: ^2.4.0
   path: ^1.9.0
   path_provider: ^2.1.4
+  taglib_dart: ^1.0.0
   transparent_image: ^2.0.1
   window_manager: ^0.4.2
   windows_taskbar: ^1.1.2
