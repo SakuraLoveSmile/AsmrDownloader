@@ -159,6 +159,143 @@ void main() {
     expect(File(p.join(workDir, 'cover.jpg')).existsSync(), false);
   });
 
+  group('VTT 转 LRC', () {
+    late Directory workDir;
+
+    setUp(() {
+      workDir = Directory(p.join(
+        targetRoot.path,
+        '测试社团',
+        'RJ12345678 - CV1&CV2 - 测试标题',
+        'RJ12345678',
+      ));
+    });
+
+    /// 音轨 + 合法 VTT 字幕
+    void createAudioWithVtt() {
+      final audioDir = Directory(p.join(sourceDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
+      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt')).writeAsStringSync(
+          'WEBVTT\n\n'
+          '00:00:01.000 --> 00:00:02.000\n'
+          '舔耳开始\n\n'
+          '00:00:03.500 --> 00:00:05.000\n'
+          '继续侍奉\n');
+    }
+
+    test('vtt 自动转换：生成 .lrc 侧车文件且保留原 vtt', () async {
+      createAudioWithVtt();
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      // wav + vtt + 生成的 lrc = 3
+      expect(result.copied, 3);
+      expect(result.skipped, 0);
+
+      final lrcFile = File(p.join(workDir.path, 'e01_舔耳.wav.lrc'));
+      expect(lrcFile.existsSync(), true);
+      expect(lrcFile.readAsStringSync(),
+          '[00:01.00]舔耳开始\n[00:03.50]继续侍奉');
+      // 原字幕仍保留
+      expect(File(p.join(workDir.path, 'e01_舔耳.wav.vtt')).existsSync(), true);
+    });
+
+    test('lrc 与 vtt 并存时 lrc 优先，不生成重复侧车', () async {
+      final audioDir = Directory(p.join(sourceDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
+      // 真实 LRC（人工字幕）
+      File(p.join(audioDir.path, 'e01_舔耳.wav.lrc')).writeAsStringSync(
+          '[00:09.00]人工字幕优先');
+      // 同名的 VTT
+      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt')).writeAsStringSync(
+          'WEBVTT\n\n'
+          '00:00:01.000 --> 00:00:02.000\n'
+          'vtt 内容\n');
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      // wav + lrc + vtt = 3
+      expect(result.copied, 3);
+
+      final lrcFile = File(p.join(workDir.path, 'e01_舔耳.wav.lrc'));
+      // 是真实 lrc 的内容（vtt 转换结果没有覆盖）
+      expect(lrcFile.readAsStringSync(), '[00:09.00]人工字幕优先');
+      // 只有一个 .lrc 文件
+      final lrcFiles = Directory(workDir.path)
+          .listSync()
+          .where((f) => f.path.endsWith('.lrc'))
+          .toList();
+      expect(lrcFiles.length, 1);
+    });
+
+    test('vtt 转换幂等：重复整理侧车 lrc 跳过', () async {
+      createAudioWithVtt();
+
+      await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      expect(result.copied, 0);
+      expect(result.skipped, 3);
+    });
+
+    test('vtt 内容非法时静默跳过，不影响复制', () async {
+      final audioDir = Directory(p.join(sourceDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
+      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt'))
+          .writeAsStringSync('这不是合法的字幕');
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      // wav + vtt = 2，无侧车
+      expect(result.copied, 2);
+      expect(File(p.join(workDir.path, 'e01_舔耳.wav.lrc')).existsSync(), false);
+    });
+  });
+
   group('resolveCircleName', () {
     // 汉化版数据结构（与 asmr API 实际返回一致）
     Map<String, dynamic> translatedWork({String circle = '汉化组'}) => {

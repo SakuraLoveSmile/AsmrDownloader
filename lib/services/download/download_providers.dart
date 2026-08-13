@@ -18,12 +18,17 @@ final voiceWorkPathProvider = Provider<String>((ref) {
   final title = ref.watch(titleProvider);
   final cvLs = ref.watch(cvLsProvider);
 
-  // cv1&cv2&...&cvn-title
-  final dirName = getLegalWindowsName('${cvLs.join('&')}-$title');
+  // cv1&cv2&...&cvn-title（cv 为空时省略，避免目录名出现孤立的 '-'）
+  final dirName = getLegalWindowsName(
+      [cvLs.join('&'), title].where((s) => s.isNotEmpty).join('-'));
   return p.join(downloadPath, dirName);
 });
 
 final searchTextProvider = StateProvider<String?>((ref) => null);
+
+/// 从粘贴的 asmr.one 作品页 URL 中解析出的音轨树目录面包屑
+/// （path 查询参数），work info 获取失败时用作保底标签。
+final workTreePathProvider = StateProvider<List<String>>((ref) => const []);
 
 final searchResultProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final searchText = ref.watch(searchTextProvider);

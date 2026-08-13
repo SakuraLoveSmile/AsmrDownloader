@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:asmr_downloader/services/organize/audio_tag_writer.dart';
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:asmr_downloader/utils/vtt_to_lrc.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:path/path.dart' as p;
 
@@ -65,6 +66,9 @@ class NavidromeOrganizer {
   /// [albumArtist] 标签 albumartist 字段（CV 名）
   /// [releaseDate] 发行日期（如 2026-06-18），年份写入标签
   /// [genres] 流派标签列表
+  ///
+  /// 字幕处理：同名 .lrc 直接使用（优先）；同名 .vtt 自动转换为 LRC，
+  /// 内嵌为音频歌词标签并额外生成 `<音频名>.lrc` 侧车文件。
   static Future<OrganizeResult> organize({
     required String sourceDir,
     required String targetRoot,
@@ -86,8 +90,9 @@ class NavidromeOrganizer {
     // 目标目录：<targetRoot>/<circle>/<sourceId> - <cv> - <title>/<sourceId>
     final circleDirName =
         getLegalWindowsName(circleName.isEmpty ? cvNames : circleName);
-    final albumDirName =
-        getLegalWindowsName('$sourceId - $cvNames - $title');
+    // 空字段省略，降级模式下 cv/title 缺失时不会出现 "RJ -  - " 残留分隔符
+    final albumDirName = getLegalWindowsName(
+        [sourceId, cvNames, title].where((s) => s.isNotEmpty).join(' - '));
     final targetDir = p.join(targetRoot, circleDirName, albumDirName, sourceId);
 
     int copied = 0;
@@ -111,17 +116,46 @@ class NavidromeOrganizer {
     final files = <File>[];
     await _collectFiles(source, files);
 
-    // 建立 LRC 歌词映射：音轨名（去扩展名）→ 歌词文本
+    // 建立歌词映射：音频引用名 → 歌词文本。
+    // 字幕文件命名可能带音频扩展名（"xxx.mp3.vtt" → key "xxx.mp3"）
+    // 或不带（"xxx.vtt" → key "xxx"），音频查找时两种 key 都试。
+    // 优先级：同名 .lrc > 同名 .vtt 转换结果（lrc 是人工/官方字幕，优先）。
     final lrcMap = <String, String>{};
-    for (final file in files) {
-      if (file.path.toLowerCase().endsWith('.lrc')) {
-        try {
-          lrcMap[p.basenameWithoutExtension(file.path)] =
-              await file.readAsString();
-        } catch (e) {
-          Log.warning('read lrc failed: ${file.path}\n' 'error: $e');
+    final vttMap = <String, String>{};
+
+    Future<void> readSubtitle(File file, String suffix) async {
+      final name = p.basename(file.path);
+      if (!name.toLowerCase().endsWith(suffix)) return;
+      final key = name.substring(0, name.length - suffix.length);
+      try {
+        final content = await file.readAsString();
+        if (suffix == '.lrc') {
+          lrcMap[key] = content;
+        } else {
+          final converted = vttToLrc(content);
+          if (converted != null) {
+            vttMap[key] = converted;
+          }
         }
+      } catch (e) {
+        Log.warning('read subtitle failed: ${file.path}\n' 'error: $e');
       }
+    }
+
+    for (final file in files) {
+      await readSubtitle(file, '.lrc');
+    }
+    for (final file in files) {
+      await readSubtitle(file, '.vtt');
+    }
+
+    /// 音频文件的歌词：完整名或去扩展名两种 key，lrc 优先于 vtt
+    String? lyricsFor(String audioBasename) {
+      final base = p.basenameWithoutExtension(audioBasename);
+      return lrcMap[audioBasename] ??
+          lrcMap[base] ??
+          vttMap[audioBasename] ??
+          vttMap[base];
     }
 
     // 扁平化复制到目标目录
@@ -138,16 +172,40 @@ class NavidromeOrganizer {
 
       // 音频文件写标签（title/artist/album/albumartist/track/内嵌歌词/内嵌封面/年份/流派）
       if (AudioTagWriter.isAudioFile(targetFile.path)) {
-        final track = _parseTrackNumber(p.basename(file.path));
+        final audioName = p.basename(file.path);
+        final base = p.basenameWithoutExtension(audioName);
+        final lyrics = lyricsFor(audioName);
+
+        // VTT 转换出的歌词额外生成为 .lrc 侧车文件
+        // （供 mp3tag 等其他工具使用；已有真实 .lrc 时跳过，避免覆盖）
+        final hasRealLrc =
+            lrcMap.containsKey(audioName) || lrcMap.containsKey(base);
+        if (lyrics != null &&
+            !hasRealLrc &&
+            (vttMap.containsKey(audioName) || vttMap.containsKey(base))) {
+          final lrcFile = File(p.join(targetDir, '$audioName.lrc'));
+          final existing = await lrcFile.exists()
+              ? await lrcFile.readAsString()
+              : null;
+          if (existing == lyrics) {
+            skipped++;
+          } else {
+            await lrcFile.writeAsString(lyrics);
+            copied++;
+            Log.info('organize lrc from vtt: ${lrcFile.path}');
+          }
+        }
+
+        final track = _parseTrackNumber(audioName);
         await AudioTagWriter.writeTags(
           targetFile.path,
-          title: p.basenameWithoutExtension(file.path),
+          title: base,
           artist: artist,
           album: title,
           albumArtist: albumArtist,
           track: track,
-          // 同名 LRC 作为内嵌歌词（wav 不支持则自动跳过）
-          lyrics: lrcMap[p.basenameWithoutExtension(file.path)],
+          // 内嵌歌词：同名 LRC 或 VTT 转换结果（wav 不支持则自动跳过）
+          lyrics: lyrics,
           // 专辑封面嵌入每首歌（wav 不支持则自动跳过）
           coverBytes: coverBytes,
           // 发行年份（releaseDate 取前 4 位）
