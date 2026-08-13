@@ -107,6 +107,19 @@ class NavidromeOrganizer {
     final files = <File>[];
     await _collectFiles(source, files);
 
+    // 建立 LRC 歌词映射：音轨名（去扩展名）→ 歌词文本
+    final lrcMap = <String, String>{};
+    for (final file in files) {
+      if (file.path.toLowerCase().endsWith('.lrc')) {
+        try {
+          lrcMap[p.basenameWithoutExtension(file.path)] =
+              await file.readAsString();
+        } catch (e) {
+          Log.warning('read lrc failed: ${file.path}\n' 'error: $e');
+        }
+      }
+    }
+
     // 扁平化复制到目标目录
     for (final file in files) {
       final targetFile = File(p.join(targetDir, p.basename(file.path)));
@@ -119,7 +132,7 @@ class NavidromeOrganizer {
         copied++;
       }
 
-      // 音频文件写标签（title/artist/album/albumartist/track）
+      // 音频文件写标签（title/artist/album/albumartist/track/内嵌歌词/内嵌封面）
       if (AudioTagWriter.isAudioFile(targetFile.path)) {
         final track = _parseTrackNumber(p.basename(file.path));
         await AudioTagWriter.writeTags(
@@ -129,6 +142,10 @@ class NavidromeOrganizer {
           album: title,
           albumArtist: albumArtist,
           track: track,
+          // 同名 LRC 作为内嵌歌词（wav 不支持则自动跳过）
+          lyrics: lrcMap[p.basenameWithoutExtension(file.path)],
+          // 专辑封面嵌入每首歌（wav 不支持则自动跳过）
+          coverBytes: coverBytes,
         );
       }
     }
