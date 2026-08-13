@@ -13,10 +13,10 @@ Future<void> setupWindow(List<String> args) async {
   await windowManager.ensureInitialized();
 
   if (Platform.isWindows) {
-    // for window acrylic, mica or transparency effects
+    // 纯色模糊背景（acrylic 亚克力效果，Windows 10 1803+）
     await Window.initialize();
     Window.setEffect(
-      effect: WindowEffect.transparent,
+      effect: WindowEffect.acrylic,
       color: const Color(0xCC222222),
     );
 

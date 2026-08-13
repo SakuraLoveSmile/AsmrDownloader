@@ -3,6 +3,7 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr
 import 'package:asmr_downloader/pages/downloader/config_settings/components/auto_organize_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/navidrome_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
@@ -17,13 +18,14 @@ class Downloader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 第一行：搜索 + 下载路径 + API channel
+          // 第一行：搜索 + 下载路径 + 整理路径 + API channel
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 SearchBox(),
                 DownloadPathPicker(),
+                NavidromePathPicker(),
                 AsmrApiChannel(),
               ],
             ),
