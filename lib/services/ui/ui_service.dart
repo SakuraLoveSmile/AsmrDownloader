@@ -181,6 +181,9 @@ class UIService {
       cvNames: ref.read(cvLsProvider).join('&'),
       title: ref.read(titleProvider),
       coverBytes: coverBytes,
+      // 标签字段：artist = 社团名，albumartist = CV 名
+      artist: circleName,
+      albumArtist: ref.read(cvLsProvider).join('&'),
     );
   }
 
