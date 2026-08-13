@@ -39,7 +39,9 @@ class AudioTagWriter {
               artist: artist,
               album: album,
               albumArtist: albumArtist,
-              track: track);
+              track: track,
+              lyrics: lyrics,
+              coverBytes: coverBytes);
         case 'mp3':
         case 'flac':
           return _writeTaglibTags(filePath,
@@ -89,9 +91,10 @@ class AudioTagWriter {
     return true;
   }
 
-  /// wav 写 LIST/INFO chunk。
-  /// 文件末尾追加 LIST chunk（data chunk 之后合法），并更新 RIFF size。
-  /// 若文件已存在 LIST INFO chunk 则跳过（避免重复追加）。
+  /// wav 写标签：
+  /// 1. ID3v2 chunk（'id3 '，TagLib/Navidrome/ffmpeg 原生读取）— 歌词 USLT / 封面 APIC
+  /// 2. LIST/INFO chunk（老播放器兼容）
+  /// 文件末尾追加 chunk 并更新 RIFF size；已存在标签则跳过（幂等）。
   static Future<bool> _writeWavTags(
     String filePath, {
     required String title,
@@ -99,6 +102,8 @@ class AudioTagWriter {
     required String album,
     required String albumArtist,
     String? track,
+    String? lyrics,
+    Uint8List? coverBytes,
   }) async {
     final file = File(filePath);
     if (!await _isValidWav(file)) {
@@ -108,15 +113,32 @@ class AudioTagWriter {
 
     final raf = await file.open(mode: FileMode.append);
     try {
-      // 检查是否已有 LIST chunk（读文件头 chunk 列表）
-      if (await _hasListInfoChunk(raf)) {
-        Log.info('wav already has LIST INFO chunk, skip: $filePath');
+      // 已存在 ID3 或 LIST INFO chunk 则跳过（避免重复追加）
+      if (await _hasTagChunks(raf)) {
+        Log.info('wav already has tags, skip: $filePath');
         return false;
       }
 
-      // 构造 LIST INFO chunk：
-      // 'LIST' + size + 'INFO' + 若干 ('INAM'|'IART'|'IPRD'|'IPRT' + size + data)
-      final builder = BytesBuilder();
+      final chunks = BytesBuilder();
+
+      // ID3v2 chunk：歌词（USLT 帧）+ 封面（APIC 帧）+ 基础字段
+      // RIFF 规范要求 chunk 数据偶对齐，奇数长度补 1 字节
+      final id3 = _buildId3v2(
+        title: title,
+        artist: artist,
+        album: album,
+        albumArtist: albumArtist,
+        track: track,
+        lyrics: lyrics,
+        coverBytes: coverBytes,
+      );
+      chunks
+        ..add('id3 '.codeUnits)
+        ..add(_uint32Le(id3.length))
+        ..add(id3)
+        ..add(List.filled(id3.length.isOdd ? 1 : 0, 0));
+
+      // LIST INFO chunk（老播放器兼容）
       final subChunks = BytesBuilder();
       void addSubChunk(String id, String value) {
         if (value.isEmpty) return;
@@ -135,21 +157,22 @@ class AudioTagWriter {
       addSubChunk('IPRT', track ?? '');
 
       final subData = subChunks.toBytes();
-      builder
+      chunks
         ..add('LIST'.codeUnits)
         ..add(_uint32Le(subData.length + 4)) // +4 是 'INFO' 标识
         ..add('INFO'.codeUnits)
         ..add(subData);
-      final listChunk = builder.toBytes();
 
-      // 更新 RIFF size（偏移 4）：加 LIST chunk 大小
+      final newChunks = chunks.toBytes();
+
+      // 更新 RIFF size（偏移 4）：加新 chunk 总大小
       final riffSize = await _readUint32Le(raf, 4);
       await raf.setPosition(4);
-      await raf.writeFrom(_uint32Le(riffSize + listChunk.length));
+      await raf.writeFrom(_uint32Le(riffSize + newChunks.length));
 
-      // 追加 LIST chunk 到文件末尾
+      // 追加到文件末尾
       await raf.setPosition(await raf.length());
-      await raf.writeFrom(listChunk);
+      await raf.writeFrom(newChunks);
 
       Log.info('wav tags written: $filePath');
       return true;
@@ -157,6 +180,110 @@ class AudioTagWriter {
       await raf.close();
     }
   }
+
+  /// 构造 ID3v2.3 tag（用于 WAV 的 'id3 ' chunk）
+  /// 文本帧 UTF-16 编码（v2.3 兼容性最好的中文编码）
+  static Uint8List _buildId3v2({
+    required String title,
+    required String artist,
+    required String album,
+    required String albumArtist,
+    String? track,
+    String? lyrics,
+    Uint8List? coverBytes,
+  }) {
+    final frames = BytesBuilder();
+
+    void addFrame(String id, List<int> data) {
+      frames
+        ..add(id.codeUnits)
+        ..add(_uint32Be(data.length))
+        ..add([0x00, 0x00]) // frame flags
+        ..add(data);
+    }
+
+    void addTextFrame(String id, String text) {
+      if (text.isEmpty) return;
+      addFrame(id, [0x01, ..._utf16Le(text)]); // 0x01 = UTF-16
+    }
+
+    addTextFrame('TIT2', title);
+    addTextFrame('TPE1', artist);
+    addTextFrame('TALB', album);
+    addTextFrame('TPE2', albumArtist);
+    addTextFrame('TRCK', track ?? '');
+
+    // USLT 歌词帧：encoding + lang(3) + 描述(UTF-16 空) + 歌词
+    if (lyrics != null && lyrics.isNotEmpty) {
+      final data = <int>[
+        0x01,
+        ...'eng'.codeUnits,
+        ..._utf16Le(''), // 空描述（含 BOM 即终止）
+        ..._utf16Le(lyrics),
+      ];
+      addFrame('USLT', data);
+    }
+
+    // APIC 封面帧：encoding + mime + \0 + 类型(3=cover front) + 描述 + 图片
+    if (coverBytes != null && coverBytes.isNotEmpty) {
+      final mime = _imageMime(coverBytes);
+      final data = <int>[
+        0x01,
+        ...mime.codeUnits,
+        0x00,
+        0x03, // picture type: cover (front)
+        ..._utf16Le(''),
+        ...coverBytes,
+      ];
+      addFrame('APIC', data);
+    }
+
+    final frameBytes = frames.toBytes();
+    return Uint8List.fromList([
+      ...'ID3'.codeUnits,
+      0x03, 0x00, // version 2.3.0
+      0x00, // flags
+      ..._synchsafe(frameBytes.length),
+      ...frameBytes,
+    ]);
+  }
+
+  /// UTF-16 LE 编码（含 BOM），Dart String 内部即 UTF-16
+  static List<int> _utf16Le(String text) {
+    final bytes = <int>[0xFF, 0xFE];
+    for (final unit in text.codeUnits) {
+      bytes
+        ..add(unit & 0xFF)
+        ..add((unit >> 8) & 0xFF);
+    }
+    return bytes;
+  }
+
+  static String _imageMime(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return 'image/png';
+    }
+    return 'image/jpeg';
+  }
+
+  /// ID3v2 tag 大小：synchsafe 32-bit（每字节只取低 7 位）
+  static List<int> _synchsafe(int value) => [
+        (value >> 21) & 0x7F,
+        (value >> 14) & 0x7F,
+        (value >> 7) & 0x7F,
+        value & 0x7F,
+      ];
+
+  static Uint8List _uint32Be(int value) => Uint8List.fromList([
+        (value >> 24) & 0xFF,
+        (value >> 16) & 0xFF,
+        (value >> 8) & 0xFF,
+        value & 0xFF,
+      ]);
 
   /// 检查是否为合法 wav（RIFF/WAVE 头）
   static Future<bool> _isValidWav(File file) async {
@@ -171,9 +298,9 @@ class AudioTagWriter {
     }
   }
 
-  /// 遍历 RIFF chunk 列表，检查是否已有 LIST INFO chunk
+  /// 遍历 RIFF chunk 列表，检查是否已有标签（'id3 ' 或 LIST INFO）
   /// 注意：不关闭传入的 raf（由调用方管理）
-  static Future<bool> _hasListInfoChunk(RandomAccessFile raf) async {
+  static Future<bool> _hasTagChunks(RandomAccessFile raf) async {
     var offset = 12;
     while (offset + 8 <= await raf.length()) {
       await raf.setPosition(offset);
@@ -181,6 +308,7 @@ class AudioTagWriter {
       if (chunkHeader.length < 8) break;
       final chunkId = String.fromCharCodes(chunkHeader.sublist(0, 4));
       final chunkSize = _leUint32(chunkHeader.sublist(4, 8));
+      if (chunkId == 'id3 ' || chunkId == 'ID3 ') return true;
       if (chunkId == 'LIST') {
         await raf.setPosition(offset + 8);
         final listType = String.fromCharCodes(
