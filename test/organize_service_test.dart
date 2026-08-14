@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -35,6 +36,74 @@ class FakeAsmrApi extends AsmrApi {
 
   @override
   Future<Uint8List?> getCoverBytes(String url) async => covers[url];
+}
+
+/// 构造最小合法 wav（RIFF + WAVE 头，AudioTagWriter 可识别并写标签）。
+Uint8List _buildMinimalWav() {
+  final fmt = Uint8List.fromList([
+    0x01, 0x00, 0x01, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x80, 0x3E, 0x00, 0x00,
+    0x02, 0x00, 0x10, 0x00,
+  ]);
+  final data = List<int>.filled(16, 0);
+  final fmtChunk = <int>[
+    ...'fmt '.codeUnits,
+    ..._u32le(fmt.length),
+    ...fmt,
+  ];
+  final dataChunk = <int>[
+    ...'data'.codeUnits,
+    ..._u32le(data.length),
+    ...data,
+  ];
+  final body = Uint8List.fromList([...fmtChunk, ...dataChunk]);
+  return Uint8List.fromList([
+    ...'RIFF'.codeUnits,
+    ..._u32le(4 + body.length),
+    ...'WAVE'.codeUnits,
+    ...body,
+  ]);
+}
+
+Uint8List _u32le(int v) =>
+    Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
+
+String _ascii(Uint8List bytes, int start, int len) =>
+    String.fromCharCodes(bytes.sublist(start, start + len));
+
+/// 读取 wav 的 LIST/INFO 子 chunk，返回 id -> 文本（如 IART=artist）。
+Map<String, String>? _readListInfo(File file) {
+  final bytes = file.readAsBytesSync();
+  var offset = 12;
+  while (offset + 8 <= bytes.length) {
+    final id = _ascii(bytes, offset, 4);
+    final size = (bytes[offset + 4] |
+            (bytes[offset + 5] << 8) |
+            (bytes[offset + 6] << 16) |
+            (bytes[offset + 7] << 24)) &
+        0x7FFFFFFF;
+    if (id == 'LIST' && offset + 8 + size <= bytes.length) {
+      final listType = _ascii(bytes, offset + 8, 4);
+      if (listType == 'INFO') {
+        final result = <String, String>{};
+        var pos = offset + 12;
+        final end = offset + 8 + size;
+        while (pos + 8 <= end) {
+          final subId = _ascii(bytes, pos, 4);
+          final subSize = (bytes[pos + 4] |
+                  (bytes[pos + 5] << 8) |
+                  (bytes[pos + 6] << 16) |
+                  (bytes[pos + 7] << 24)) &
+              0x7FFFFFFF;
+          final value = utf8.decode(bytes.sublist(pos + 8, pos + 8 + subSize));
+          result[subId] = value;
+          pos += 8 + subSize + (subSize.isOdd ? 1 : 0);
+        }
+        return result;
+      }
+    }
+    offset += 8 + size + (size.isOdd ? 1 : 0);
+  }
+  return null;
 }
 
 void main() {
@@ -174,6 +243,48 @@ void main() {
         'RJ00001',
       );
       expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
+    });
+
+    test('音频 artist 标签 = CV 声优，而非社团名', () async {
+      // 构造合法 wav（让 AudioTagWriter 能写标签）
+      final srcDir = Directory(p.join(dlPath.path, '社团-艺术家标签', 'RJ00009'))
+        ..createSync(recursive: true);
+      final audioDir = Directory(p.join(srcDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(_buildMinimalWav());
+
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      final info = <String, dynamic>{
+        'circle': {'id': 1, 'name': '社团名'},
+        'vas': [
+          {'name': '声优A'},
+          {'name': '声优B'},
+        ],
+      };
+      final result = await container
+          .read(organizeServiceProvider)
+          .organizeWork(
+        sourceId: 'RJ00009',
+        sourceDir: srcDir.path,
+        targetRoot: targetRoot.path,
+        workInfo: info,
+        fallbackTitle: '标题',
+        fallbackCvNames: 'CV_FALLBACK',
+        fallbackCircle: '社团名',
+      );
+      expect(result, isNotNull);
+
+      // circle 目录仍用社团名，而非 CV
+      final outDir = p.join(targetRoot.path, '社团名', 'RJ00009 - 声优A&声优B - 标题', 'RJ00009');
+      final outWav = File(p.join(outDir, 'e01_舔耳.wav'));
+      expect(outWav.existsSync(), true);
+
+      // artist(IART) = CV；albumartist(TP2/IPLS 映射由写器处理)由 writer 写入
+      final list = _readListInfo(outWav);
+      expect(list, isNotNull);
+      expect(list!['IART'], '声优A&声优B');
     });
   });
 

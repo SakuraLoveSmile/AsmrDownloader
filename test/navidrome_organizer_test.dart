@@ -295,6 +295,36 @@ void main() {
       expect(result.copied, 2);
       expect(File(p.join(workDir.path, 'e01_舔耳.wav.lrc')).existsSync(), false);
     });
+
+    test('AI 生成的 lrc（无官方 vtt）被保留并采用', () async {
+      // 模拟 ChickenRice 输出：音轨 + 同名 AI 中文 lrc（无官方 vtt）
+      final audioDir = Directory(p.join(sourceDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
+      File(p.join(audioDir.path, 'e01_舔耳.lrc')).writeAsStringSync(
+          '[00:01.00]AI中文字幕');
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: null,
+      );
+
+      // wav + lrc = 2
+      expect(result.copied, 2);
+
+      // AI lrc 被原样保留并作为侧车文件
+      final lrcFile = File(p.join(workDir.path, 'e01_舔耳.lrc'));
+      expect(lrcFile.existsSync(), true);
+      expect(lrcFile.readAsStringSync(), '[00:01.00]AI中文字幕');
+      // 不生成重复的 e01_舔耳.wav.lrc（因同名 lrc 已存在）
+      expect(
+          File(p.join(workDir.path, 'e01_舔耳.wav.lrc')).existsSync(), false);
+    });
   });
 
   group('resolveCircleName', () {

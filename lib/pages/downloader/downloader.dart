@@ -3,11 +3,13 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr
 import 'package:asmr_downloader/pages/downloader/config_settings/components/auto_organize_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/batch_cache_dialog.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/cache_dialog.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/chicken_rice_config_controls.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/navidrome_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_all_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_button.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/transcribe_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
 import 'package:flutter/material.dart';
@@ -30,6 +32,7 @@ class Downloader extends StatelessWidget {
                 DownloadPathPicker(),
                 NavidromePathPicker(),
                 AsmrApiChannel(),
+                ChickenRiceConfigControls(),
               ],
             ),
           ),
@@ -42,6 +45,7 @@ class Downloader extends StatelessWidget {
                 AsmrProxy(),
                 AutoOrganizeCheck(),
                 OrganizeButton(),
+                TranscribeButton(),
                 OrganizeAllButton(),
                 WorksIndexButton(),
                 CacheButton(),

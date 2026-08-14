@@ -75,8 +75,8 @@ class NavidromeOrganizer {
   /// [sourceDir] 下载的作品目录（`<voiceWorkPath>/<sourceId>`）
   /// [targetRoot] Navidrome 媒体库根目录
   /// [coverBytes] 封面字节，非空时保存为 `cover.jpg`
-  /// [artist] 标签 artist 字段（社团名）
-  /// [albumArtist] 标签 albumartist 字段（CV 名）
+  /// [artist] 标签 artist 字段（CV 声优名）
+  /// [albumArtist] 标签 albumartist 字段（CV 声优名）
   /// [releaseDate] 发行日期（如 2026-06-18），年份写入标签
   /// [genres] 流派标签列表
   ///

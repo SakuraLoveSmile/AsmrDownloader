@@ -149,19 +149,21 @@ class OrganizeService {
       fallbackCircle: resolveCircle(workInfo, fallbackCircle),
       fetchWorkInfo: _fetchWorkInfoCached,
     );
-    // artist 保底：社团 → CV → sourceId
-    final artist =
+    // circle 目录名（汉化跟踪后的社团名）保底：社团 → CV → sourceId
+    final circleDirName =
         [circleName, cvNames, sourceId].firstWhere((s) => s.isNotEmpty);
+    // 音频 artist/albumArtist 标签 = CV 声优（用户需求：艺术家是声优而非社团名）
+    final artistTag = cvNames;
 
     return NavidromeOrganizer.organize(
       sourceDir: sourceDir,
       targetRoot: targetRoot,
-      circleName: artist,
+      circleName: circleDirName,
       sourceId: sourceId,
       cvNames: cvNames,
       title: title,
       coverBytes: coverBytes,
-      artist: artist,
+      artist: artistTag,
       albumArtist: cvNames,
       releaseDate: resolveRelease(workInfo),
       genres: resolveTags(workInfo),
