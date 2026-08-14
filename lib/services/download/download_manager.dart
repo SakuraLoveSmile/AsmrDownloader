@@ -140,6 +140,11 @@ class DownloadManager {
     if (ref.read(autoOrganizeProvider)) {
       await ref.read(uiServiceProvider).autoOrganize();
     }
+
+    // auto AI subtitle translate (ChickenRice)
+    if (ref.read(autoTranscribeProvider)) {
+      await ref.read(uiServiceProvider).autoTranscribe(sourceId);
+    }
   }
 
   /// 取消全部下载任务：置 canceled 状态并 cancel 本轮所有在途 CancelToken。

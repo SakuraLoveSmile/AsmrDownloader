@@ -55,6 +55,19 @@
 - **自动识别 RJ 号**：批量整理时自动扫描下载目录（≤ 4 层），识别带 `RJ`/`VJ`/`BJ` 前缀的目录（如 `RJ12345678`），未注册的作品自动补录注册表并整理：在线拉取元数据/封面，失败则降级为目录名解析（`CV&CV-标题`）；注册表中目录被移动过的条目也会自动修正路径
 - **降级标签**：work info 接口获取不到数据时，标题依次降级为 tracks 接口携带的 workTitle → 粘贴 URL 里的音轨树目录名（`path` 参数面包屑）→ sourceId；artist 依次降级为 CV 名 → sourceId，保证目录结构与音乐标签不落空
 
+## AI 字幕翻译（ChickenRice 联动）
+
+可调用 [Faster-Whisper-TransWithAI-ChickenRice](https://github.com/TransWithAI/Faster-Whisper-TransWithAI-ChickenRice) 为作品生成 AI 中文字幕：
+
+- **基于「同名字幕是否存在」自动判断**：若某个音轨已有 `.lrc` / `.vtt` / `.srt` 官方字幕，则跳过 AI 翻译（官方字幕够用，不浪费算力）；仅对**没有任何字幕的音轨**调用 AI 生成中文字幕。
+- **用法**：
+  1. 自行下载 ChickenRice 对应 release（按你的显卡选 CUDA/AMD/CPU 版本），解压到本地。
+  2. 在应用搜索框右侧的 **AI字幕** 控件里点击 `code` 图标选择其 `infer.exe`。
+  3. 选择任务（翻译=中文 / 转录=原文）和设备（auto/cuda/cpu）。
+  4. 点 **字幕** 按钮手动为当前作品生成，或勾选 **自动** 在下载完成后自动翻译。
+- 生成的字幕与音轨同名（`xxx.lrc`），Navidrome 整理时会被自动采纳并内嵌为歌词标签。
+- 注意：首次运行会下载/加载 Whisper 模型，较耗时、占用 GPU 显存；进程可通过取消按钮中断。
+
 ## 功能特色
 
 1. 断点续传：  

@@ -9,6 +9,8 @@ import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
+import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
+import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -125,6 +127,153 @@ class UIService {
       ..read(autoOrganizeProvider.notifier).state = value
       ..read(configFileProvider).addOrUpdate({'autoOrganize': value});
     Log.info('autoOrganize: $value');
+  }
+
+  // ---------- ChickenRice（AI 字幕翻译） ----------
+
+  /// 下载完成后自动翻译开关
+  void onAutoTranscribeChanged(bool? value) {
+    if (value == null) return;
+    ref
+      ..read(autoTranscribeProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'autoTranscribe': value});
+    Log.info('autoTranscribe: $value');
+  }
+
+  /// 设置 infer.exe 路径（手动输入/选择）
+  void setChickenRiceExePath(String path) {
+    ref
+      ..read(chickenRiceExePathProvider.notifier).state = path
+      ..read(configFileProvider).addOrUpdate({'chickenRiceExePath': path});
+    Log.info('chickenRiceExePath: $path');
+  }
+
+  /// 通过文件选择器选取 infer.exe
+  Future<void> pickChickenRiceExe() async {
+    final result =
+        await FilePicker.platform.pickFiles(type: FileType.any);
+    final files = result?.files;
+    if (files == null || files.isEmpty) return;
+    final path = files.first.path;
+    if (path == null) return;
+    setChickenRiceExePath(path);
+  }
+
+  /// 设置计算设备（auto/cuda/cpu）
+  void setChickenRiceDevice(String device) {
+    ref
+      ..read(chickenRiceDeviceProvider.notifier).state = device
+      ..read(configFileProvider).addOrUpdate({'chickenRiceDevice': device});
+  }
+
+  /// 设置任务（translate/transcribe）
+  void setChickenRiceTask(String task) {
+    ref
+      ..read(chickenRiceTaskProvider.notifier).state = task
+      ..read(configFileProvider).addOrUpdate({'chickenRiceTask': task});
+  }
+
+  /// 请求取消正在进行的转录
+  void cancelTranscribe() {
+    ref.read(transcribeCancelRequestedProvider.notifier).state = true;
+  }
+
+  /// 对当前作品执行 ChickenRice 字幕翻译。
+  /// 返回 true 表示已启动/完成；false 表示未执行（无作品/正在运行/无字幕缺口）。
+  /// [pickExeIfEmpty] 为 true 且未配置 exe 时弹出文件选择器引导选择。
+  Future<bool> transcribeCurrentWork({bool pickExeIfEmpty = false}) async {
+    if (!ref.read(chickenRiceConfigProvider).isConfigured) {
+      if (!pickExeIfEmpty) {
+        showSnack('未配置 ChickenRice 可执行文件');
+        return false;
+      }
+      await pickChickenRiceExe();
+      if (!ref.read(chickenRiceConfigProvider).isConfigured) return false;
+    }
+    final probe = ref.read(chickenRiceServiceProvider).probeExe();
+    if (probe != null) {
+      showSnack('ChickenRice 不可用：$probe');
+      return false;
+    }
+    if (ref.read(transcribeStatusProvider) == TranscribeStatus.running) {
+      showSnack('字幕翻译正在进行中');
+      return false;
+    }
+
+    final sourceId = ref.read(sourceIdProvider);
+    if (sourceId == null) {
+      showSnack('请先搜索作品');
+      return false;
+    }
+    final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
+    if (!Directory(sourceDir).existsSync()) {
+      showSnack('作品目录不存在，请先下载');
+      return false;
+    }
+
+    // 预判：统计缺字幕的音轨数，给用户反馈
+    final missing =
+        SubtitleGapDetector.findMissingSubtitleTracks(sourceDir);
+    if (missing.isEmpty) {
+      showSnack('所有音轨已有字幕，无需 AI 翻译');
+      return true;
+    }
+    Log.info('transcribe: $sourceId missing ${missing.length} subtitle tracks');
+
+    ref
+      ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
+      ..read(transcribeProgressProvider.notifier).state = null
+      ..read(transcribeCancelRequestedProvider.notifier).state = false;
+
+    final completed = await ref.read(chickenRiceServiceProvider).runOnDir(
+      sourceDir,
+      onProgress: (progress) {
+        ref.read(transcribeProgressProvider.notifier).state = progress;
+      },
+      isCancelled: () =>
+          ref.read(transcribeCancelRequestedProvider),
+    );
+
+    ref.read(transcribeStatusProvider.notifier).state =
+        completed ? TranscribeStatus.done : TranscribeStatus.failed;
+    ref.read(transcribeCancelRequestedProvider.notifier).state = false;
+    showSnack(completed ? '字幕翻译完成' : '字幕翻译失败或已取消');
+    return true;
+  }
+
+  /// 供「下载完成自动翻译」调用的非 UI 版本（无上下文提示直接执行）。
+  /// 与 transcribeCurrentWork 共用，仅在未配置时静默跳过。
+  Future<bool> autoTranscribe(String sourceId) async {
+    final cfg = ref.read(chickenRiceConfigProvider);
+    if (!cfg.isConfigured) return false;
+    final probe = ref.read(chickenRiceServiceProvider).probeExe();
+    if (probe != null) {
+      Log.warning('chickenRice autoTranscribe skipped: $probe');
+      return false;
+    }
+
+    // 自动触发时需要 sourceDir，但当前可能已没有搜索上下文。
+    // 从 voiceWorkPath 计算：
+    final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
+    if (!Directory(sourceDir).existsSync()) return false;
+
+    ref
+      ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
+      ..read(transcribeProgressProvider.notifier).state = null
+      ..read(transcribeCancelRequestedProvider.notifier).state = false;
+
+    final completed = await ref.read(chickenRiceServiceProvider).runOnDir(
+      sourceDir,
+      onProgress: (progress) {
+        ref.read(transcribeProgressProvider.notifier).state = progress;
+      },
+      isCancelled: () =>
+          ref.read(transcribeCancelRequestedProvider),
+    );
+    ref.read(transcribeStatusProvider.notifier).state =
+        completed ? TranscribeStatus.done : TranscribeStatus.failed;
+    ref.read(transcribeCancelRequestedProvider.notifier).state = false;
+    return completed;
   }
 
   Future<void> pickDlPath() async {
