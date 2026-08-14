@@ -28,7 +28,7 @@ class AsmrCover extends ConsumerWidget {
       error: (error, stack) {
         Log.error('load cover image failed\n'
             'sourceId: ${ref.read(sourceIdProvider)}\n'
-            'error: ');
+            'error: $error');
         return const Icon(Icons.error, color: Colors.red);
       },
     );

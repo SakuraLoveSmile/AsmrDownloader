@@ -241,6 +241,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "3.1.1"
+  desktop_drop:
+    dependency: "direct main"
+    description:
+      name: desktop_drop
+      sha256: aa1e797255bfbc76f9eb5aa4f61e5b68dbf69962ab1be6495816d2f251bc0d1f
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.7.1"
   dio:
     dependency: "direct main"
     description:
@@ -258,7 +266,7 @@ packages:
     source: hosted
     version: "2.1.1"
   drift:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: drift
       sha256: "14a61af39d4584faf1d73b5b35e4b758a43008cf4c0fdb0576ec8e7032c0d9a5"
@@ -786,6 +794,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.7.5"
+  sqlite3_flutter_libs:
+    dependency: "direct main"
+    description:
+      name: sqlite3_flutter_libs
+      sha256: eeb9e3a45207649076b808f8a5a74d68770d0b7f26ccef6d5f43106eee5375ad
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.5.42"
   sqlparser:
     dependency: transitive
     description:
@@ -882,6 +898,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.4.0"
+  universal_platform:
+    dependency: transitive
+    description:
+      name: universal_platform
+      sha256: "64e16458a0ea9b99260ceb5467a214c1f298d647c659af1bff6d3bf82536b1ec"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.1.0"
   uuid:
     dependency: transitive
     description:

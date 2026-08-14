@@ -2,12 +2,17 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:asmr_downloader/services/cache/rate_limiter.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 class AsmrApi {
   final Dio _apiDio = Dio();
+
+  /// 全局速率限制器：控制任意两次 API 请求间至少间隔 minInterval。
+  /// 仅包裹 _requestWithRetry 内的实际网络请求，不影响下载等大流量传输。
+  final RateLimiter? _rateLimiter;
 
   String _proxy = 'DIRECT';
 
@@ -26,7 +31,7 @@ class AsmrApi {
     Log.info('proxy set to: $proxy');
   }
 
-  AsmrApi() {
+  AsmrApi({RateLimiter? rateLimiter}) : _rateLimiter = rateLimiter {
     _apiDio.options
       ..connectTimeout = Duration(seconds: 10)
       ..sendTimeout = Duration(seconds: 10)
@@ -72,7 +77,9 @@ class AsmrApi {
     while (tryCount < maxTry) {
       try {
         tryCount++;
-        final response = await request();
+        // 发出请求前先过速率限制（重试同样受控，保证对网站的总请求频率可预期）
+        final response =
+            await _rateLimiter?.gate(request) ?? await request();
         Log.info('[$method] request to "$path" succeeded');
         return response;
       } on DioException catch (e) {
@@ -252,12 +259,18 @@ class AsmrApi {
   }
 
   /// Searches for content.
+  ///
+  /// [content] 拼进路径作为单个路径段，必须整体 percent-encode：关键词可能是
+  /// `$tag:舔耳$` / `$va:xxx$` / `$circle:xxx$` 等高级搜索语法，含中文、空格、
+  /// `$`、`:` 乃至 `/`（如标签 "Cosplay/角色扮演"）。若不编码，`/` 会被按
+  /// 路径分隔符拆开导致 404，未编码的中文/特殊字符也会让服务端匹配不到结果。
   Future<Map<String, dynamic>?> search({
     required String content,
     Map<String, dynamic>? params,
     int maxTry = 3,
   }) async {
-    final response = await get<Map<String, dynamic>>('search/$content',
+    final encoded = Uri.encodeComponent(content);
+    final response = await get<Map<String, dynamic>>('search/$encoded',
         queryParameters: params, maxTry: maxTry);
     return response?.data;
   }

@@ -18,6 +18,7 @@ class WorksIndexDialog extends ConsumerStatefulWidget {
 class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
   List<WorkEntry>? _entries;
   String? _error;
+  String _filterText = '';
 
   @override
   void initState() {
@@ -77,6 +78,17 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
               ],
             ),
             const SizedBox(height: 8),
+            TextField(
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search, size: 18),
+                hintText: '过滤 sourceId / 标题',
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onChanged: (value) => setState(() => _filterText = value),
+            ),
+            const SizedBox(height: 8),
             Expanded(
               child: _buildList(context, entries),
             ),
@@ -102,12 +114,25 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
     if (entries == null) return const Center(child: CircularProgressIndicator());
     if (entries.isEmpty) return const Center(child: Text('暂无条目'));
 
+    // 按 sourceId / 标题实时过滤
+    final query = _filterText.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? entries
+        : entries
+            .where((e) =>
+                e.sourceId.toLowerCase().contains(query) ||
+                e.title.toLowerCase().contains(query))
+            .toList();
+    if (filtered.isEmpty) {
+      return const Center(child: Text('无匹配条目'));
+    }
+
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: ListView.builder(
-        itemCount: entries.length,
+        itemCount: filtered.length,
         itemBuilder: (context, i) {
-          final entry = entries[i];
+          final entry = filtered[i];
           final dirExists = Directory(entry.sourceDir).existsSync();
           return ListTile(
             dense: true,

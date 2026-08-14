@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_count.dart';
+import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_speed.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/progress_bar.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/progress_percentage.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ class DownloadProgress extends StatelessWidget {
           ProgressBar(),
           SizedBox(width: spacing),
           ProgressPercentage(),
+          SizedBox(width: spacing),
+          DownloadSpeed(),
           Spacer(),
           DownloadCount(),
         ],

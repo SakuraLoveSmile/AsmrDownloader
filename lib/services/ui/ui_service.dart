@@ -34,7 +34,9 @@ class UIService {
       ..read(processProvider.notifier).state = 0
       ..read(currentDlNoProvider.notifier).state = 0
       ..read(totalTaskCntProvider.notifier).state = 0
-      ..read(currentFileNameProvider.notifier).state = '';
+      ..read(currentFileNameProvider.notifier).state = ''
+      ..read(downloadSpeedProvider.notifier).state = 0
+      ..read(downloadEtaProvider.notifier).state = Duration.zero;
     if (Platform.isWindows) {
       await WindowsTaskbar.setProgress(0, 0);
     }
@@ -60,7 +62,10 @@ class UIService {
       ref.read(workTreePathProvider.notifier).state = const [];
       searchText = normalizeInput(input);
     }
-    if (!isSourceIdValid(searchText)) return null;
+    if (!isSourceIdValid(searchText)) {
+      showSnack('无效的 sourceId，请输入 RJ/VJ/BJ 开头加数字，或粘贴 asmr.one 作品页 URL');
+      return null;
+    }
 
     if (searchText == ref.read(searchTextProvider)) {
       // force to refetch
@@ -78,12 +83,7 @@ class UIService {
     final clipBoardText = (await Clipboard.getData('text/plain'))?.text;
     if (clipBoardText == null) return null;
 
-    // set old sourceId to clipboard
-    final oldSourceId = ref.read(sourceIdProvider);
-    if (oldSourceId != null) {
-      await Clipboard.setData(ClipboardData(text: oldSourceId));
-    }
-
+    // 注意：不再把旧 sourceId 写回剪贴板，避免覆盖用户剪贴板中的其他内容
     return search(clipBoardText);
   }
 
@@ -219,10 +219,10 @@ class UIService {
 
     if (!context.mounted) return;
     if (result == null) {
-      _showSnack('整理失败：请先搜索并下载作品', context: context);
+      showSnack('整理失败：请先搜索并下载作品', context: context);
       return;
     }
-    _showSnack(context: context,
+    showSnack(context: context,
         '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
   }
 
@@ -231,17 +231,27 @@ class UIService {
     final result = await organizeCurrentWork(pickPathIfEmpty: true);
 
     if (result == null) {
-      _showSnack('自动整理未执行：未设置整理路径或作品未下载');
+      showSnack('自动整理未执行：未设置整理路径或作品未下载');
       return;
     }
-    _showSnack(
+    showSnack(
         '自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
   }
 
-  void _showSnack(String message, {BuildContext? context}) {
-    final messenger = context != null
-        ? ScaffoldMessenger.of(context)
-        : scaffoldMessengerKey.currentState;
+  /// 弹出用户可见的提示（无 BuildContext 时走全局 scaffoldMessengerKey）。
+  /// 纯逻辑调用（下载流程/单元测试）可能没有可用的 messenger，静默跳过。
+  void showSnack(String message, {BuildContext? context}) {
+    ScaffoldMessengerState? messenger;
+    if (context != null) {
+      messenger = ScaffoldMessenger.of(context);
+    } else {
+      try {
+        messenger = scaffoldMessengerKey.currentState;
+      } catch (_) {
+        // WidgetsBinding 未初始化（如单元测试环境），跳过
+        return;
+      }
+    }
     messenger
       ?..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));

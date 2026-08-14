@@ -15,19 +15,22 @@ class AsmrApiChannel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final apiChannel = ref.watch(apiChannelProvider);
-    return SizedBox(
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: DropdownButton<String>(
-          value: apiChannel,
-          focusColor: Colors.transparent,
-          items: _dropdownItems.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value),
-            );
-          }).toList(),
-          onChanged: ref.read(uiServiceProvider).onApiChannelChoosed,
+    return Tooltip(
+      message: '仅影响搜索 API。asmr-100 需代理，200/300 不需要；200/300 搜不到时可尝试 100',
+      child: SizedBox(
+        child: Padding(
+          padding: const EdgeInsets.only(left: 20.0),
+          child: DropdownButton<String>(
+            value: apiChannel,
+            focusColor: Colors.transparent,
+            items: _dropdownItems.map((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(value),
+              );
+            }).toList(),
+            onChanged: ref.read(uiServiceProvider).onApiChannelChoosed,
+          ),
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
+import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
@@ -142,10 +143,11 @@ class OrganizeService {
     final title = resolveTitle(workInfo, fallbackTitle);
     final cvNames = resolveCvNames(workInfo, fallbackCvNames);
     // 汉化版作品的 circle 是汉化组名，跟踪到原版取真实社团名
+    // （原版元数据缓存优先，避免重复请求 API）
     final circleName = await NavidromeOrganizer.resolveCircleName(
       workInfo: workInfo,
       fallbackCircle: resolveCircle(workInfo, fallbackCircle),
-      fetchWorkInfo: (id) => ref.read(asmrApiProvider).getWorkInfo(id),
+      fetchWorkInfo: _fetchWorkInfoCached,
     );
     // artist 保底：社团 → CV → sourceId
     final artist =
@@ -176,7 +178,17 @@ class OrganizeService {
     if (fetchWorkInfo) {
       final digits = entry.sourceId.replaceAll(RegExp(r'[^0-9]'), '');
       try {
-        workInfo = await ref.read(asmrApiProvider).getWorkInfo(digits);
+        // 缓存优先：搜索/浏览过的作品元数据直接复用
+        final cache = ref.read(cacheServiceProvider);
+        workInfo = await cache.getWorkInfo(entry.sourceId);
+        if (workInfo == null) {
+          workInfo = await ref.read(asmrApiProvider).getWorkInfo(digits);
+          if (workInfo != null) {
+            await cache.saveWorkInfo(entry.sourceId, workInfo);
+          }
+        } else {
+          Log.info('organizeEntry workInfo cache hit: ${entry.sourceId}');
+        }
       } catch (e) {
         Log.warning('fetch workInfo failed: ${entry.sourceId}\n' 'error: $e');
       }
@@ -241,6 +253,46 @@ class OrganizeService {
       organizedAt: entry.organizedAt,
     );
     return OrganizeEntryOutcome(result: result, resolvedEntry: resolved);
+  }
+
+  /// 缓存优先拉取 workInfo（供汉化版原版 circle 跟踪等场景复用）。
+  /// [id] 可为完整 sourceId（RJ/VJ/BJ + 数字）或纯数字 id：
+  /// - 完整 sourceId 直接查缓存；
+  /// - 纯数字 id 先按数字段扫描已有缓存条目；
+  /// - 未命中时请求 API（数字 id），成功后按响应自带的 source_id 入库。
+  Future<Map<String, dynamic>?> _fetchWorkInfoCached(String id) async {
+    final cache = ref.read(cacheServiceProvider);
+    final digits = id.replaceAll(RegExp(r'[^0-9]'), '');
+
+    String? cacheKey;
+    if (RegExp(r'^(RJ|VJ|BJ)\d+$', caseSensitive: false).hasMatch(id)) {
+      cacheKey = id.toUpperCase();
+      final cached = await cache.getWorkInfo(cacheKey);
+      if (cached != null) {
+        Log.info('resolveCircleName workInfo cache hit: $cacheKey');
+        return cached;
+      }
+    } else if (digits.isNotEmpty) {
+      cacheKey = await cache.findSourceIdByDigits(digits);
+      if (cacheKey != null) {
+        final cached = await cache.getWorkInfo(cacheKey);
+        if (cached != null) {
+          Log.info('resolveCircleName workInfo cache hit: $cacheKey');
+          return cached;
+        }
+      }
+    }
+
+    final data = await ref.read(asmrApiProvider).getWorkInfo(digits);
+    if (data != null) {
+      final respSourceId = data['source_id']?.toString().toUpperCase();
+      if (respSourceId != null && respSourceId.isNotEmpty) {
+        await cache.saveWorkInfo(respSourceId, data);
+      } else if (cacheKey != null) {
+        await cache.saveWorkInfo(cacheKey, data);
+      }
+    }
+    return data;
   }
 
   // ---------- 自动识别（批量整理） ----------
