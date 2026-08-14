@@ -2,21 +2,40 @@ import 'dart:typed_data';
 
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
+import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// 缓存优先的 workInfo：命中本地缓存则不再请求 API；
+/// 未命中（或 forceRefresh）时请求 API 并写入缓存。
+/// 作品元数据发布后基本不变（仅 dl_count 变化，可接受长期缓存）。
 final workInfoProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final api = ref.watch(asmrApiProvider);
-
   final id = ref.watch(idProvider);
   if (id == null) {
     return null;
   }
 
+  final sourceId = ref.watch(sourceIdProvider) ?? '';
+  final cache = ref.read(cacheServiceProvider);
+  final forceRefresh = ref.read(forceRefreshProvider);
+
+  if (!forceRefresh && sourceId.isNotEmpty) {
+    final cached = await cache.getWorkInfo(sourceId);
+    if (cached != null) {
+      Log.info('workInfo cache hit: $sourceId');
+      return cached;
+    }
+  }
+
   Log.info('fetch workInfo, id: $id');
-  return api.getWorkInfo(id);
+  final api = ref.watch(asmrApiProvider);
+  final data = await api.getWorkInfo(id);
+  if (data != null && sourceId.isNotEmpty) {
+    await cache.saveWorkInfo(sourceId, data);
+  }
+  return data;
 });
 
 /// 标题降级链：work info → tracks 携带的 workTitle → URL 目录面包屑 → sourceId。
@@ -103,16 +122,33 @@ final coverUrlProvider = Provider<String>((ref) {
   );
 });
 
+/// 缓存优先的封面字节：命中本地 BLOB 缓存则不再请求网络；
+/// 未命中（或 forceRefresh）时按封面 URL 拉取并写入缓存。
 final coverBytesProvider = FutureProvider<Uint8List?>((ref) async {
-  final api = ref.watch(asmrApiProvider);
-  
   final coverUrl = ref.watch(coverUrlProvider);
   if (coverUrl.isEmpty) {
     return null;
   }
 
+  final sourceId = ref.watch(sourceIdProvider) ?? '';
+  final cache = ref.read(cacheServiceProvider);
+  final forceRefresh = ref.read(forceRefreshProvider);
+
+  if (!forceRefresh && sourceId.isNotEmpty) {
+    final cached = await cache.getCover(sourceId);
+    if (cached != null) {
+      Log.info('cover cache hit: $sourceId');
+      return cached;
+    }
+  }
+
   Log.info('fetch cover bytes, url: $coverUrl');
-  return api.getCoverBytes(coverUrl);
+  final api = ref.watch(asmrApiProvider);
+  final bytes = await api.getCoverBytes(coverUrl);
+  if (bytes != null && sourceId.isNotEmpty) {
+    await cache.saveCover(sourceId, bytes);
+  }
+  return bytes;
 });
 
 final tagLsProvider = Provider<List<String>>((ref) {

@@ -20,7 +20,28 @@ class DownloadManager {
   final Ref ref;
   DownloadManager(this.ref);
 
+  /// 最新一轮 run() 的序号（新一轮 run 会使旧一轮让位）
+  int _runSeq = 0;
+
+  /// 当前正在执行下载循环的那一轮序号
+  int _currentRunSeq = 0;
+
+  /// 用户请求取消（cancelAllDownload 置位，run() 开始时复位）
+  bool _cancelRequested = false;
+
+  /// 本轮正在下载的所有 CancelToken（含封面），取消时统一 cancel
+  final Set<CancelToken> _activeCancelTokens = {};
+
+  /// 本轮下载失败（返回 false）的文件数
+  int _failedCnt = 0;
+
   Future<void> run() async {
+    final runSeq = ++_runSeq;
+    _currentRunSeq = runSeq;
+    _cancelRequested = false;
+    _activeCancelTokens.clear();
+    _failedCnt = 0;
+
     await ref.read(uiServiceProvider).resetProgress();
 
     // handle error
@@ -28,6 +49,7 @@ class DownloadManager {
     final sourceId = ref.read(sourceIdProvider);
     if (sourceId == null) {
       Log.fatal('download failed\n' 'error: sourceId is null');
+      ref.read(uiServiceProvider).showSnack('下载失败：请先搜索作品');
       return;
     }
 
@@ -37,6 +59,7 @@ class DownloadManager {
         p.equals(voiceWorkPath, ref.read(downloadPathProvider))) {
       Log.error('download failed: $sourceId\n'
           'error: voiceWorkPath is invalid, which means you have to start downloading after work info is loaded');
+      ref.read(uiServiceProvider).showSnack('下载失败：请等待作品信息加载完成后再下载');
       return;
     }
 
@@ -51,6 +74,7 @@ class DownloadManager {
     if (rootFolderSnapshot == null) {
       Log.fatal(
           'download tracks failed: $sourceId\n' 'error: rootFolder is null');
+      ref.read(uiServiceProvider).showSnack('下载失败：音轨列表为空，请重新搜索');
     } else {
       rootFolderTaskCnt = countTotalTask(rootFolderSnapshot);
       ref.read(totalTaskCntProvider.notifier).state = rootFolderTaskCnt;
@@ -71,7 +95,23 @@ class DownloadManager {
       await _downloadTrackItem(rootFolderSnapshot!, voiceWorkPath);
     }
 
-    // download completed
+    // download finished (completed / canceled / failed)
+
+    // 新一轮 run 已经开始，或用户取消了下载：放弃收尾，避免旧流程覆盖新状态
+    if (runSeq != _runSeq ||
+        ref.read(dlStatusProvider) == DownloadStatus.canceled) {
+      Log.info('download aborted: $sourceId');
+      return;
+    }
+
+    if (_failedCnt > 0) {
+      Log.error('download failed: $sourceId\n'
+          'failed task count: $_failedCnt');
+      ref.read(dlStatusProvider.notifier).state = DownloadStatus.failed;
+      ref.read(uiServiceProvider)
+          .showSnack('下载失败：$_failedCnt 个文件下载失败，可点击「重试」');
+      return;
+    }
 
     ref.read(dlStatusProvider.notifier).state = DownloadStatus.completed;
 
@@ -100,6 +140,22 @@ class DownloadManager {
     if (ref.read(autoOrganizeProvider)) {
       await ref.read(uiServiceProvider).autoOrganize();
     }
+  }
+
+  /// 取消全部下载任务：置 canceled 状态并 cancel 本轮所有在途 CancelToken。
+  /// 已开始的请求立即中断，尚未开始的任务会通过 [_cancelRequested] 跳过。
+  void cancelAllDownload() {
+    if (ref.read(dlStatusProvider) != DownloadStatus.downloading) return;
+
+    _cancelRequested = true;
+    ref.read(dlStatusProvider.notifier).state = DownloadStatus.canceled;
+
+    for (final token in _activeCancelTokens) {
+      if (!token.isCancelled) {
+        token.cancel('下载已取消');
+      }
+    }
+    Log.info('cancel all downloads');
   }
 
   int countTotalTask(Folder rootFolder) {
@@ -195,10 +251,21 @@ class DownloadManager {
   // 开始下载任务
   /// need to specify task.savePath otherwise it will be empty
   Future<void> _downloadFileAsset(FileAsset task) async {
+    // 已取消或已有新一轮下载开始时，跳过排队中的任务
+    if (_cancelRequested || _runSeq != _currentRunSeq) return;
+    _activeCancelTokens.add(task.cancelToken);
+
     ref.read(currentFileNameProvider.notifier).state = task.title;
     ref.read(processProvider.notifier).state = 0;
     ref.read(currentDlNoProvider.notifier).state++;
 
+    // 重置速度/剩余时间
+    ref
+      ..read(downloadSpeedProvider.notifier).state = 0
+      ..read(downloadEtaProvider.notifier).state = Duration.zero;
+
+    var lastBytes = 0;
+    final stopwatch = Stopwatch()..start();
     final dlFlag = await _resumableDownload(
       task.mediaDownloadUrl,
       task.savePath,
@@ -209,6 +276,23 @@ class DownloadManager {
           final progress = received / total;
           // task.progress = progress;
           ref.read(processProvider.notifier).state = progress;
+
+          // 每 500ms 用增量计算一次下载速度，避免累计误差
+          final elapsedMs = stopwatch.elapsedMilliseconds;
+          if (elapsedMs >= 500) {
+            final speed = (received - lastBytes) * 1000 / elapsedMs;
+            ref.read(downloadSpeedProvider.notifier).state = speed;
+            lastBytes = received;
+            stopwatch.reset();
+          }
+
+          // 剩余时间 = 剩余字节 / 当前速度
+          final speedNow = ref.read(downloadSpeedProvider);
+          if (speedNow > 0) {
+            final remainingSeconds = ((total - received) / speedNow).round();
+            ref.read(downloadEtaProvider.notifier).state =
+                Duration(seconds: remainingSeconds);
+          }
         }
       },
     );
@@ -220,10 +304,15 @@ class DownloadManager {
       // task.progress = 1;
 
       ref.read(processProvider.notifier).state = 1;
+      ref
+        ..read(downloadSpeedProvider.notifier).state = 0
+        ..read(downloadEtaProvider.notifier).state = Duration.zero;
       if (Platform.isWindows) {
         await WindowsTaskbar.setProgress(
             ref.read(currentDlNoProvider), ref.read(totalTaskCntProvider));
       }
+    } else {
+      _failedCnt++;
     }
   }
 
@@ -259,6 +348,12 @@ class DownloadManager {
 
     while (true) {
       try {
+        // 取消后不再继续重试/开始新请求
+        if (_cancelRequested || cancelToken?.isCancelled == true) {
+          Log.warning('download canceled: $fileName');
+          return false;
+        }
+
         if (await file.exists()) {
           Log.info('file already downloaded: $fileName\n'
               'savePath: $savePath');
@@ -326,6 +421,11 @@ class DownloadManager {
           return false;
         }
       } on DioException catch (e) {
+        if (e.type == DioExceptionType.cancel) {
+          Log.warning('download canceled: $fileName\n' 'error: $e');
+          return false;
+        }
+
         if (e.response?.statusCode == 416) {
           Log.error('download failed: $fileName\n'
               'statusCode = 416, range incorrect\n'

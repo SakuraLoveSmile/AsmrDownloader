@@ -4,9 +4,13 @@ import 'dart:typed_data';
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/asmr_api.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
+import 'package:asmr_downloader/services/cache/cache_database.dart';
+import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/cache/cache_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -74,12 +78,18 @@ void main() {
     Map<String, Map<String, dynamic>> works = const {},
     Map<String, Uint8List> covers = const {},
     bool apiThrows = false,
+    CacheService? cache,
   }) {
+    // 默认内存缓存库（避免测试污染真实应用数据目录）
+    final cacheDb = CacheDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(cacheDb.close);
     return ProviderContainer(overrides: [
       worksIndexProvider.overrideWith((ref) => index),
       asmrApiProvider.overrideWith(
           (ref) => FakeAsmrApi(works: works, covers: covers, throws: apiThrows)),
       downloadPathProvider.overrideWith((ref) => dlPath.path),
+      cacheServiceProvider.overrideWith(
+          (ref) => cache ?? CacheService(cacheDb)),
     ]);
   }
 
@@ -443,6 +453,105 @@ void main() {
           .discoverWorks(dlRoot: dlPath.path, excludeRoot: targetRoot.path);
       expect(discovered.length, 1);
       expect(discovered.first.dirName, '浅层');
+    });
+  });
+
+  group('缓存优先（organize 复用本地缓存）', () {
+    /// 在下载目录创建 <dlPath>/<dirName>/<rj>/e01_舔耳.wav
+    void createWork(String rj, {String dirName = 'CV1&CV2-测试标题'}) {
+      final workDir = Directory(p.join(dlPath.path, dirName, rj))
+        ..createSync(recursive: true);
+      File(p.join(workDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+    }
+
+    test('自动识别作品元数据缓存命中时不再请求 API（API 异常也不影响）', () async {
+      final cacheDb = CacheDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(cacheDb.close);
+      final cache = CacheService(cacheDb);
+      await cache.saveWorkInfo('RJ100001', {
+        'title': '缓存标题',
+        'circle': {'name': '缓存社团'},
+        'vas': [
+          {'name': '缓存CV'},
+        ],
+        'release': '2026-01-01',
+        'tags': [
+          {'i18n': {'zh-cn': {'name': '缓存标签'}}},
+        ],
+        'mainCoverUrl': '',
+      });
+      final container = makeContainer(apiThrows: true, cache: cache);
+      addTearDown(container.dispose);
+      createWork('RJ100001');
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      // 注册表回写的是缓存元数据
+      final entry = await index.get('RJ100001');
+      expect(entry!.title, '缓存标题');
+      expect(entry.circleName, '缓存社团');
+      expect(entry.cvNames, '缓存CV');
+      // 目标目录用缓存元数据
+      final workDir = p.join(
+        targetRoot.path,
+        '缓存社团',
+        'RJ100001 - 缓存CV - 缓存标题',
+        'RJ100001',
+      );
+      expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
+    });
+
+    test('汉化版 circle 跟踪原版时缓存优先（缓存命中不请求 API）', () async {
+      final cacheDb = CacheDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(cacheDb.close);
+      final cache = CacheService(cacheDb);
+      // 原版 RJ01618607 已在缓存中（此前搜索/浏览过）
+      await cache.saveWorkInfo('RJ01618607', {
+        'circle': {'name': '原版社团'},
+      });
+      final container = makeContainer(apiThrows: true, cache: cache);
+      addTearDown(container.dispose);
+
+      final e = entry('RJ999999');
+      final translatedWorkInfo = <String, dynamic>{
+        'title': '【简体中文版】测试',
+        'circle': {'name': '汉化组'},
+        'translation_info': {
+          'is_original': false,
+          'original_workno': 'RJ01618607',
+        },
+        'other_language_editions_in_db': [
+          {'id': 1618607, 'source_id': 'RJ01618607', 'is_original': true},
+        ],
+      };
+
+      final result = await container.read(organizeServiceProvider).organizeWork(
+        sourceId: e.sourceId,
+        sourceDir: e.sourceDir,
+        targetRoot: targetRoot.path,
+        workInfo: translatedWorkInfo,
+        fallbackTitle: '测试标题',
+        fallbackCvNames: 'CV1&CV2',
+        fallbackCircle: '汉化组',
+      );
+
+      expect(result, isNotNull);
+      // artist 使用缓存中的原版社团名（API 抛异常也不影响）；
+      // 标题来自 workInfo 本体（resolveTitle 优先 workInfo）
+      final workDir = p.join(
+        targetRoot.path,
+        '原版社团',
+        'RJ999999 - CV1&CV2 - 【简体中文版】测试',
+        'RJ999999',
+      );
+      expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
     });
   });
 }

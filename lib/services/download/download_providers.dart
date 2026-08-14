@@ -93,6 +93,12 @@ final rootFolderProvider = StateProvider<Folder?>((ref) {
 
 final dlStatusProvider = StateProvider((ref) => DownloadStatus.notStarted);
 
+/// 下载速度（bytes/s），下载中由 DownloadManager 实时更新
+final downloadSpeedProvider = StateProvider<double>((ref) => 0);
+
+/// 下载剩余时间，下载中由 DownloadManager 实时更新
+final downloadEtaProvider = StateProvider<Duration>((ref) => Duration.zero);
+
 final processProvider = StateProvider<double>((ref) => 0);
 
 final currentFileNameProvider = StateProvider<String>((ref) => '');

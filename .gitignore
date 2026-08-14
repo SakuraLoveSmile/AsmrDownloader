@@ -47,6 +47,7 @@ app.*.map.json
 asmr_dl_config.json
 .workflow/
 .zcode/
+.qoder/
 
 _build.bat
 # 本地示例目录（含大体积音频，不提交）
