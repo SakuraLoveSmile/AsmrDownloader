@@ -87,6 +87,17 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['navidromePath'] as String? ?? '';
   ref.read(dlCoverProvider.notifier).state =
       config['dlCover'] as bool? ?? false;
+
+  // 下载线程数：只接受 UI 提供的可选值，非法配置回退默认 4
+  final savedThreads = (config['downloadThreads'] as num?)?.toInt() ?? 4;
+  ref.read(downloadThreadsProvider.notifier).state =
+      downloadThreadOptions.contains(savedThreads) ? savedThreads : 4;
+
+  // 并行文件数：只接受 UI 提供的可选值，非法配置回退默认 2
+  final savedParallel = (config['parallelDownloadCount'] as num?)?.toInt() ?? 2;
+  ref.read(parallelDownloadCountProvider.notifier).state =
+      parallelDownloadOptions.contains(savedParallel) ? savedParallel : 2;
+
   ref.read(autoOrganizeProvider.notifier).state =
       config['autoOrganize'] as bool? ?? false;
   ref.read(onlyOrganizeUnorganizedProvider.notifier).state =

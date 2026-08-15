@@ -9,7 +9,14 @@ class ProgressBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final process = ref.watch(processProvider);
-    final currentFileName = ref.watch(currentFileNameProvider);
+    final activeFileNames = ref.watch(activeFileNamesProvider);
+    final displayText = switch (activeFileNames.length) {
+      0 => '',
+      1 => activeFileNames.first,
+      2 => activeFileNames.join('、'),
+      _ =>
+        '${activeFileNames.take(2).join('、')} 等 ${activeFileNames.length} 个文件',
+    };
     return Expanded(
       child: Stack(children: [
         LinearProgressIndicator(
@@ -21,7 +28,7 @@ class ProgressBar extends ConsumerWidget {
           left: 10,
           right: 10,
           bottom: 1,
-          child: Row(children: ellipsisInMiddle(currentFileName)),
+          child: Row(children: ellipsisInMiddle(displayText)),
         ),
       ]),
     );

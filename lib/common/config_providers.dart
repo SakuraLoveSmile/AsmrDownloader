@@ -20,6 +20,22 @@ final autoOrganizeProvider = StateProvider<bool>((ref) => false);
 
 final dlCoverProvider = StateProvider<bool>((ref) => false);
 
+/// 单文件多线程下载的可选连接数（分段并发，需服务器支持 Range）。
+/// 服务器不支持 Range 或分段下载失败时会自动回退单线程。
+const downloadThreadOptions = [1, 2, 4, 8, 16];
+
+/// 当前单文件下载使用的线程数（每段至少 1 MiB，小文件自动用更少线程）
+final downloadThreadsProvider = StateProvider<int>((ref) => 4);
+
+/// 文件级并行下载的可选文件数（同一作品内同时下载的文件数）。
+const parallelDownloadOptions = [1, 2, 3, 4];
+
+/// 所有文件并发连接数的安全上限：并行文件数 × 每文件线程数不得超过该值。
+const maxTotalDownloadConnections = 16;
+
+/// 当前文件级并行数，默认 2；并行时会自动压低单文件线程数。
+final parallelDownloadCountProvider = StateProvider<int>((ref) => 2);
+
 final proxyProvider = StateProvider<String>((ref) => 'DIRECT');
 
 final apiChannelProvider = StateProvider<String>((ref) => 'asmr-200');
@@ -43,8 +59,8 @@ final chickenRiceTaskProvider = StateProvider<String>((ref) => 'translate');
 final autoTranscribeProvider = StateProvider<bool>((ref) => false);
 
 /// 是否已启用 ChickenRice 能力（脚本已配置）
-final chickenRiceConfiguredProvider =
-    Provider<bool>((ref) => ref.watch(chickenRiceScriptPathProvider).isNotEmpty);
+final chickenRiceConfiguredProvider = Provider<bool>(
+    (ref) => ref.watch(chickenRiceScriptPathProvider).isNotEmpty);
 
 /// 当前生效的 ChickenRice 配置（聚合）
 final chickenRiceConfigProvider = Provider<ChickenRiceConfig>((ref) {

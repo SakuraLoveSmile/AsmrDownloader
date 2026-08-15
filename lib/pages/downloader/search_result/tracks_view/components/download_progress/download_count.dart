@@ -8,6 +8,7 @@ class DownloadCount extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final appWidth = MediaQuery.of(context).size.width;
+    // currentDlNoProvider 在并行下载下表示「已完成文件数」
     final currentDl = ref.watch(currentDlNoProvider);
     final total = ref.watch(totalTaskCntProvider);
     return SizedBox(
