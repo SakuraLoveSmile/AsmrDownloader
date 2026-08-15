@@ -214,6 +214,18 @@ class UIService {
     ref.read(transcribeCancelRequestedProvider.notifier).state = true;
   }
 
+  /// 运行日志环形缓冲上限（供日志弹窗实时展示，超出丢弃最旧）
+  static const int _kTranscribeLogCap = 300;
+
+  /// ChickenRice 输出逐行写入日志缓冲（UI 实时展示）
+  void _appendTranscribeLog(String line) {
+    final notifier = ref.read(transcribeLogLinesProvider.notifier);
+    final lines = [...notifier.state, line];
+    notifier.state = lines.length > _kTranscribeLogCap
+        ? lines.sublist(lines.length - _kTranscribeLogCap)
+        : lines;
+  }
+
   /// 对指定作品执行 ChickenRice 字幕翻译。
   /// 返回 true 表示已启动/完成；false 表示未执行（脚本未配置/正在运行/无字幕缺口）。
   /// [pickScriptIfEmpty] 为 true 且未配置脚本时弹出文件选择器引导选择。
@@ -259,7 +271,7 @@ class UIService {
     }
 
     // 预判：聚合每个作品的缺口目录；无缺口/目录缺失的作品跳过
-    final dirs = <String>[];
+    final targets = <String>[];
     var noGap = 0;
     var notExist = 0;
     for (final w in works) {
@@ -273,29 +285,35 @@ class UIService {
         noGap++;
         continue;
       }
-      dirs.add(w.sourceDir);
+      // 传「缺字幕的音轨文件」而非整个作品目录：ChickenRice 自身的跳过
+      // 判据只认 foo.lrc（纯 stem），不认官方字幕的 foo.mp3.vtt 命名，
+      // 传目录会把已有官方字幕的音轨也重复翻译。改传文件清单后以本应用
+      // 的判据为准，只翻真正缺字幕的音轨。
+      targets.addAll(missing.map((f) => f.path));
     }
-    if (dirs.isEmpty) {
+    if (targets.isEmpty) {
       showSnack(works.length == 1
           ? '所有音轨已有字幕，无需 AI 翻译'
           : '所选作品音轨均已有字幕，无需 AI 翻译');
       return false;
     }
-    Log.info('transcribeWorks: ${works.length} works -> ${dirs.length} dirs '
-        '(noGap=$noGap, notExist=$notExist)');
+    Log.info('transcribeWorks: ${works.length} works -> ${targets.length} '
+        'missing tracks (noGap=$noGap, notExist=$notExist)');
 
     ref
       ..read(activeTranscribeSourceIdProvider.notifier).state =
           works.first.sourceId
       ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
       ..read(transcribeProgressProvider.notifier).state = null
+      ..read(transcribeLogLinesProvider.notifier).state = const []
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
     final result = await ref.read(chickenRiceServiceProvider).run(
-          dirs: dirs,
+          dirs: targets,
           onProgress: (progress) {
             ref.read(transcribeProgressProvider.notifier).state = progress;
           },
+          onOutput: _appendTranscribeLog,
           isCancelled: () => ref.read(transcribeCancelRequestedProvider),
         );
     final completed = result.success;
@@ -355,6 +373,7 @@ class UIService {
       ..read(activeTranscribeSourceIdProvider.notifier).state = sourceId
       ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
       ..read(transcribeProgressProvider.notifier).state = null
+      ..read(transcribeLogLinesProvider.notifier).state = const []
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
     final result = await ref.read(chickenRiceServiceProvider).runOnDir(
@@ -362,6 +381,7 @@ class UIService {
           onProgress: (progress) {
             ref.read(transcribeProgressProvider.notifier).state = progress;
           },
+          onOutput: _appendTranscribeLog,
           isCancelled: () => ref.read(transcribeCancelRequestedProvider),
         );
     final completed = result.success;

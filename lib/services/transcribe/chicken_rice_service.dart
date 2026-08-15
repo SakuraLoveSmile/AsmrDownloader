@@ -116,16 +116,19 @@ class _RealProcessHandle implements ProcessHandle {
 /// - **bat 模式**（scriptPath 为 .bat/.cmd）：优先解析 bat 内 infer.exe
 ///   调用行**直调 exe**（Dart 经 CreateProcessW 传参，UTF-16 无损，完全
 ///   绕开 cmd 的代码页转码/批处理解析问题）；解析失败（自定义 bat）时
-///   回退 UTF-8 wrapper 真调用原 bat（等价于把文件夹拖到 bat 上），再
-///   失败才用 cmd.exe /d /c call 兜底。翻译/转录与设备由所选 bat 决定
-///   （bat 自带 --device=... 等参数），本服务只追加可选的 --overwrite
-///   （注意必须放在目录参数**之前**，见 buildCommand）。
+///   回退 UTF-8 wrapper 真调用原 bat（等价于把文件夹拖到 bat 上），
+///   再失败才用 cmd.exe /d /c call 兜底。翻译/转录与设备由所选 bat 决定
+///   （bat 自带 --device=... 等参数）；直调 exe 时输出格式由本应用配置
+///   统一控制（默认只出 lrc，覆盖 bat 自带的 --sub_formats）；本服务
+///   只追加可选的 --overwrite（注意必须放在目录参数**之前**，见 buildCommand）。
 /// - **exe 模式**（scriptPath 为 infer.exe）：直接调用并拼接全部参数。
 ///
 /// 关键设计：
 /// - **工作目录 = 脚本所在目录**（ChickenRice 运行时 os.chdir 到 exe 目录
 ///   查找 models/whisper_vad.onnx 与主模型，不设置会找不到模型）。
-/// - **把目录交给 ChickenRice 递归扫描**：传入的目录作为 base_dirs，
+/// - **base_dirs 传目录或文件均可**：UI 链路传的是本应用缺口检测算出的
+///   「缺字幕音轨文件清单」（ChickenRice 自身跳过判据只认 foo.lrc，
+///   不认官方字幕 foo.mp3.vtt 命名，传整个目录会重复翻译）；
 ///   ChickenRice 对已存在字幕自动跳过（--overwrite 控制），天然增量。
 /// - **stdin 立即关闭**：bat 末尾 pause 依赖 EOF 才能立即结束（见上）。
 /// - **进度解析 stdout + stderr**：VAD 块进度（stdout，x/y）与每文件
@@ -191,7 +194,17 @@ class ChickenRiceService {
       // 3) **cmd call 兜底**（wrapper 生成也失败时，与旧行为一致）。
       final parsed = _parseBatInvocation();
       if (parsed != null && File(parsed.exePath).existsSync()) {
-        final args = <String>[parsed.exePath, ...parsed.args];
+        // 输出格式由本应用配置统一控制（默认只出 lrc，与 Navidrome
+        // 整理链路对齐）：去掉 bat 自带的 --sub_formats（官方 bat 为
+        // srt,vtt,lrc），换成 config.subFormats。
+        final batArgs = parsed.args
+            .where((a) => !a.startsWith('--sub_formats'))
+            .toList();
+        final args = <String>[
+          parsed.exePath,
+          ...batArgs,
+          '--sub_formats=${config.subFormats}',
+        ];
         // --overwrite 必须放在目录**之前** —— ChickenRice 的 base_dirs
         // 是 argparse.REMAINDER，位置参数之后的任何 token（含 --overwrite）
         // 都会被吞进 base_dirs 而静默失效。
@@ -229,11 +242,14 @@ class ChickenRiceService {
 
   /// 在一个/多个目录（或文件）上运行 ChickenRice。
   ///
-  /// [dirs] 传给 base_dirs 的列表（每个目录独立 argv 元素，支持空格路径）。
-  /// [onProgress] 每解析到一次进度回调；[isCancelled] 返回 true 时 kill 进程。
+  /// [dirs] 传给 base_dirs 的列表（目录或音轨文件均可，每项独立 argv
+  /// 元素，支持空格路径）。
+  /// [onProgress] 每解析到一次进度回调；[onOutput] 每行 stdout/stderr
+  /// 输出回调（供 UI 实时展示日志）；[isCancelled] 返回 true 时 kill 进程。
   Future<TranscribeResult> run({
     required List<String> dirs,
     void Function(TranscribeProgress)? onProgress,
+    void Function(String line)? onOutput,
     bool Function() isCancelled = _never,
   }) async {
     if (dirs.isEmpty) {
@@ -262,8 +278,10 @@ class ChickenRiceService {
       _cleanupWrapper(wrapperPath);
       return TranscribeResult(success: false, exitCode: -1, error: '$e');
     }
-    final result =
-        await _await(handle, onProgress: onProgress, isCancelled: isCancelled);
+    final result = await _await(handle,
+        onProgress: onProgress,
+        onOutput: onOutput,
+        isCancelled: isCancelled);
     _cleanupWrapper(wrapperPath);
     return result;
   }
@@ -326,24 +344,39 @@ class ChickenRiceService {
   /// 便捷：对单个作品目录运行翻译。
   Future<TranscribeResult> runOnDir(String dir,
       {void Function(TranscribeProgress)? onProgress,
+      void Function(String line)? onOutput,
       bool Function() isCancelled = _never}) {
-    return run(dirs: [dir], onProgress: onProgress, isCancelled: isCancelled);
+    return run(
+        dirs: [dir],
+        onProgress: onProgress,
+        onOutput: onOutput,
+        isCancelled: isCancelled);
   }
 
   Future<TranscribeResult> _await(ProcessHandle handle,
       {void Function(TranscribeProgress)? onProgress,
+      void Function(String line)? onOutput,
       required bool Function() isCancelled}) async {
     final stderrLines = <String>[];
     // 处理文件数：null = 未解析；0 = 明确「未找到要处理的文件」。
     int? filesProcessed;
     final cancelled = Completer<bool>();
+    // 两路流结束信号：退出码可能先于最后几行输出到达，
+    // 收尾前等流彻底结束，避免丢失尾部日志/文件计数。
+    final outDone = Completer<void>();
+    final errDone = Completer<void>();
 
     final subOut = handle.stdout.listen(
       (line) {
         _parseProgress(line, onProgress);
+        // 非空行实时转发给 UI（启动横幅/模型加载/VAD 进度等）
+        if (line.trim().isNotEmpty) onOutput?.call(line);
       },
       onError: (Object e) =>
           Log.warning('chickenRice stdout stream error: $e'),
+      onDone: () {
+        if (!outDone.isCompleted) outDone.complete();
+      },
     );
     final subErr = handle.stderr.listen(
       (line) {
@@ -351,12 +384,16 @@ class ChickenRiceService {
         _parseProgress(line, onProgress);
         filesProcessed = _parseFilesProcessed(line, filesProcessed);
         if (line.trim().isNotEmpty) {
+          onOutput?.call(line);
           if (stderrLines.length >= 40) stderrLines.removeAt(0);
           stderrLines.add(line);
         }
       },
       onError: (Object e) =>
           Log.warning('chickenRice stderr stream error: $e'),
+      onDone: () {
+        if (!errDone.isCompleted) errDone.complete();
+      },
     );
 
     // 取消轮询：isCancelled 翻转时 kill 进程
@@ -374,6 +411,11 @@ class ChickenRiceService {
       Log.error('chickenRice await exitCode failed: $e');
       exitCode = -1;
     }
+    // 退出码可能先于最后几行输出到达：等两路流彻底结束再收尾，
+    // 避免丢失尾部日志/文件计数（dart:io 的管道随进程退出必然关闭）。
+    try {
+      await Future.wait([outDone.future, errDone.future]);
+    } catch (_) {}
     cancelTimer.cancel();
 
     final wasCancelled = cancelled.isCompleted;

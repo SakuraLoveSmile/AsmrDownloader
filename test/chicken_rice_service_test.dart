@@ -129,6 +129,10 @@ void main() {
       expect(cmd.first, endsWith('infer.exe'));
       expect(cmd, contains('--device=cuda'));
       expect(cmd, contains('--task=translate'));
+      // 输出格式由应用配置统一（默认只出 lrc）：覆盖 bat 自带的 srt,vtt,lrc
+      expect(cmd, contains('--sub_formats=lrc'));
+      expect(cmd.where((a) => a.startsWith('--sub_formats')).length, 1);
+      expect(cmd, isNot(contains('--sub_formats=srt,vtt,lrc')));
       expect(cmd.last, 'D:\\asmr\\RJ1');
       exe.deleteSync();
       bat.deleteSync();
@@ -358,6 +362,31 @@ void main() {
       final result = await svc.run(dirs: ['/d']);
       expect(result.success, true);
       expect(result.filesProcessed, 3);
+      tmp.deleteSync();
+    });
+
+    test('stdout/stderr 行经 onOutput 实时转发（供 UI 日志展示）', () async {
+      final tmp = createTempScript('infer.bat');
+      final lines = <String>[];
+      final svc = ChickenRiceService(
+        ChickenRiceConfig(scriptPath: tmp.path),
+        skipPlatformCheck: true,
+        runner: _FakeRunner((cmd, env) => _FakeHandle(
+              stdoutLines: ['⚠️  重要声明 / IMPORTANT NOTICE', ''],
+              stderrLines: ['正在加载模型…', '找到 2 个文件待处理'],
+              // 真实进程流一定先于退出码结束；fake 里稍延迟避免竞态
+              exitCodeFuture:
+                  Future.delayed(const Duration(milliseconds: 10), () => 0),
+            )),
+      );
+      final result = await svc.run(dirs: ['/d'], onOutput: lines.add);
+      expect(result.success, true);
+      // 非空行逐行转发，空行不转发
+      expect(lines, [
+        '⚠️  重要声明 / IMPORTANT NOTICE',
+        '正在加载模型…',
+        '找到 2 个文件待处理',
+      ]);
       tmp.deleteSync();
     });
 
