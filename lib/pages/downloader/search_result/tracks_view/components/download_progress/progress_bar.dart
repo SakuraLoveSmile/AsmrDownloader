@@ -20,15 +20,24 @@ class ProgressBar extends ConsumerWidget {
     return Expanded(
       child: Stack(children: [
         LinearProgressIndicator(
-          minHeight: 30,
-          borderRadius: BorderRadius.circular(10),
+          minHeight: 26,
+          borderRadius: BorderRadius.circular(8),
           value: process,
         ),
         Positioned.fill(
           left: 10,
           right: 10,
           bottom: 1,
-          child: Row(children: ellipsisInMiddle(displayText)),
+          child: Row(
+            children: ellipsisInMiddle(
+              displayText,
+              textStyle: TextStyle(
+                height: 1.0,
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
         ),
       ]),
     );

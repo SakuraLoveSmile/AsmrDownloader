@@ -31,9 +31,10 @@ class TracksView extends ConsumerWidget {
             final rootFolder = ref.read(rootFolderProvider);
             if (ref.read(workInfoLoadingStateProvider).value == null ||
                 rootFolder == null) {
-              return const Center(
+              return Center(
                 child: Text('未找到音轨数据',
-                    style: TextStyle(color: Colors.white54)),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
               );
             }
 

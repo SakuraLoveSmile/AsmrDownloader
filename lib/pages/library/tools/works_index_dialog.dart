@@ -148,7 +148,9 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
             leading: Icon(
               dirExists ? Icons.folder : Icons.folder_off,
               size: 18,
-              color: dirExists ? Colors.white70 : Colors.redAccent,
+              color: dirExists
+                  ? Theme.of(context).colorScheme.onSurfaceVariant
+                  : Theme.of(context).colorScheme.error,
             ),
             title: Text(entry.sourceId,
                 style: Theme.of(context).textTheme.bodySmall),

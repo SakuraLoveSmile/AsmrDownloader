@@ -8,13 +8,16 @@ class AsmrMiscInfo extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final style = TextStyle(
+        fontSize: 12,
+        color: Theme.of(context).colorScheme.onSurfaceVariant);
     return Padding(
       padding: EdgeInsets.only(top: verticalPadding),
       child: Row(
         children: [
-          Text(ref.watch(releaseDateProvider)),
+          Text(ref.watch(releaseDateProvider), style: style),
           const SizedBox(width: 20.0),
-          Text('销量: ${ref.watch(dlCountProvider)}'),
+          Text('销量: ${ref.watch(dlCountProvider)}', style: style),
         ],
       ),
     );

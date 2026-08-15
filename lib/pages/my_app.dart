@@ -7,6 +7,7 @@ import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_title_bar.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_close_handler.dart';
 import 'package:asmr_downloader/services/ui/ui_service.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -28,19 +29,10 @@ class MyApp extends StatelessWidget {
           Locale('en', 'US'), // English
           Locale('zh', 'CN'), // Chinese
         ],
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.purple,
-            dynamicSchemeVariant: DynamicSchemeVariant.fidelity,
-            brightness: Brightness.dark,
-          ),
-        ),
+        theme: AppTheme.dark(),
         scrollBehavior: MyCustomScrollBehavior(),
         home: Scaffold(
-          // Windows 透明背景配合 acrylic 窗口效果；macOS 使用不透明深色背景
-          backgroundColor: Platform.isWindows
-              ? Colors.transparent
-              : const Color(0xFF1E1E1E),
+          // 背景色由深色主题的 scaffoldBackgroundColor 统一控制
           // Windows: MoveWindow 整窗可拖拽 + 自绘标题栏
           // macOS: 原生标题栏（红绿灯）自带拖拽，不需要 MoveWindow 和自绘标题栏
           body: WindowCloseHandler(

@@ -60,7 +60,7 @@ class AppNavTabs extends ConsumerWidget {
     return Container(
       width: double.infinity,
       height: 40,
-      color: const Color(0xFF1E1E1E),
+      color: Theme.of(context).colorScheme.surface,
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.only(left: 8),
@@ -89,11 +89,14 @@ class _NavTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? Colors.white : Colors.white60;
+    final scheme = Theme.of(context).colorScheme;
+    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Material(
-        color: selected ? Colors.white.withValues(alpha: 0.14) : Colors.transparent,
+        color: selected
+            ? scheme.primary.withValues(alpha: 0.1)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         child: InkWell(
           onTap: onTap,
@@ -119,13 +122,13 @@ class _NavTab extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
-                      color: Colors.amber.shade700,
+                      color: scheme.primary,
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '$badgeCount',
-                      style: const TextStyle(
-                          color: Colors.black, fontSize: 10),
+                      style: TextStyle(
+                          color: scheme.onPrimary, fontSize: 10),
                     ),
                   ),
                 ],

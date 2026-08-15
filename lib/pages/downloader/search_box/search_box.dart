@@ -20,7 +20,6 @@ class SearchBox extends ConsumerStatefulWidget {
 
 class SearchBoxState extends ConsumerState<SearchBox> {
   final TextEditingController _controller = TextEditingController();
-  final Color _color = Colors.white70;
   String _inputText = '';
   bool _dragOver = false;
 
@@ -137,9 +136,16 @@ class SearchBoxState extends ConsumerState<SearchBox> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final downloading =
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
     final invalid = _inputText.isNotEmpty && !_isValidInput(_inputText);
+
+    // 非法输入时覆盖边框为错误色，其余情况沿用主题输入框样式
+    final errorBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: scheme.error),
+    );
 
     return DropTarget(
       enable: !downloading,
@@ -155,7 +161,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
         height: 50.0,
         decoration: BoxDecoration(
           color: _dragOver
-              ? Colors.pinkAccent.withValues(alpha: 0.08)
+              ? scheme.primary.withValues(alpha: 0.06)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
@@ -164,21 +170,15 @@ class SearchBoxState extends ConsumerState<SearchBox> {
           child: Row(
             children: [
               SizedBox(
-                width: 150,
+                width: 280,
                 child: TextField(
                   controller: _controller,
-                  cursorColor: _color,
                   decoration: InputDecoration(
                     hintText: '输入sourceId或作品页URL',
-                    border: OutlineInputBorder(
-                        borderSide: BorderSide(
-                            color: invalid ? Colors.redAccent : Colors.white24)),
-                    focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                            color: invalid ? Colors.redAccent : _color)),
-                    enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                            color: invalid ? Colors.redAccent : Colors.white24)),
+                    border: invalid ? errorBorder : null,
+                    enabledBorder: invalid ? errorBorder : null,
+                    focusedBorder:
+                        invalid ? errorBorder.copyWith(borderSide: BorderSide(color: scheme.error, width: 1.4)) : null,
                   ),
                   onChanged: (value) => setState(() => _inputText = value),
                   onSubmitted: (_) =>
@@ -191,13 +191,16 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                   onPressed:
                       downloading ? null : () => _searchInput(_inputText),
                   icon: Icon(Icons.search,
-                      color: invalid ? Colors.redAccent : null),
+                      color: invalid ? scheme.error : null),
+                  tooltip: '搜索',
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
               IconButton(
                 onPressed: downloading ? null : _refresh,
                 icon: const Icon(Icons.refresh),
                 tooltip: '强制刷新（重新请求元数据并更新缓存）',
+                visualDensity: VisualDensity.compact,
               ),
               IconButton(
                 onPressed: downloading
@@ -213,6 +216,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                         }
                       },
                 icon: const Icon(Icons.content_paste_go),
+                tooltip: '粘贴并搜索',
+                visualDensity: VisualDensity.compact,
               ),
             ],
           ),

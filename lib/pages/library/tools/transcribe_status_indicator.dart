@@ -27,7 +27,9 @@ class TranscribeStatusIndicator extends ConsumerWidget {
               children: [
                 Text(
                   '字幕 ${progress == null ? '..' : '${(progress.percentage * 100).toStringAsFixed(0)}%'}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontSize: 12),
                 ),
                 const SizedBox(width: 6),
                 IconButton(
@@ -40,13 +42,6 @@ class TranscribeStatusIndicator extends ConsumerWidget {
             )
           : OutlinedButton(
               onPressed: onStart,
-              style: OutlinedButton.styleFrom(
-                side: BorderSide(color: Colors.white24),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                foregroundColor: Colors.white70,
-                disabledForegroundColor: Colors.white24,
-              ),
               child: const Text('字幕'),
             ),
     );

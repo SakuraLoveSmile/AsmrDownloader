@@ -2,6 +2,7 @@ import 'package:asmr_downloader/pages/components/middle_ellipsis_text.dart';
 import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,12 +44,17 @@ class TracksState extends ConsumerState<Tracks> {
 
   List<Widget> trackExpansion(TrackItem track) {
     List<Widget> trackWidgets = [];
+    final scheme = Theme.of(context).colorScheme;
+    final roundedShape =
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
     if (track is Folder) {
       trackWidgets.add(
         Padding(
           padding: EdgeInsets.only(left: widget.tracksLPadding),
           child: ExpansionTile(
-            leading: Icon(Icons.folder, color: Color(0xFFF9C100)),
+            shape: roundedShape,
+            collapsedShape: roundedShape,
+            leading: Icon(Icons.folder, color: AppColors.folder),
             trailing: Checkbox(
                 value: track.selected,
                 onChanged: (bool? newValue) {
@@ -73,6 +79,9 @@ class TracksState extends ConsumerState<Tracks> {
           padding: EdgeInsets.only(left: widget.tracksLPadding),
           child: CheckboxListTile(
             value: track.selected,
+            shape: roundedShape,
+            hoverColor: scheme.primary.withValues(alpha: 0.06),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             onChanged: (bool? newValue) {
               if (newValue == null) return;
               setState(() {
@@ -97,13 +106,13 @@ class TracksState extends ConsumerState<Tracks> {
   Icon getIconFromType(String type) {
     switch (type) {
       case 'audio':
-        return Icon(Icons.music_note, color: Colors.blue);
+        return Icon(Icons.music_note, color: AppColors.audio);
       case 'image':
-        return Icon(Icons.image, color: Colors.green);
+        return Icon(Icons.image, color: AppColors.image);
       case 'text':
-        return Icon(Icons.text_snippet, color: Colors.grey);
+        return Icon(Icons.text_snippet, color: AppColors.textFile);
       default:
-        return Icon(Icons.error, color: Colors.white);
+        return Icon(Icons.error, color: Theme.of(context).colorScheme.error);
     }
   }
 }

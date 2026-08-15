@@ -164,7 +164,7 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
             Text('数据库文件：', style: theme.textTheme.bodySmall),
             SelectableText(_dbPath ?? '…',
                 style: theme.textTheme.bodySmall!.copyWith(
-                  color: Colors.white70,
+                  color: theme.colorScheme.onSurfaceVariant,
                 )),
             const SizedBox(height: 12),
             Wrap(
@@ -223,12 +223,6 @@ class CacheButton extends ConsumerWidget {
           onPressed: () => showDialog(
             context: context,
             builder: (_) => const CacheDialog(),
-          ),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.white24),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            foregroundColor: Colors.white70,
-            disabledForegroundColor: Colors.white24,
           ),
           child: const Text('缓存'),
         ),

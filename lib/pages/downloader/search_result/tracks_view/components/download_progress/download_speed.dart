@@ -30,7 +30,9 @@ class DownloadSpeed extends ConsumerWidget {
         : '${getSizeString(speed.round())}/s · 剩余 $etaText';
     return Text(
       text,
-      style: const TextStyle(fontSize: 12, color: Colors.white54),
+      style: TextStyle(
+          fontSize: 12,
+          color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 }

@@ -262,12 +262,6 @@ class BatchCacheButton extends ConsumerWidget {
           context: context,
           builder: (_) => const BatchCacheDialog(),
         ),
-        style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: Colors.white24),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-          foregroundColor: Colors.white70,
-          disabledForegroundColor: Colors.white24,
-        ),
         child: const Text('主动缓存'),
       ),
     );

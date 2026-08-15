@@ -8,6 +8,7 @@ const _kIconChromeMaximize = 'icon_chrome_maximize';
 const _kIconChromeMinimize = 'icon_chrome_minimize';
 const _kIconChromeUnmaximize = 'icon_chrome_unmaximize';
 
+// 深色主题：浅灰图标 + 透明底，hover 白色浅底
 const _buttonBgColorScheme = ButtonBgColorScheme(
   normal: Color.fromRGBO(255, 255, 255, 0.0),
   hovered: Color.fromRGBO(255, 255, 255, 0.1),
@@ -15,10 +16,10 @@ const _buttonBgColorScheme = ButtonBgColorScheme(
 );
 
 const _buttonIconColorScheme = ButtonIconColorScheme(
-  normal: Color.fromRGBO(255, 255, 255, 0.5),
+  normal: Color.fromRGBO(255, 255, 255, 0.55),
   hovered: Color.fromRGBO(255, 255, 255, 1.0),
   pressed: Color.fromRGBO(255, 255, 255, 1.0),
-  disabled: Color.fromRGBO(255, 255, 255, 0.5),
+  disabled: Color.fromRGBO(255, 255, 255, 0.3),
 );
 
 const _closeButtonBgColorScheme = ButtonBgColorScheme(
@@ -28,10 +29,10 @@ const _closeButtonBgColorScheme = ButtonBgColorScheme(
 );
 
 const _closeButtonIconColorScheme = ButtonIconColorScheme(
-  normal: Color.fromRGBO(255, 255, 255, 0.5),
+  normal: Color.fromRGBO(255, 255, 255, 0.55),
   hovered: Color.fromRGBO(255, 255, 255, 1.0),
   pressed: Color.fromRGBO(255, 255, 255, 1.0),
-  disabled: Color.fromRGBO(255, 255, 255, 0.5),
+  disabled: Color.fromRGBO(255, 255, 255, 0.3),
 );
 
 class MinimizeButton extends StatelessWidget {
