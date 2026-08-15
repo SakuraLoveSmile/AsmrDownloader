@@ -16,7 +16,9 @@ class ChickenRiceConfig {
   final String task;
 
   /// 输出字幕格式（逗号分隔），默认只输出 lrc（与 Navidrome 整理链路对齐）。
-  /// 仅 exe 模式生效。
+  /// exe 模式与 bat 模式直调 exe 时均生效（bat 模式会覆盖 bat 自带的
+  /// --sub_formats，官方 bat 为 srt,vtt,lrc）；仅 wrapper/cmd call
+  /// 兜底（罕见，自定义 bat）时格式由 bat 自身决定。
   final String subFormats;
 
   /// 处理的音频后缀（逗号分隔）。仅 exe 模式生效。
