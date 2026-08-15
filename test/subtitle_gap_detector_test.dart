@@ -57,6 +57,31 @@ void main() {
     expect(missing, isEmpty);
   });
 
+  test('视频音轨：foo.mp4.vtt 视为已有字幕（视频 stem 匹配）', () {
+    audio('e01.mp4');
+    sub('e01.mp4.vtt'); // 视频音轨带扩展名的字幕
+    final missing =
+        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    expect(missing, isEmpty);
+  });
+
+  test('视频音轨无字幕时列入缺口（flv/wmv 在支持列表内）', () {
+    audio('e01.flv');
+    audio('e02.wmv');
+    final missing =
+        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    expect(missing.map((f) => p.basename(f.path)).toSet(),
+        {'e01.flv', 'e02.wmv'});
+  });
+
+  test('kAudioExtensions 覆盖官方 bat 的全部后缀', () {
+    expect(
+      kAudioExtensions,
+      containsAll(['.wma', '.mp4', '.mkv', '.avi', '.mov', '.webm',
+          '.flv', '.wmv']),
+    );
+  });
+
   test('递归扫描子目录中的音频与字幕', () {
     final subDir = Directory(p.join(workDir.path, '音声'))..createSync();
     File(p.join(subDir.path, 'e01.wav')).writeAsBytesSync(List.filled(100, 1));

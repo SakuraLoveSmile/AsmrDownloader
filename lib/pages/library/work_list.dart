@@ -193,11 +193,15 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     if (items.isEmpty) return;
 
     final ui = ref.read(uiServiceProvider);
-    for (final item in items) {
-      // 串行：前一个完成后状态复位，下一个才能开始
-      await ui.transcribeWork(item.sourceId, item.sourceDir,
-          pickScriptIfEmpty: true);
-    }
+    // 批量聚合：所有选中作品的缺字幕目录一次传给 ChickenRice
+    // （一次进程、一次模型加载，进度为跨作品总进度）
+    await ui.transcribeWorks(
+      [
+        for (final item in items)
+          (sourceId: item.sourceId, sourceDir: item.sourceDir),
+      ],
+      pickScriptIfEmpty: true,
+    );
     if (mounted) setState(_selected.clear);
   }
 }

@@ -23,6 +23,8 @@ const List<String> kAudioExtensions = [
   '.avi',
   '.mov',
   '.webm',
+  '.flv',
+  '.wmv',
 ];
 
 /// 判断音轨是否需要 AI 生成字幕。
@@ -77,16 +79,13 @@ class SubtitleGapDetector {
   /// 递归扫描 [sourceDir] 下所有文件进行匹配（字幕可能与被检音频不同目录，
   /// 与整理逻辑一致地用「文件名」而非「同目录」匹配）。
   static bool _hasSubtitle(String sourceDir, String stem, Set<String> subExt) {
-    final targets = <String>{
-      stem,
-      '$stem.wav',
-      '$stem.flac',
-      '$stem.mp3',
-      '$stem.m4a',
-      '$stem.aac',
-      '$stem.ogg',
-      '$stem.wma',
-    };
+    // 覆盖两种命名：`foo.lrc`（key=stem）与 `foo.mp3.lrc`（key=stem+扩展名）。
+    // targets 由 kAudioExtensions 泛化生成，保证视频音轨（如 foo.mp4）的
+    // `foo.mp4.vtt` 也能被识别为已有字幕，避免重复翻译。
+    final targets = <String>{stem};
+    for (final ext in kAudioExtensions) {
+      targets.add('$stem${ext.toLowerCase()}');
+    }
     // 需排除音频本体自身（同名不同扩展名可能被误判为字幕）
     for (final file in _allFiles(sourceDir)) {
       final name = p.basename(file.path).toLowerCase();

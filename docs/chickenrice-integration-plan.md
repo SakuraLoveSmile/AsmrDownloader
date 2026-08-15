@@ -180,3 +180,25 @@ infer.exe \
 ### 验证备注
 - `flutter analyze`（经 `dart analyze` snapshot）全项目 **No issues found**。
 - **单元测试未能运行**：当前环境文件沙箱禁止写 `~/flutter/bin/cache`（workspace 外），`flutter test` 命令无法执行（升级权限无可用审批通道）。测试文件已编写好，需在具备 Flutter 工具链正常写权限的环境执行 `flutter test test/subtitle_gap_detector_test.dart test/chicken_rice_service_test.dart test/navidrome_organizer_test.dart` 验证。
+
+---
+
+## 8. 联动修正记录（2026-08）
+
+联动上线后发现一批与 ChickenRice v1.10 联动的缺陷，已按 [docs/chickenrice-linkage-fix-plan.md](chickenrice-linkage-fix-plan.md) 修正：
+
+| 问题 | 修复 | 状态 |
+|---|---|---|
+| P0-1 bat 模式 `pause` 挂死（stdin 未关闭） | `RealProcessRunner` 启动后立即 `stdin.close()` | ✅ |
+| P0-2 中文 Windows 管道 GBK 输出 | 子进程注入 `PYTHONUTF8=1` + `Utf8Decoder(allowMalformed: true)` + 流 onError 兜底 | ✅ |
+| P0-3 bat 模式 `--overwrite` 被 REMAINDER 吞掉 | `--overwrite` 移至目录参数之前 | ✅ |
+| P0-4 每文件进度在 stderr 未被解析 | stderr 参与进度解析，文件级进度优先并提取当前文件名 | ✅ |
+| P0-5 自动翻译无运行互斥 | `autoTranscribe` 增加 running 检查 | ✅ |
+| P1-1 exe 默认 `audio_suffixes` 缺视频格式 | 与 `kAudioExtensions` 对齐（含 wma/视频/flv/wmv） | ✅ |
+| P1-2 退出码 0 但 0 输出的假成功 | 解析 `找到 N 个文件待处理`/`未找到要处理的文件`，UI 给出可操作提示 | ✅ |
+| P1-3 缺口检测漏视频 stem（`foo.mp4.vtt`） | `_hasSubtitle` targets 由 `kAudioExtensions` 泛化生成 | ✅ |
+| P1-4 多目录被 `join(' ')` 拼成单参数 | `buildCommand(List<String> dirs)` 每目录独立 argv | ✅ |
+| P2-1 macOS 不支持翻译 | 非 Windows 平台控件禁用 + probe 拦截（用户确认不做 .py 方案） | ✅ |
+| resource/ 上传问题 | 加入 `.gitignore`（仅本地参考） | ✅ |
+| P1-5 批量聚合一次进程 | `ui_service.transcribeWorks` 聚合缺口目录一次 `run(dirs:)`；批量「字幕所选」一次模型加载（中途取消终止整批，已确认接受） | ✅ |
+
