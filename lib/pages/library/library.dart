@@ -25,39 +25,39 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 工具栏第一行：整理路径 + 自动整理 + AI 字幕配置
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                NavidromePathPicker(),
-                AutoOrganizeCheck(),
-                ChickenRiceConfigControls(),
-              ],
-            ),
+    // 注意：LibraryPage 是 IndexedStack 的子页，不能再包 Expanded，
+    // 由 Column 直接撑满 IndexedStack 的约束。
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 工具栏第一行：整理路径 + 自动整理 + AI 字幕配置
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              NavidromePathPicker(),
+              AutoOrganizeCheck(),
+              ChickenRiceConfigControls(),
+            ],
           ),
-          // 工具栏第二行：批量整理 / 注册表 / 缓存 / 字幕
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                OrganizeAllButton(),
-                WorksIndexButton(),
-                CacheButton(),
-                BatchCacheButton(),
-                TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
-              ],
-            ),
+        ),
+        // 工具栏第二行：批量整理 / 注册表 / 缓存 / 字幕
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              OrganizeAllButton(),
+              WorksIndexButton(),
+              CacheButton(),
+              BatchCacheButton(),
+              TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
+            ],
           ),
-          const SizedBox(height: 8),
-          // 作品库内容：已下载作品列表
-          Expanded(child: LibraryWorkList(key: _workListKey)),
-        ],
-      ),
+        ),
+        const SizedBox(height: 8),
+        // 作品库内容：已下载作品列表
+        Expanded(child: LibraryWorkList(key: _workListKey)),
+      ],
     );
   }
 
@@ -65,8 +65,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   void _onToolbarTranscribe() {
     final listState = _workListKey.currentState;
     if (listState == null || !listState.hasSelection) {
-      ref.read(uiServiceProvider).showSnack(
-          '请先勾选要生成字幕的作品（列表左侧复选框），或使用行内的字幕按钮');
+      ref.read(uiServiceProvider).showSnack('请先勾选要生成字幕的作品（列表左侧复选框），或使用行内的字幕按钮');
       return;
     }
     listState.transcribeSelected();
