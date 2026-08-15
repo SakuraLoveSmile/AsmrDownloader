@@ -2,10 +2,13 @@ import 'dart:io';
 
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
+import 'package:asmr_downloader/pages/library/tools/engine_setup_dialog.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/engine/chicken_rice_engine_service.dart';
+import 'package:asmr_downloader/services/engine/engine_providers.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
@@ -29,6 +32,10 @@ import 'package:path/path.dart' as p;
 
 /// 全局 SnackBar 入口（供无 BuildContext 的下载流程提示）
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
+/// 全局 Navigator 入口（供无 BuildContext 的服务层弹对话框，
+/// 如未配置脚本时引导打开 AI 翻译引擎安装向导）
+final navigatorKey = GlobalKey<NavigatorState>();
 
 class UIService {
   final Ref ref;
@@ -214,6 +221,57 @@ class UIService {
     ref.read(transcribeCancelRequestedProvider.notifier).state = true;
   }
 
+  // ---------- AI 翻译引擎内置安装器 ----------
+
+  /// 设置引擎安装目录（持久化）
+  void setChickenRiceEngineInstallDir(String dir) {
+    ref
+      ..read(chickenRiceEngineInstallDirProvider.notifier).state = dir
+      ..read(configFileProvider).addOrUpdate({'chickenRiceEngineInstallDir': dir});
+  }
+
+  /// 执行引擎安装（安装向导调用）；成功返回 infer.exe 路径并自动配置。
+  ///
+  /// 安装成功后：scriptPath 自动指向组件内 infer.exe，设备预置 cuda；
+  /// 现有的直调 exe 链路（进度/日志/lrc-only/缺口清单）无缝复用。
+  Future<String?> installEngine({
+    required String installDir,
+    required String variant,
+    required String task,
+  }) async {
+    final svc = ref.read(chickenRiceEngineServiceProvider);
+    final exePath = await svc.install(
+      installDir: installDir,
+      variant: variant,
+      task: task,
+      onState: (s) {
+        ref.read(engineInstallStateProvider.notifier).state = s;
+      },
+    );
+    if (exePath != null) {
+      setChickenRiceEngineInstallDir(installDir);
+      ref
+        ..read(chickenRiceEngineVariantProvider.notifier).state = variant
+        ..read(configFileProvider)
+            .addOrUpdate({'chickenRiceEngineVariant': variant});
+      setChickenRiceScriptPath(exePath);
+      setChickenRiceDevice('cuda');
+    }
+    return exePath;
+  }
+
+  /// 请求取消进行中的引擎安装
+  void cancelEngineInstall() {
+    ref.read(chickenRiceEngineServiceProvider).requestCancel();
+  }
+
+  /// 探测内置引擎完整性（安装目录内的 infer.exe/models）
+  Future<EngineProbeResult> probeEngine() {
+    return ref
+        .read(chickenRiceEngineServiceProvider)
+        .probe(ref.read(chickenRiceEngineInstallDirProvider));
+  }
+
   /// 运行日志环形缓冲上限（供日志弹窗实时展示，超出丢弃最旧）
   static const int _kTranscribeLogCap = 300;
 
@@ -257,7 +315,14 @@ class UIService {
         showSnack('未配置 ChickenRice 启动脚本');
         return false;
       }
-      await pickChickenRiceScript();
+      // 引导入口：优先弹内置安装向导（一键安装引擎）；
+      // 无可用 Navigator 时回退手动选择脚本。
+      final nav = navigatorKey.currentState;
+      if (nav != null && nav.context.mounted) {
+        await showEngineSetupDialog(nav.context);
+      } else {
+        await pickChickenRiceScript();
+      }
       if (!ref.read(chickenRiceConfigProvider).isConfigured) return false;
     }
     final probe = ref.read(chickenRiceServiceProvider).probeScript();

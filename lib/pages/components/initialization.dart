@@ -115,6 +115,10 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['chickenRiceDevice'] as String? ?? 'auto';
   ref.read(chickenRiceTaskProvider.notifier).state =
       config['chickenRiceTask'] as String? ?? 'translate';
+  ref.read(chickenRiceEngineInstallDirProvider.notifier).state =
+      config['chickenRiceEngineInstallDir'] as String? ?? '';
+  ref.read(chickenRiceEngineVariantProvider.notifier).state =
+      config['chickenRiceEngineVariant'] as String? ?? '';
   ref.read(autoTranscribeProvider.notifier).state =
       config['autoTranscribe'] as bool? ?? false;
 });

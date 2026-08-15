@@ -62,6 +62,12 @@ final chickenRiceTaskProvider = StateProvider<String>((ref) => 'translate');
 /// 下载完成后自动调用 ChickenRice 生成 AI 字幕（带开关）
 final autoTranscribeProvider = StateProvider<bool>((ref) => false);
 
+/// AI 翻译引擎内置安装目录（用户自选；空 = 未使用内置安装器）
+final chickenRiceEngineInstallDirProvider = StateProvider<String>((ref) => '');
+
+/// 内置引擎变体（cu128/gfx110x_all 等；供重装/状态展示）
+final chickenRiceEngineVariantProvider = StateProvider<String>((ref) => '');
+
 /// 是否已启用 ChickenRice 能力（脚本已配置）
 final chickenRiceConfiguredProvider = Provider<bool>(
     (ref) => ref.watch(chickenRiceScriptPathProvider).isNotEmpty);

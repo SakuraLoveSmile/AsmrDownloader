@@ -203,3 +203,36 @@ infer.exe \
 | P1-5 批量聚合一次进程 | `ui_service.transcribeWorks` 聚合缺口目录一次 `run(dirs:)`；批量「字幕所选」一次模型加载（中途取消终止整批，已确认接受） | ✅ |
 | P0-6 bat 模式经 cmd 传参损坏（v0.5.1→v0.5.3） | 中文 Windows 下 cmd 按 GBK 转码命令行，日文假名目录被转成 `?`；含全角括号的 bat 路径被 cmd 误解析。v0.5.1 曾改为解析 bat 直调 exe；v0.5.2 改回真调用原 bat（UTF-8 wrapper + chcp 65001），但用户 Windows 实测 wrapper 仍失败（cmd 批处理解析器对 UTF-8 内容处理缺陷，call 行被损坏，报「不是内部或外部命令」退出码 1）；**v0.5.3 调整优先级：首选解析 bat 直调 infer.exe**（Dart 经 CreateProcessW 传参 UTF-16 无损，完全不经过 cmd，且校验 exe 存在），解析失败（自定义 bat）才回退 wrapper（已加 UTF-8 BOM 适配 Win11 24H2+ 原生 UTF-8 解析），再失败才 cmd call 兜底 | ✅ |
 
+---
+
+## 9. v0.7.0 内置 AI 翻译引擎安装器（合二为一）
+
+> 用户需求：把 ChickenRice 的必须部分集成进本项目，免手动下载/配置。
+
+### 调研结论
+
+- **协议**：ChickenRice 为 MIT（Copyright (c) 2025 TransWithAI），本项目同为 MIT，允许集成/再分发，需保留版权声明（已落 THIRD-PARTY.md）。依赖链（faster-whisper/CTranslate2/onnxruntime/Silero VAD/Whisper 权重）均为 MIT 系。
+- **源码级合并不可行**：Python 3.10 + CTranslate2 技术栈 vs Flutter/Dart；产物体积巨大（nomodel 包 3.5 GB、带模型 5.6 GB，2 GB 分卷），不进 git、不随本应用 Release 分发。
+- **方案**：应用内按需下载安装上游官方产物到用户自选目录。
+
+### 实施内容
+
+| 模块 | 内容 |
+|---|---|
+| lib/services/download/chunk_downloader.dart | 纯 dio 分段断点续传下载器（Range 分段/part 续传/合并/取消，不耦合 AsmrApi），支持代理 |
+| lib/services/engine/chicken_rice_engine_service.dart | 安装编排：GitHub Release API 发现最新 tag → 下载 `.zip.manifest` 解析分卷清单 → 磁盘预检 → 逐分卷下载 → 流式合并 + SHA-256 校验 → 解压（系统 tar 优先，archive 包兜底）→ 定位 infer.exe → 模型下载（VAD + whisper-base + 主模型，HF 主源失败自动回退 hf-mirror.com）→ 探测 probe（infer.exe/VAD/主模型完整性） |
+| lib/services/engine/engine_providers.dart | engineInstallStateProvider（安装状态机）+ 服务 provider（随代理重建） |
+| lib/services/ui/ui_service.dart | installEngine（装完自动 setChickenRiceScriptPath + device=cuda + 持久化安装目录/变体）、cancelEngineInstall、probeEngine |
+| lib/pages/library/tools/engine_setup_dialog.dart | 向导对话框：状态探测横幅 + 变体（cu118/cu122/cu128 + 4 个 AMD gfx）/任务选择 + 自选目录 + 双进度展示 + 取消（断点续传） |
+| chicken_rice_config_controls.dart | 「安装引擎」入口按钮（仅 Windows 可用） |
+| THIRD-PARTY.md | 上游 MIT 全文 + 模型来源声明 |
+
+### 关键决策
+
+1. **传 nomodel 包 + 单独下模型**（而非 5.6 GB 带模型包）：模型可按任务选择，下载失败可单独补。
+2. **无纯 CPU 包**（上游未提供）：CPU 用户继续手动模式，UI 已注明。
+3. **解压用系统 tar**（Win10+ 自带）：避免 archive 包对 3.5 GB zip 的内存压力；archive 包仅兜底。
+4. **断点续传**：分卷/模型文件均支持，取消/断网后重新安装从已下载部分继续。
+5. 手动指定外部 bat/exe 的旧用法完全保留。
+
+

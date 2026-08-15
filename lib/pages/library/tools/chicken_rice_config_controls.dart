@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/pages/components/labeled_checkbox.dart';
+import 'package:asmr_downloader/pages/library/tools/engine_setup_dialog.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -95,6 +96,20 @@ class ChickenRiceConfigControls extends ConsumerWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // 内置安装器：自动下载 ChickenRice 运行时 + 模型，免手动配置
+            Tooltip(
+              message: '一键安装 AI 翻译引擎（自动下载运行时与模型，'
+                  '装完自动配置，无需手动选择脚本）',
+              child: OutlinedButton.icon(
+                onPressed: supported
+                    ? () => showEngineSetupDialog(context)
+                    : null,
+                icon: const Icon(Icons.download, size: 14),
+                label: const Text('安装引擎',
+                    style: TextStyle(fontSize: 12)),
               ),
             ),
             const SizedBox(width: 8),
