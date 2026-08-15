@@ -24,12 +24,6 @@ class OrganizeAllButton extends ConsumerWidget {
                     context: context,
                     builder: (_) => const BatchOrganizeDialog(),
                   ),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.white24),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            foregroundColor: Colors.white70,
-            disabledForegroundColor: Colors.white24,
-          ),
           child: const Text('整理全部'),
         ),
       ),
@@ -50,12 +44,6 @@ class WorksIndexButton extends ConsumerWidget {
           onPressed: () => showDialog(
             context: context,
             builder: (_) => const WorksIndexDialog(),
-          ),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: Colors.white24),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            foregroundColor: Colors.white70,
-            disabledForegroundColor: Colors.white24,
           ),
           child: const Text('注册表'),
         ),

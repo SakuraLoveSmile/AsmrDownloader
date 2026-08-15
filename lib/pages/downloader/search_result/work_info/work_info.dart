@@ -114,16 +114,18 @@ class WorkInfo extends ConsumerWidget {
 
   /// 搜索结果为空（查无此作品）
   Widget _buildNotFound(BuildContext context) {
-    return const Center(
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.search_off, size: 48, color: Colors.white24),
+          Icon(Icons.search_off,
+              size: 48, color: scheme.onSurfaceVariant.withValues(alpha: 0.5)),
           SizedBox(height: 12),
           Text(
             '未找到匹配的作品\n请检查 sourceId 或网络后重试',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(color: scheme.onSurfaceVariant),
           ),
         ],
       ),

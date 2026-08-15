@@ -14,7 +14,9 @@ class AsmrCircleName extends ConsumerWidget {
       padding: EdgeInsets.only(top: verticalPadding),
       child: CopyableTextBox(
         text: circleName,
-        textStyle: TextStyle(color: Color.fromRGBO(158, 158, 158, 1)),
+        textStyle: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 13),
         padding: EdgeInsets.zero,
       ),
     );

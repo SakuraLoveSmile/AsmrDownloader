@@ -6,8 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class DownloadPathPicker extends ConsumerWidget {
   const DownloadPathPicker({super.key});
 
-  final Color _color = Colors.white70;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dlPath = ref.watch(downloadPathProvider);
@@ -21,12 +19,8 @@ class DownloadPathPicker extends ConsumerWidget {
               width: 250,
               child: TextField(
                 enabled: false,
-                cursorColor: _color,
                 decoration: InputDecoration(
                   hintText: dlPath.isEmpty ? '选择下载路径' : dlPath,
-                  border: OutlineInputBorder(),
-                  focusedBorder:
-                      OutlineInputBorder(borderSide: BorderSide(color: _color)),
                 ),
               ),
             ),
@@ -35,6 +29,8 @@ class DownloadPathPicker extends ConsumerWidget {
               child: IconButton(
                 onPressed: ref.read(uiServiceProvider).pickDlPath,
                 icon: const Icon(Icons.folder),
+                tooltip: '选择下载路径',
+                visualDensity: VisualDensity.compact,
               ),
             ),
             Padding(
@@ -42,6 +38,8 @@ class DownloadPathPicker extends ConsumerWidget {
               child: IconButton(
                 onPressed: ref.read(uiServiceProvider).openFolder,
                 icon: const Icon(Icons.folder_open),
+                tooltip: '打开下载目录',
+                visualDensity: VisualDensity.compact,
               ),
             ),
           ],

@@ -30,29 +30,25 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SizedBox(height: 8),
         // 工具栏第一行：整理路径 + 自动整理 + AI 字幕配置
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              NavidromePathPicker(),
-              AutoOrganizeCheck(),
-              ChickenRiceConfigControls(),
-            ],
-          ),
+        _ToolbarRow(
+          children: [
+            NavidromePathPicker(),
+            AutoOrganizeCheck(),
+            ChickenRiceConfigControls(),
+          ],
         ),
+        const SizedBox(height: 8),
         // 工具栏第二行：批量整理 / 注册表 / 缓存 / 字幕
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              OrganizeAllButton(),
-              WorksIndexButton(),
-              CacheButton(),
-              BatchCacheButton(),
-              TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
-            ],
-          ),
+        _ToolbarRow(
+          children: [
+            OrganizeAllButton(),
+            WorksIndexButton(),
+            CacheButton(),
+            BatchCacheButton(),
+            TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
+          ],
         ),
         const SizedBox(height: 8),
         // 作品库内容：已下载作品列表
@@ -69,5 +65,30 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       return;
     }
     listState.transcribeSelected();
+  }
+}
+
+/// 工具条行：浅灰底圆角容器，内部横向可滚动。
+class _ToolbarRow extends StatelessWidget {
+  const _ToolbarRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: children),
+        ),
+      ),
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -38,7 +39,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
       children: [
         _buildHeader(worksAsync, activeSourceId),
         const SizedBox(height: 4),
-        const Divider(height: 1, color: Colors.white12),
+        const Divider(height: 1),
         Expanded(
           child: worksAsync.when(
             loading: () => Center(
@@ -48,7 +49,8 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
                     child: CircularProgressIndicator(strokeWidth: 2))),
             error: (e, _) => Center(
                 child: Text('加载作品库失败: $e',
-                    style: const TextStyle(color: Colors.redAccent))),
+                    style:
+                        TextStyle(color: Theme.of(context).colorScheme.error))),
             data: (works) => _buildList(works, activeSourceId),
           ),
         ),
@@ -60,36 +62,34 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
 
   Widget _buildHeader(
       AsyncValue<List<WorksListItem>> worksAsync, String? activeSourceId) {
+    final scheme = Theme.of(context).colorScheme;
     final works = worksAsync.value ?? const <WorksListItem>[];
     final selectedCount = _selected.length;
     final batchBusy = activeSourceId != null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
           Text('作品库（${works.length}）',
-              style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
           if (selectedCount > 0) ...[
             const SizedBox(width: 12),
             Text('已选 $selectedCount',
-                style: const TextStyle(color: Colors.amber, fontSize: 12)),
+                style: TextStyle(color: scheme.primary, fontSize: 12)),
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: batchBusy ? null : _organizeSelected,
-              style: _miniBtnStyle(),
               child: const Text('整理所选'),
             ),
             const SizedBox(width: 4),
             OutlinedButton(
               onPressed: batchBusy ? null : _transcribeSelected,
-              style: _miniBtnStyle(),
               child: const Text('字幕所选'),
             ),
             const SizedBox(width: 4),
             OutlinedButton(
               onPressed: () => _toggleSelectAll(works),
-              style: _miniBtnStyle(),
               child: Text(_isAllSelected(works) ? '取消全选' : '全选'),
             ),
           ],
@@ -102,34 +102,26 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
             icon: const Icon(Icons.refresh, size: 18),
             tooltip: '刷新作品库',
             visualDensity: VisualDensity.compact,
-            color: Colors.white54,
           ),
         ],
       ),
     );
   }
 
-  ButtonStyle _miniBtnStyle() => OutlinedButton.styleFrom(
-        side: BorderSide(color: Colors.white24),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-        foregroundColor: Colors.white70,
-        disabledForegroundColor: Colors.white24,
-        minimumSize: const Size(0, 28),
-        textStyle: const TextStyle(fontSize: 12),
-      );
-
   // ---------- 列表 ----------
 
   Widget _buildList(List<WorksListItem> works, String? activeSourceId) {
     if (works.isEmpty) {
-      return const Center(
+      return Center(
         child: Text('暂无已下载作品\n（设置下载路径并下载后自动出现）',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white38, fontSize: 13)),
+            style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                fontSize: 13)),
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       itemCount: works.length,
       separatorBuilder: (_, __) => const SizedBox(height: 4),
       itemBuilder: (context, i) => _WorkRow(
@@ -207,7 +199,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
 }
 
 /// 单行作品。
-class _WorkRow extends ConsumerWidget {
+class _WorkRow extends ConsumerStatefulWidget {
   const _WorkRow({
     required this.item,
     required this.selected,
@@ -221,23 +213,52 @@ class _WorkRow extends ConsumerWidget {
   final VoidCallback onToggleSelect;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final ui = ref.read(uiServiceProvider);
-    final statusColor = item.organized
-        ? Colors.greenAccent
-        : (item.missingSubtitleCount > 0 ? Colors.amber : Colors.blueAccent);
+  ConsumerState<_WorkRow> createState() => _WorkRowState();
+}
 
-    return Container(
-      decoration: BoxDecoration(
-        color: selected
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: selected ? Colors.white24 : Colors.white10, width: 1),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      child: Row(
+class _WorkRowState extends ConsumerState<_WorkRow> {
+  /// 鼠标悬停高亮
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final selected = widget.selected;
+    final transcribing = widget.transcribing;
+    final onToggleSelect = widget.onToggleSelect;
+    final scheme = Theme.of(context).colorScheme;
+    final ui = ref.read(uiServiceProvider);
+
+    // 状态标签：色底 + 深字的圆角 chip
+    final (String statusLabel, Color statusFg, Color statusBg) = transcribing
+        ? ('字幕中', scheme.primary,
+            scheme.primaryContainer.withValues(alpha: 0.5))
+        : item.organized
+            ? ('已整理', AppColors.success, AppColors.successBg)
+            : item.missingSubtitleCount > 0
+                ? ('未整理', AppColors.warning, AppColors.warningBg)
+                : ('未整理', AppColors.info, AppColors.infoBg);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          color: selected
+              ? scheme.primary.withValues(alpha: 0.06)
+              : _hovered
+                  ? scheme.surfaceContainerHighest
+                  : scheme.surfaceContainerLowest,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: selected
+                  ? scheme.primary.withValues(alpha: 0.45)
+                  : scheme.outlineVariant,
+              width: 1),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
         children: [
           Checkbox(
             value: selected,
@@ -251,16 +272,16 @@ class _WorkRow extends ConsumerWidget {
                 Row(
                   children: [
                     Text(item.sourceId,
-                        style: const TextStyle(
-                            color: Colors.white,
+                        style: TextStyle(
+                            color: scheme.onSurface,
                             fontWeight: FontWeight.w600,
                             fontSize: 13)),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(item.title,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 12)),
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant, fontSize: 12)),
                     ),
                   ],
                 ),
@@ -270,24 +291,28 @@ class _WorkRow extends ConsumerWidget {
                     if (item.cvNames.isNotEmpty) ...[
                       Text(item.cvNames,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white38, fontSize: 11)),
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant
+                                  .withValues(alpha: 0.7),
+                              fontSize: 11)),
                       const SizedBox(width: 8),
                     ],
                     Text('音轨 ${item.trackCount}',
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11)),
+                        style: TextStyle(
+                            color:
+                                scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                            fontSize: 11)),
                     if (item.missingSubtitleCount > 0) ...[
                       const SizedBox(width: 8),
                       Text('缺字幕 ${item.missingSubtitleCount}',
                           style: const TextStyle(
-                              color: Colors.amber, fontSize: 11)),
+                              color: AppColors.warning, fontSize: 11)),
                     ],
                     if (item.convertibleVttCount > 0) ...[
                       const SizedBox(width: 8),
                       Text('vtt ${item.convertibleVttCount}',
                           style: const TextStyle(
-                              color: Colors.lightBlueAccent, fontSize: 11)),
+                              color: AppColors.info, fontSize: 11)),
                     ],
                   ],
                 ),
@@ -296,19 +321,26 @@ class _WorkRow extends ConsumerWidget {
           ),
           // 状态标签
           if (transcribing)
-            const Padding(
-              padding: EdgeInsets.only(right: 8),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
               child: SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: scheme.primary),
               ),
             ),
-          Text(
-            transcribing
-                ? '字幕中'
-                : (item.organized ? '已整理' : '未整理'),
-            style: TextStyle(color: statusColor, fontSize: 11),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: statusBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              statusLabel,
+              style: TextStyle(color: statusFg, fontSize: 11),
+            ),
           ),
           const SizedBox(width: 8),
           // 行内操作
@@ -344,7 +376,8 @@ class _WorkRow extends ConsumerWidget {
             enabled: item.convertibleVttCount > 0 && !transcribing,
             onTap: () => ui.convertVttToLrcForWork(item.sourceDir),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -372,7 +405,9 @@ class _RowIconBtn extends StatelessWidget {
         icon: Icon(icon, size: 17),
         tooltip: tooltip,
         visualDensity: VisualDensity.compact,
-        color: enabled ? Colors.white60 : Colors.white24,
+        color: enabled
+            ? Theme.of(context).colorScheme.onSurfaceVariant
+            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
       ),
     );
   }

@@ -19,18 +19,15 @@ class DownloadThreadsSelector extends ConsumerWidget {
         child: Row(
           children: [
             const Text('下载线程'),
-            SizedBox(
-              child: DropdownButton<int>(
-                value: value,
-                focusColor: Colors.transparent,
-                items: downloadThreadOptions.map((int option) {
-                  return DropdownMenuItem<int>(
-                    value: option,
-                    child: Text(option == 1 ? '单线程' : '$option 线程'),
-                  );
-                }).toList(),
-                onChanged: ref.read(uiServiceProvider).onDownloadThreadsChanged,
-              ),
+            const SizedBox(width: 6),
+            DropdownMenu<int>(
+              initialSelection: value,
+              dropdownMenuEntries: downloadThreadOptions
+                  .map((option) => DropdownMenuEntry<int>(
+                      value: option,
+                      label: option == 1 ? '单线程' : '$option 线程'))
+                  .toList(),
+              onSelected: ref.read(uiServiceProvider).onDownloadThreadsChanged,
             ),
           ],
         ),

@@ -9,6 +9,7 @@ class AsmrTags extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
     final tagLs = ref.watch(tagLsProvider);
     return Padding(
       padding: EdgeInsets.only(top: verticalPadding),
@@ -20,8 +21,8 @@ class AsmrTags extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 3.0, bottom: 3.0),
                 child: CopyableTextBox(
                   text: e,
-                  textStyle: const TextStyle(color: Colors.black),
-                  backgroundColor: Color.fromRGBO(224, 224, 224, 1),
+                  textStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
+                  backgroundColor: scheme.surfaceContainerHighest,
                   borderRadius: 15.0,
                 ),
               ))

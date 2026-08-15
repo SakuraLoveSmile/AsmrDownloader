@@ -4,6 +4,7 @@ import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -220,8 +221,8 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         itemBuilder: (context, i) {
           final item = results[i];
           final icon = item.success
-              ? const Icon(Icons.check_circle, size: 16, color: Colors.green)
-              : const Icon(Icons.error, size: 16, color: Colors.redAccent);
+              ? const Icon(Icons.check_circle, size: 16, color: AppColors.success)
+              : const Icon(Icons.error, size: 16, color: AppColors.danger);
           return ListTile(
             dense: true,
             leading: icon,

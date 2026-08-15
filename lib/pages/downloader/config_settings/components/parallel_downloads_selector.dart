@@ -22,19 +22,16 @@ class ParallelDownloadsSelector extends ConsumerWidget {
         child: Row(
           children: [
             const Text('并行文件数'),
-            SizedBox(
-              child: DropdownButton<int>(
-                value: value,
-                focusColor: Colors.transparent,
-                items: parallelDownloadOptions.map((int option) {
-                  return DropdownMenuItem<int>(
-                    value: option,
-                    child: Text(option == 1 ? '单文件' : '$option 文件'),
-                  );
-                }).toList(),
-                onChanged:
-                    ref.read(uiServiceProvider).onParallelDownloadCountChanged,
-              ),
+            const SizedBox(width: 6),
+            DropdownMenu<int>(
+              initialSelection: value,
+              dropdownMenuEntries: parallelDownloadOptions
+                  .map((option) => DropdownMenuEntry<int>(
+                      value: option,
+                      label: option == 1 ? '单文件' : '$option 文件'))
+                  .toList(),
+              onSelected:
+                  ref.read(uiServiceProvider).onParallelDownloadCountChanged,
             ),
           ],
         ),

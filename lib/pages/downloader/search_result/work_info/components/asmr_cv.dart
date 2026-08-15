@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/components/copyable_textbox.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -21,7 +22,9 @@ class AsmrCv extends ConsumerWidget {
                 padding: const EdgeInsets.only(top: 3.0, bottom: 3.0),
                 child: CopyableTextBox(
                   text: e,
-                  backgroundColor: Color.fromRGBO(50, 150, 136, 1),
+                  textStyle: const TextStyle(color: AppColors.cvText, fontSize: 12),
+                  backgroundColor: AppColors.cvBg,
+                  borderRadius: 15.0,
                 ),
               ))
         ],

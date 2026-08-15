@@ -14,7 +14,10 @@ class AsmrTitle extends ConsumerWidget {
       padding: EdgeInsets.only(top: verticalPadding),
       child: CopyableTextBox(
         text: title,
-        textStyle: Theme.of(context).textTheme.bodyLarge,
+        textStyle: Theme.of(context)
+            .textTheme
+            .titleLarge
+            ?.copyWith(fontWeight: FontWeight.w600, height: 1.35),
         padding: EdgeInsets.zero,
       ),
     );

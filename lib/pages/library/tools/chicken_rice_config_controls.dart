@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:asmr_downloader/common/config_providers.dart';
+import 'package:asmr_downloader/pages/components/labeled_checkbox.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,34 +47,36 @@ class ChickenRiceConfigControls extends ConsumerWidget {
         padding: const EdgeInsets.only(left: 20.0),
         child: Row(
           children: [
-            const Text('AI字幕'),
+            Text('AI字幕',
+                style: TextStyle(
+                    fontSize: 13,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.8))),
+            const SizedBox(width: 6),
             // 任务/设备：bat 模式下由 bat 决定，禁用
-            DropdownButton<String>(
-              value: task,
-              focusColor: Colors.transparent,
-              items: _tasks
-                  .map((v) => DropdownMenuItem<String>(
-                      value: v, child: Text(_taskLabel(v))))
+            DropdownMenu<String>(
+              initialSelection: task,
+              enabled: !isBat && supported,
+              dropdownMenuEntries: _tasks
+                  .map((v) => DropdownMenuEntry<String>(
+                      value: v, label: _taskLabel(v)))
                   .toList(),
-              onChanged: (isBat || !supported)
-                  ? null
-                  : (v) {
-                      if (v != null) ui.setChickenRiceTask(v);
-                    },
+              onSelected: (v) {
+                if (v != null) ui.setChickenRiceTask(v);
+              },
             ),
             const SizedBox(width: 4),
-            DropdownButton<String>(
-              value: device,
-              focusColor: Colors.transparent,
-              items: _devices
-                  .map((v) => DropdownMenuItem<String>(
-                      value: v, child: Text(v)))
+            DropdownMenu<String>(
+              initialSelection: device,
+              enabled: !isBat && supported,
+              dropdownMenuEntries: _devices
+                  .map((v) => DropdownMenuEntry<String>(value: v, label: v))
                   .toList(),
-              onChanged: (isBat || !supported)
-                  ? null
-                  : (v) {
-                      if (v != null) ui.setChickenRiceDevice(v);
-                    },
+              onSelected: (v) {
+                if (v != null) ui.setChickenRiceDevice(v);
+              },
             ),
             const SizedBox(width: 4),
             // 脚本选择：显示文件名，悬停可见完整路径
@@ -83,11 +86,7 @@ class ChickenRiceConfigControls extends ConsumerWidget {
                   : scriptPath,
               child: OutlinedButton.icon(
                 onPressed: supported ? ui.pickChickenRiceScript : null,
-                icon: Icon(Icons.terminal,
-                    size: 14,
-                    color: scriptPath.isEmpty
-                        ? Colors.white38
-                        : Colors.white70),
+                icon: const Icon(Icons.terminal, size: 14),
                 label: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 140),
                   child: Text(
@@ -96,21 +95,12 @@ class ChickenRiceConfigControls extends ConsumerWidget {
                     style: const TextStyle(fontSize: 12),
                   ),
                 ),
-                style: OutlinedButton.styleFrom(
-                  side: BorderSide(
-                      color: scriptPath.isEmpty
-                          ? Colors.white24
-                          : Colors.white38),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  foregroundColor: Colors.white70,
-                ),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 8),
             // 自动翻译开关
-            const Text('自动'),
-            Checkbox(
+            LabeledCheckbox(
+              label: '自动',
               value: auto,
               onChanged: supported ? ui.onAutoTranscribeChanged : null,
             ),

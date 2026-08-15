@@ -21,33 +21,54 @@ class Downloader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const SizedBox(height: 8),
         // 第一行：搜索 + 下载路径 + API channel
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              SearchBox(),
-              DownloadPathPicker(),
-              AsmrApiChannel(),
-            ],
-          ),
+        _ToolbarRow(
+          children: [
+            SearchBox(),
+            DownloadPathPicker(),
+            AsmrApiChannel(),
+          ],
         ),
+        const SizedBox(height: 8),
         // 第二行：下载相关配置
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              DlCoverCheck(),
-              DownloadThreadsSelector(),
-              ParallelDownloadsSelector(),
-              DebugModeCheck(),
-              AsmrProxy(),
-            ],
-          ),
+        _ToolbarRow(
+          children: [
+            DlCoverCheck(),
+            DownloadThreadsSelector(),
+            ParallelDownloadsSelector(),
+            DebugModeCheck(),
+            AsmrProxy(),
+          ],
         ),
         SizedBox(height: 20),
         SearchResult(),
       ],
+    );
+  }
+}
+
+/// 工具条行：浅灰底圆角容器，内部横向可滚动。
+class _ToolbarRow extends StatelessWidget {
+  const _ToolbarRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: children),
+        ),
+      ),
     );
   }
 }

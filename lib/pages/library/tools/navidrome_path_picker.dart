@@ -7,8 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class NavidromePathPicker extends ConsumerWidget {
   const NavidromePathPicker({super.key});
 
-  final Color _color = Colors.white70;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final navidromePath = ref.watch(navidromePathProvider);
@@ -22,12 +20,8 @@ class NavidromePathPicker extends ConsumerWidget {
               width: 180,
               child: TextField(
                 enabled: false,
-                cursorColor: _color,
                 decoration: InputDecoration(
                   hintText: navidromePath.isEmpty ? '选择整理路径' : navidromePath,
-                  border: OutlineInputBorder(),
-                  focusedBorder:
-                      OutlineInputBorder(borderSide: BorderSide(color: _color)),
                 ),
               ),
             ),
@@ -36,6 +30,8 @@ class NavidromePathPicker extends ConsumerWidget {
               child: IconButton(
                 onPressed: ref.read(uiServiceProvider).pickNavidromePath,
                 icon: const Icon(Icons.folder),
+                tooltip: '选择整理路径',
+                visualDensity: VisualDensity.compact,
               ),
             ),
           ],
