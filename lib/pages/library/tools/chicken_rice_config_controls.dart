@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +12,9 @@ import 'package:path/path.dart' as p;
 /// 或 `infer.exe`：
 /// - 选 .bat：翻译/转录与设备由所选 bat 决定，任务/设备下拉禁用；
 /// - 选 .exe：任务/设备下拉生效，参数由本控件拼接。
+///
+/// **平台限制**：ChickenRice 官方仅提供 Windows 的 exe/bat，macOS 不支持
+/// 翻译功能 —— 非 Windows 平台整体禁用（置灰 + 拦截所有交互）。
 class ChickenRiceConfigControls extends ConsumerWidget {
   const ChickenRiceConfigControls({super.key});
 
@@ -24,14 +29,20 @@ class ChickenRiceConfigControls extends ConsumerWidget {
     final auto = ref.watch(autoTranscribeProvider);
     final isBat = scriptPath.toLowerCase().endsWith('.bat') ||
         scriptPath.toLowerCase().endsWith('.cmd');
+    // macOS 不支持翻译功能：非 Windows 整体禁用
+    final supported = Platform.isWindows;
     final ui = ref.read(uiServiceProvider);
 
     return Tooltip(
-      message: 'AI 字幕翻译（Faster-Whisper-ChickenRice）。选择其 release 中的 '
-          '.bat 启动脚本（如 运行(翻译)(GPU).bat，翻译/转录与设备由所选 bat 决定）'
-          '或 infer.exe（此时用下拉选择任务/设备）。'
-          '已存在同名字幕的音轨会自动跳过',
-      child: Padding(
+      message: supported
+          ? 'AI 字幕翻译（Faster-Whisper-ChickenRice）。选择其 release 中的 '
+              '.bat 启动脚本（如 运行(翻译)(GPU).bat，翻译/转录与设备由所选 bat 决定）'
+              '或 infer.exe（此时用下拉选择任务/设备）。'
+              '已存在同名字幕的音轨会自动跳过'
+          : 'AI 字幕翻译仅支持 Windows（当前平台不支持）',
+      child: Opacity(
+        opacity: supported ? 1.0 : 0.45,
+        child: Padding(
         padding: const EdgeInsets.only(left: 20.0),
         child: Row(
           children: [
@@ -44,7 +55,7 @@ class ChickenRiceConfigControls extends ConsumerWidget {
                   .map((v) => DropdownMenuItem<String>(
                       value: v, child: Text(_taskLabel(v))))
                   .toList(),
-              onChanged: isBat
+              onChanged: (isBat || !supported)
                   ? null
                   : (v) {
                       if (v != null) ui.setChickenRiceTask(v);
@@ -58,7 +69,7 @@ class ChickenRiceConfigControls extends ConsumerWidget {
                   .map((v) => DropdownMenuItem<String>(
                       value: v, child: Text(v)))
                   .toList(),
-              onChanged: isBat
+              onChanged: (isBat || !supported)
                   ? null
                   : (v) {
                       if (v != null) ui.setChickenRiceDevice(v);
@@ -71,7 +82,7 @@ class ChickenRiceConfigControls extends ConsumerWidget {
                   ? '选择 ChickenRice 的 .bat 启动脚本或 infer.exe'
                   : scriptPath,
               child: OutlinedButton.icon(
-                onPressed: ui.pickChickenRiceScript,
+                onPressed: supported ? ui.pickChickenRiceScript : null,
                 icon: Icon(Icons.terminal,
                     size: 14,
                     color: scriptPath.isEmpty
@@ -101,9 +112,10 @@ class ChickenRiceConfigControls extends ConsumerWidget {
             const Text('自动'),
             Checkbox(
               value: auto,
-              onChanged: ui.onAutoTranscribeChanged,
+              onChanged: supported ? ui.onAutoTranscribeChanged : null,
             ),
           ],
+        ),
         ),
       ),
     );

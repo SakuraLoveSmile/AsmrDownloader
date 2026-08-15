@@ -221,7 +221,25 @@ class UIService {
     String sourceId,
     String sourceDir, {
     bool pickScriptIfEmpty = false,
+  }) {
+    return transcribeWorks(
+      [(sourceId: sourceId, sourceDir: sourceDir)],
+      pickScriptIfEmpty: pickScriptIfEmpty,
+    );
+  }
+
+  /// 对多个作品批量执行 ChickenRice 字幕翻译。
+  ///
+  /// 关键优化：聚合所有作品的「缺字幕目录」为**一次进程调用**
+  /// （`run(dirs: [...])`），Whisper 模型只加载一次；进度为跨作品的
+  /// 总进度（ChickenRice 对全部 base_dirs 统一扫描、统一 n/total）。
+  /// 每个作品先做缺口过滤：目录不存在或所有音轨已有字幕的作品
+  /// 不会传给 ChickenRice，避免空跑。
+  Future<bool> transcribeWorks(
+    List<({String sourceId, String sourceDir})> works, {
+    bool pickScriptIfEmpty = false,
   }) async {
+    if (works.isEmpty) return false;
     if (!ref.read(chickenRiceConfigProvider).isConfigured) {
       if (!pickScriptIfEmpty) {
         showSnack('未配置 ChickenRice 启动脚本');
@@ -239,41 +257,68 @@ class UIService {
       showSnack('字幕翻译正在进行中');
       return false;
     }
-    if (!Directory(sourceDir).existsSync()) {
-      showSnack('作品目录不存在：$sourceDir');
+
+    // 预判：聚合每个作品的缺口目录；无缺口/目录缺失的作品跳过
+    final dirs = <String>[];
+    var noGap = 0;
+    var notExist = 0;
+    for (final w in works) {
+      if (!Directory(w.sourceDir).existsSync()) {
+        notExist++;
+        continue;
+      }
+      final missing =
+          SubtitleGapDetector.findMissingSubtitleTracks(w.sourceDir);
+      if (missing.isEmpty) {
+        noGap++;
+        continue;
+      }
+      dirs.add(w.sourceDir);
+    }
+    if (dirs.isEmpty) {
+      showSnack(works.length == 1
+          ? '所有音轨已有字幕，无需 AI 翻译'
+          : '所选作品音轨均已有字幕，无需 AI 翻译');
       return false;
     }
-
-    // 预判：统计缺字幕的音轨数，给用户反馈
-    final missing = SubtitleGapDetector.findMissingSubtitleTracks(sourceDir);
-    if (missing.isEmpty) {
-      showSnack('所有音轨已有字幕，无需 AI 翻译');
-      return true;
-    }
-    Log.info('transcribe: $sourceId missing ${missing.length} subtitle tracks');
+    Log.info('transcribeWorks: ${works.length} works -> ${dirs.length} dirs '
+        '(noGap=$noGap, notExist=$notExist)');
 
     ref
-      ..read(activeTranscribeSourceIdProvider.notifier).state = sourceId
+      ..read(activeTranscribeSourceIdProvider.notifier).state =
+          works.first.sourceId
       ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
       ..read(transcribeProgressProvider.notifier).state = null
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
-    final completed = await ref.read(chickenRiceServiceProvider).runOnDir(
-          sourceDir,
+    final result = await ref.read(chickenRiceServiceProvider).run(
+          dirs: dirs,
           onProgress: (progress) {
             ref.read(transcribeProgressProvider.notifier).state = progress;
           },
           isCancelled: () => ref.read(transcribeCancelRequestedProvider),
         );
+    final completed = result.success;
 
     ref
       ..read(transcribeStatusProvider.notifier).state =
           completed ? TranscribeStatus.done : TranscribeStatus.failed
       ..read(transcribeCancelRequestedProvider.notifier).state = false
       ..read(activeTranscribeSourceIdProvider.notifier).state = null;
-    showSnack(completed ? '字幕翻译完成' : '字幕翻译失败或已取消');
+    // 假成功检测：退出码 0 但 ChickenRice 明确「未找到要处理的文件」
+    // （多为音频后缀/格式不匹配），给出可操作的提示而不是「完成」。
+    final skipped = noGap + notExist;
+    showSnack(
+      !completed
+          ? '字幕翻译失败或已取消'
+          : (result.filesProcessed == 0
+              ? '未找到需要处理的文件（请检查音频格式配置）'
+              : (skipped > 0
+                  ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）'
+                  : '字幕翻译完成')),
+    );
     ref.invalidate(worksLibraryProvider);
-    return true;
+    return completed;
   }
 
   /// 供「下载完成自动翻译」调用的非 UI 版本（无上下文提示直接执行）。
@@ -281,6 +326,12 @@ class UIService {
   Future<bool> autoTranscribe(String sourceId) async {
     final cfg = ref.read(chickenRiceConfigProvider);
     if (!cfg.isConfigured) return false;
+    // 互斥：已有手动/自动翻译在跑时跳过，避免并发启动多个 infer.exe
+    // （模型重复加载、显存/算力争抢、状态互相覆盖）。
+    if (ref.read(transcribeStatusProvider) == TranscribeStatus.running) {
+      Log.info('chickenRice autoTranscribe skipped: run in progress: $sourceId');
+      return false;
+    }
     final probe = ref.read(chickenRiceServiceProvider).probeScript();
     if (probe != null) {
       Log.warning('chickenRice autoTranscribe skipped: $probe');
@@ -306,13 +357,17 @@ class UIService {
       ..read(transcribeProgressProvider.notifier).state = null
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
-    final completed = await ref.read(chickenRiceServiceProvider).runOnDir(
+    final result = await ref.read(chickenRiceServiceProvider).runOnDir(
           sourceDir,
           onProgress: (progress) {
             ref.read(transcribeProgressProvider.notifier).state = progress;
           },
           isCancelled: () => ref.read(transcribeCancelRequestedProvider),
         );
+    final completed = result.success;
+    if (completed && result.filesProcessed == 0) {
+      Log.warning('chickenRice autoTranscribe: no files processed: $sourceId');
+    }
     ref
       ..read(transcribeStatusProvider.notifier).state =
           completed ? TranscribeStatus.done : TranscribeStatus.failed

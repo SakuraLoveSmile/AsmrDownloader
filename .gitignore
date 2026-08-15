@@ -52,3 +52,5 @@ asmr_dl_config.json
 _build.bat
 # 本地示例目录（含大体积音频，不提交）
 example/
+# 本地参考项目（Faster-Whisper-TransWithAI-ChickenRice 等），仅本地参考不上传
+resource/

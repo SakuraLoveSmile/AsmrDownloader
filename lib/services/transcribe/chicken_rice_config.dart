@@ -20,6 +20,9 @@ class ChickenRiceConfig {
   final String subFormats;
 
   /// 处理的音频后缀（逗号分隔）。仅 exe 模式生效。
+  /// 与 SubtitleGapDetector.kAudioExtensions 及官方 bat 保持一致
+  /// （含视频格式 wma/mp4/mkv/avi/mov/webm/flv/wmv），避免
+  /// 「缺口检测说有缺字幕、ChickenRice 却因后缀不匹配 0 输出」的假成功。
   final String audioSuffixes;
 
   /// 是否覆盖已存在的字幕（默认 false：已存在则跳过，天然增量）
@@ -33,7 +36,8 @@ class ChickenRiceConfig {
     this.device = 'auto',
     this.task = 'translate',
     this.subFormats = 'lrc',
-    this.audioSuffixes = 'wav,flac,mp3,m4a,aac,ogg',
+    this.audioSuffixes =
+        'wav,flac,mp3,m4a,aac,ogg,wma,mp4,mkv,avi,mov,webm,flv,wmv',
     this.overwrite = false,
     this.modelNameOrPath = 'models',
   });
@@ -77,9 +81,14 @@ class TranscribeResult {
   final int exitCode;
   final String? error;
 
+  /// ChickenRice 报告的实际处理文件数：
+  /// null = 未解析到；0 = 明确「未找到要处理的文件」（假成功检测）。
+  final int? filesProcessed;
+
   const TranscribeResult({
     required this.success,
     required this.exitCode,
     this.error,
+    this.filesProcessed,
   });
 }
