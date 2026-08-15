@@ -51,6 +51,7 @@ class RealProcessRunner implements ProcessRunner {
   @override
   Future<ProcessHandle> start(List<String> command,
       {String? workingDirectory, Map<String, String>? environment}) async {
+    final sw = Stopwatch()..start();
     final process = await Process.start(
       command.first,
       command.skip(1).toList(),
@@ -58,6 +59,10 @@ class RealProcessRunner implements ProcessRunner {
       environment:
           environment == null ? null : {...Platform.environment, ...environment},
     );
+    // 诊断：Process.start 本身若耗时异常（杀软扫描/SmartScreen 等）
+    // 会在这里暴露；正常应为毫秒级。
+    Log.info('chickenRice process spawned: pid=${process.pid} '
+        '(${sw.elapsedMilliseconds}ms)');
     // 关键修复：Dart 默认不关闭子进程 stdin（管道写端一直开着）。
     // ChickenRice 的 .bat 末尾都有 pause（从 stdin 等待按键），
     // 不关闭 stdin 会永久阻塞，导致 bat 模式运行永远不结束。
@@ -108,10 +113,13 @@ class _RealProcessHandle implements ProcessHandle {
 /// 调用 ChickenRice（Faster-Whisper-TransWithAI-ChickenRice）生成本地字幕。
 ///
 /// 两种调用模式：
-/// - **bat 模式**（scriptPath 为 .bat/.cmd）：经 cmd.exe /d /c call 调用，
-///   把作品目录作为参数传进去（等价于把文件夹拖到 bat 上）。翻译/转录与
-///   设备由所选 bat 决定（bat 自带 --device=... 等参数），本服务只追加
-///   可选的 --overwrite（注意必须放在目录参数**之前**，见 buildCommand）。
+/// - **bat 模式**（scriptPath 为 .bat/.cmd）：优先解析 bat 内 infer.exe
+///   调用行**直调 exe**（Dart 经 CreateProcessW 传参，UTF-16 无损，完全
+///   绕开 cmd 的代码页转码/批处理解析问题）；解析失败（自定义 bat）时
+///   回退 UTF-8 wrapper 真调用原 bat（等价于把文件夹拖到 bat 上），再
+///   失败才用 cmd.exe /d /c call 兜底。翻译/转录与设备由所选 bat 决定
+///   （bat 自带 --device=... 等参数），本服务只追加可选的 --overwrite
+///   （注意必须放在目录参数**之前**，见 buildCommand）。
 /// - **exe 模式**（scriptPath 为 infer.exe）：直接调用并拼接全部参数。
 ///
 /// 关键设计：
@@ -163,21 +171,26 @@ class ChickenRiceService {
   /// 拼接传给 ChickenRice 的命令（base_dirs 为 [dirs]，每个目录独立参数）。
   List<String> buildCommand(List<String> dirs) {
     if (config.isBat) {
-      // bat 模式：**真调用所选 bat**（保留原项目的全部行为：参数预设、
-      // echo 提示、拖放逻辑），但路径不经过 cmd 命令行参数，而是写进一个
-      // 临时 UTF-8 wrapper bat：
-      //   @echo off
-      //   chcp 65001 >nul
-      //   call "<原bat>" "<目录1>" "<目录2>" ...
-      // 原因（Windows 实测）：cmd 在**启动时**按 OEM 代码页（中文系统=
-      // GBK）转码命令行参数，日文假名等非 GBK 字符会变成 '?'；而 bat
-      // 文件内容在 `chcp 65001` 之后按 UTF-8 逐行读取，路径无损。
-      // wrapper 路径为纯 ASCII，cmd /c 传它不受转码影响。
-      final wrapper = _buildBatWrapperCommand(dirs);
-      if (wrapper != null) return wrapper;
-      // wrapper 生成失败：回退解析 bat 内 infer.exe 参数直调 exe。
+      // bat 模式按可靠性排序的三级回退：
+      //
+      // 1) **解析 bat 直调 exe**（首选，官方 release bat 全部可解析）：
+      //    Dart Process.start 经 CreateProcessW 传参（UTF-16），中文 bat
+      //    文件名、日文假名目录等一律无损，且完全不经过 cmd.exe，绕开
+      //    其 GBK 命令行转码与批处理解析器对 UTF-8 内容的处理缺陷。
+      // 2) **UTF-8 wrapper 真调用原 bat**（自定义 bat 无法解析时）：
+      //    保留原 bat 全部行为（参数预设、echo 提示、拖放逻辑），路径写进
+      //    临时 wrapper 文件而非 cmd 命令行参数：
+      //      @echo off
+      //      chcp 65001 >nul
+      //      call "<原bat>" "<目录1>" "<目录2>" ...
+      //    cmd 启动时按 OEM 代码页（中文系统=GBK）转码命令行参数，日文
+      //    假名等非 GBK 字符会变成 '?'；而 wrapper 路径为纯 ASCII 不受
+      //    影响。注意：wrapper 方案在部分 Windows 版本上仍可能因 cmd 批
+      //    处理解析器的 UTF-8 处理缺陷失败（call 行被损坏，报「不是内部
+      //    或外部命令」退出码 1），故只作为非官方 bat 的兜底。
+      // 3) **cmd call 兜底**（wrapper 生成也失败时，与旧行为一致）。
       final parsed = _parseBatInvocation();
-      if (parsed != null) {
+      if (parsed != null && File(parsed.exePath).existsSync()) {
         final args = <String>[parsed.exePath, ...parsed.args];
         // --overwrite 必须放在目录**之前** —— ChickenRice 的 base_dirs
         // 是 argparse.REMAINDER，位置参数之后的任何 token（含 --overwrite）
@@ -186,7 +199,9 @@ class ChickenRiceService {
         args.addAll(dirs);
         return args;
       }
-      // 解析失败（自定义 bat）：最后回退 cmd call（与旧行为一致）。
+      final wrapper = _buildBatWrapperCommand(dirs);
+      if (wrapper != null) return wrapper;
+      // 解析与 wrapper 均失败：最后回退 cmd call（与旧行为一致）。
       final args = <String>[
         'cmd.exe',
         '/d',
@@ -277,7 +292,11 @@ class ChickenRiceService {
         buf.write(' "${_escapeBatPath(d)}"');
       }
       buf.writeln();
-      wrapper.writeAsStringSync(buf.toString(), encoding: utf8);
+      // 文件以 UTF-8 BOM 开头：Win11 24H2+ 的 cmd 见 BOM 会原生按 UTF-8
+      // 解析整个文件；旧版 cmd 不识别 BOM 时会把 BOM 三字节卷进首行，
+      // 首行保持 `@echo off`——即使被 BOM 字节污染，也只是该行被回显
+      // 一次（stderr 无害文本），命令本身仍会执行。
+      wrapper.writeAsStringSync('\uFEFF${buf.toString()}', encoding: utf8);
       return ['cmd.exe', '/d', '/c', wrapper.path];
     } catch (e) {
       Log.warning('chickenRice create bat wrapper failed: $e');
@@ -408,8 +427,9 @@ class ChickenRiceService {
 
   /// 解析 bat 内 infer.exe 的调用行（如
   /// `"%cpath%\\infer.exe" --device="cuda" --task="translate" %*`），
-  /// 提取 exe 绝对路径与全部 `--参数`，以便**直调 exe 绕开 cmd**。
-  /// 官方 release 的所有 bat 均为此结构；解析失败返回 null（回退 cmd call）。
+  /// 提取 exe 绝对路径与全部 `--参数`，以便**直调 exe 绕开 cmd**
+  /// （bat 模式首选路径，见 buildCommand）。
+  /// 官方 release 的所有 bat 均为此结构；解析失败返回 null（回退 wrapper）。
   _BatInvocation? _parseBatInvocation() {
     final file = File(config.scriptPath);
     if (!file.existsSync()) return null;
@@ -438,6 +458,9 @@ class ChickenRiceService {
       }
       if (exe.isEmpty) continue;
       exe = exe.replaceAll('%cpath%', batDir).replaceAll('%~dp0', batDir);
+      // bat 内的路径分隔符固定为 `\`；归一为平台分隔符
+      // （Windows 上等价，非 Windows 上便于测试验证）。
+      exe = exe.replaceAll('\\', p.separator);
       if (!p.isAbsolute(exe)) exe = p.join(batDir, exe);
       return _BatInvocation(exe, args);
     }

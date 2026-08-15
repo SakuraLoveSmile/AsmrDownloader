@@ -118,8 +118,39 @@ void main() {
       expect(cmd, isNot(contains('D:\\a 1 D:\\b 2')));
     });
 
-    test('bat 模式：经 UTF-8 wrapper 真调用原 bat（保留原 bat 全部行为）', () {
+    test('bat 模式（首选）：解析 bat 直调 infer.exe（绕开 cmd，路径无损）', () {
       final bat = createBatScript(_officialBatTemplate);
+      // bat 同目录放一个 infer.exe 才会走直调路径（existsSync 校验）
+      final exe = File('${bat.parent.path}${p.separator}infer.exe')
+        ..writeAsStringSync('x');
+      final cfg = ChickenRiceConfig(scriptPath: bat.path);
+      final cmd = ChickenRiceService(cfg).buildCommand(['D:\\asmr\\RJ1']);
+      // 不经 cmd.exe，直接调 exe（Dart CreateProcessW 传参，UTF-16 无损）
+      expect(cmd.first, endsWith('infer.exe'));
+      expect(cmd, contains('--device=cuda'));
+      expect(cmd, contains('--task=translate'));
+      expect(cmd.last, 'D:\\asmr\\RJ1');
+      exe.deleteSync();
+      bat.deleteSync();
+    });
+
+    test('bat 模式（首选）：多目录 + overwrite 时直调参数正确（overwrite 在目录前）', () {
+      final bat = createBatScript(_officialBatTemplate);
+      final exe = File('${bat.parent.path}${p.separator}infer.exe')
+        ..writeAsStringSync('x');
+      final cfg = ChickenRiceConfig(scriptPath: bat.path, overwrite: true);
+      final cmd = ChickenRiceService(cfg).buildCommand(['D:\\a', 'D:\\b']);
+      // --overwrite 在目录前，否则会被 base_dirs(REMAINDER) 吞掉
+      final ov = cmd.indexOf('--overwrite');
+      expect(ov, greaterThan(0));
+      expect(cmd.sublist(ov + 1), ['D:\\a', 'D:\\b']);
+      exe.deleteSync();
+      bat.deleteSync();
+    });
+
+    test('bat 模式：exe 不存在时回退 UTF-8 wrapper 真调用原 bat', () {
+      final bat = createBatScript(_officialBatTemplate);
+      // 目录内无 infer.exe → 直调不可用 → 回退 wrapper
       final cfg = ChickenRiceConfig(scriptPath: bat.path);
       final cmd = ChickenRiceService(cfg).buildCommand(['D:\\asmr\\RJ1']);
       // cmd /d /c <wrapper.bat>：wrapper 是纯 ASCII 路径，不受代码页转码影响
@@ -127,6 +158,9 @@ void main() {
       final wrapper = File(cmd.last);
       expect(wrapper.existsSync(), isTrue);
       final content = wrapper.readAsStringSync();
+      // wrapper 以 UTF-8 BOM 开头（Win11 24H2+ cmd 原生 UTF-8 解析）；
+      // readAsStringSync 会吞掉 BOM，故用原始字节校验
+      expect(wrapper.readAsBytesSync().sublist(0, 3), [0xEF, 0xBB, 0xBF]);
       // wrapper 用 chcp 65001 + UTF-8 写路径，随后真调用原 bat
       expect(content, contains('chcp 65001 >nul'));
       expect(content, contains('call "${bat.path}"'));
@@ -137,8 +171,8 @@ void main() {
       bat.deleteSync();
     });
 
-    test('bat 模式：多目录 + overwrite 时 wrapper 内容正确（overwrite 在目录前）', () {
-      final bat = createBatScript(_officialBatTemplate);
+    test('bat 模式：wrapper 多目录 + overwrite 内容正确（overwrite 在目录前）', () {
+      final bat = createBatScript('@echo off\necho no infer here\npause');
       final cfg = ChickenRiceConfig(scriptPath: bat.path, overwrite: true);
       final cmd = ChickenRiceService(cfg).buildCommand(['D:\\a', 'D:\\b']);
       final content = File(cmd.last).readAsStringSync();
@@ -165,24 +199,7 @@ void main() {
       dir.deleteSync(recursive: true);
     });
 
-    test('bat 模式：wrapper 生成失败时回退解析直调', () {
-      final bat = createBatScript(_officialBatTemplate);
-      // 注入不存在的临时目录 → wrapper 写入失败 → 回退解析 bat 直调 exe
-      final svc = ChickenRiceService(
-        ChickenRiceConfig(scriptPath: bat.path),
-        tempDir: Directory(p.join(Directory.systemTemp.path,
-            'no_such_dir_${DateTime.now().millisecondsSinceEpoch}')),
-      );
-      final cmd = svc.buildCommand(['D:\\asmr\\RJ1']);
-      // Windows 语义：bat 目录 + \\infer.exe（macOS 测试里为反斜杠形式）
-      expect(cmd.first, endsWith('infer.exe'));
-      expect(cmd, contains('--device=cuda'));
-      expect(cmd, contains('--task=translate'));
-      expect(cmd.last, 'D:\\asmr\\RJ1');
-      bat.deleteSync();
-    });
-
-    test('bat 模式：wrapper 失败且解析失败时回退 cmd call', () {
+    test('bat 模式：解析失败（无 infer.exe）且 wrapper 失败时回退 cmd call', () {
       final bat = createBatScript('@echo off\necho no infer here\npause');
       final svc = ChickenRiceService(
         ChickenRiceConfig(scriptPath: bat.path),

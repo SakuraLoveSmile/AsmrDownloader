@@ -201,5 +201,5 @@ infer.exe \
 | P2-1 macOS 不支持翻译 | 非 Windows 平台控件禁用 + probe 拦截（用户确认不做 .py 方案） | ✅ |
 | resource/ 上传问题 | 加入 `.gitignore`（仅本地参考） | ✅ |
 | P1-5 批量聚合一次进程 | `ui_service.transcribeWorks` 聚合缺口目录一次 `run(dirs:)`；批量「字幕所选」一次模型加载（中途取消终止整批，已确认接受） | ✅ |
-| P0-6 bat 模式经 cmd 传参损坏（v0.5.1→v0.5.2） | 中文 Windows 下 cmd 按 GBK 转码命令行，日文假名目录被转成 `?`；含全角括号的 bat 路径被 cmd 误解析。v0.5.1 曾改为解析 bat 直调 exe；**v0.5.2 改回真调用原 bat**：生成临时 UTF-8 wrapper（`chcp 65001` 后写路径，cmd 按 UTF-8 读文件内容，路径无损）→ wrapper 内 `call "原bat" "目录"`，原 bat 全部行为（参数预设/echo/pause）保留；wrapper 失败回退解析直调 → cmd call | ✅ |
+| P0-6 bat 模式经 cmd 传参损坏（v0.5.1→v0.5.3） | 中文 Windows 下 cmd 按 GBK 转码命令行，日文假名目录被转成 `?`；含全角括号的 bat 路径被 cmd 误解析。v0.5.1 曾改为解析 bat 直调 exe；v0.5.2 改回真调用原 bat（UTF-8 wrapper + chcp 65001），但用户 Windows 实测 wrapper 仍失败（cmd 批处理解析器对 UTF-8 内容处理缺陷，call 行被损坏，报「不是内部或外部命令」退出码 1）；**v0.5.3 调整优先级：首选解析 bat 直调 infer.exe**（Dart 经 CreateProcessW 传参 UTF-16 无损，完全不经过 cmd，且校验 exe 存在），解析失败（自定义 bat）才回退 wrapper（已加 UTF-8 BOM 适配 Win11 24H2+ 原生 UTF-8 解析），再失败才 cmd call 兜底 | ✅ |
 
