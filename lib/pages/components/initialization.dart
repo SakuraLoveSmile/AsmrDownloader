@@ -91,7 +91,7 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['autoOrganize'] as bool? ?? false;
   ref.read(onlyOrganizeUnorganizedProvider.notifier).state =
       config['onlyOrganizeUnorganized'] as bool? ?? true;
-  ref.read(chickenRiceExePathProvider.notifier).state =
+  ref.read(chickenRiceScriptPathProvider.notifier).state =
       config['chickenRiceExePath'] as String? ?? '';
   ref.read(chickenRiceDeviceProvider.notifier).state =
       config['chickenRiceDevice'] as String? ?? 'auto';

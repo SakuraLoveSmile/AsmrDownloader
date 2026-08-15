@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/common/const.dart';
+import 'package:asmr_downloader/pages/app_shell.dart';
 import 'package:asmr_downloader/pages/window_title_bar/caption_buttons/window_caption_buttons.dart';
 // ignore: unused_import
 import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
@@ -23,6 +24,11 @@ class WindowTitleBar extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // 导航标签（下载 / 作品库）
+              const Padding(
+                padding: EdgeInsets.only(left: 8, top: 4),
+                child: AppNavTabs(),
+              ),
               Expanded(child: Container()),
               CaptionButtons(),
             ],

@@ -75,6 +75,11 @@ class _RealProcessHandle implements ProcessHandle {
   @override
   void kill() {
     try {
+      if (Platform.isWindows) {
+        // bat 经 cmd.exe 启动，只杀 cmd 会留下孤儿 infer.exe：
+        // 用 taskkill 按 PID 树杀（/t 杀子进程树 /f 强制）。
+        Process.run('taskkill', ['/pid', '${_process.pid}', '/t', '/f']);
+      }
       _process.kill();
     } catch (_) {}
   }
@@ -82,11 +87,18 @@ class _RealProcessHandle implements ProcessHandle {
 
 /// 调用 ChickenRice（Faster-Whisper-TransWithAI-ChickenRice）生成本地字幕。
 ///
+/// 两种调用模式：
+/// - **bat 模式**（scriptPath 为 .bat/.cmd）：经 `cmd.exe /d /c call` 调用，
+///   把作品目录作为参数传进去（等价于把文件夹拖到 bat 上）。翻译/转录与
+///   设备由所选 bat 决定（bat 自带 `--device=...` 等参数），本服务不再拼接
+///   任务/设备参数，只追加可选的 `--overwrite`。
+/// - **exe 模式**（scriptPath 为 infer.exe）：直接调用并拼接全部参数。
+///
 /// 关键设计：
-/// - **工作目录 = exe 所在目录**（ChickenRice 运行时 `os.chdir` 到 exe 目录查找
-///   `models/whisper_vad.onnx` 与主模型，不设置会找不到模型）。
-/// - **把目录交给 ChickenRice 递归扫描**：传入的目录作为 base_dirs，ChickenRice
-///   对已存在字幕自动跳过（`--overwrite` 控制），天然增量。
+/// - **工作目录 = 脚本所在目录**（ChickenRice 运行时 `os.chdir` 到 exe 目录
+///   查找 `models/whisper_vad.onnx` 与主模型，不设置会找不到模型）。
+/// - **把目录交给 ChickenRice 递归扫描**：传入的目录作为 base_dirs，
+///   ChickenRice 对已存在字幕自动跳过（`--overwrite` 控制），天然增量。
 /// - **进度解析 stdout**：ChickenRice 用 `\r` 刷新 VAD 进度并打进度日志，
 ///   无结构化输出，这里按日志里的 `n/total` 文本估算。
 class ChickenRiceService {
@@ -96,16 +108,33 @@ class ChickenRiceService {
   ChickenRiceService(this.config, {ProcessRunner? runner})
       : _runner = runner ?? const RealProcessRunner();
 
-  /// 探测 exe 是否可用（存在且可执行）。返回 null 表示 OK，否则错误说明。
-  String? probeExe() {
-    final exePath = config.exePath;
-    if (exePath.isEmpty) return '未配置 ChickenRice 可执行文件';
-    if (!File(exePath).existsSync()) return '可执行文件不存在: $exePath';
+  /// 探测脚本是否可用（存在且扩展名受支持）。返回 null 表示 OK，否则错误说明。
+  String? probeScript() {
+    final path = config.scriptPath;
+    if (path.isEmpty) return '未配置 ChickenRice 启动脚本';
+    if (!File(path).existsSync()) return '文件不存在: $path';
+    if (!config.isBat && !config.isExe) {
+      return '不支持的文件类型（仅支持 .bat / .cmd / .exe）: $path';
+    }
     return null;
   }
 
   /// 拼接传给 ChickenRice 的命令（含 base_dirs 的 [dirs]）。
   List<String> buildCommand(String dirs) {
+    if (config.isBat) {
+      // bat 模式：任务/设备由 bat 决定，只传目录 + 可选 --overwrite。
+      // `call` 前缀避免 cmd /c 对首引号参数的剥离规则破坏带空格路径。
+      final args = <String>[
+        'cmd.exe',
+        '/d',
+        '/c',
+        'call',
+        config.scriptPath,
+        dirs,
+      ];
+      if (config.overwrite) args.add('--overwrite');
+      return args;
+    }
     final args = <String>[
       '--device=${config.device}',
       '--task=${config.task}',
@@ -117,7 +146,7 @@ class ChickenRiceService {
       args.add('--model_name_or_path=${config.modelNameOrPath}');
     }
     args.add(dirs);
-    return [config.exePath, ...args];
+    return [config.scriptPath, ...args];
   }
 
   /// 在一个/多个目录（或文件）上运行 ChickenRice。
@@ -131,14 +160,14 @@ class ChickenRiceService {
     bool Function() isCancelled = _never,
   }) async {
     if (dirs.isEmpty) return true;
-    final probe = probeExe();
+    final probe = probeScript();
     if (probe != null) {
       Log.error('chickenRice run failed: $probe');
       return false;
     }
 
     final command = buildCommand(dirs.join(' '));
-    final workDir = p.dirname(config.exePath);
+    final workDir = p.dirname(config.scriptPath);
     Log.info('chickenRice run: ${command.join(' ')}\n'
         'workingDir: $workDir');
 

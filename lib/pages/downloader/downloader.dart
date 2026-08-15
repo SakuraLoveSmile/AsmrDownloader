@@ -1,19 +1,13 @@
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_api_channel.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/auto_organize_check.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/batch_cache_dialog.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/cache_dialog.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/chicken_rice_config_controls.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/navidrome_path_picker.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_all_button.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/organize_button.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/transcribe_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
 import 'package:flutter/material.dart';
 
+/// 下载页：只负责「搜索 + 下载」。
+/// 整理 / AI 字幕 / 缓存 / 注册表等文件管理功能已移至「作品库」页。
 class Downloader extends StatelessWidget {
   const Downloader({super.key});
 
@@ -23,33 +17,24 @@ class Downloader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 第一行：搜索 + 下载路径 + 整理路径 + API channel
+          // 第一行：搜索 + 下载路径 + API channel
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 SearchBox(),
                 DownloadPathPicker(),
-                NavidromePathPicker(),
                 AsmrApiChannel(),
-                ChickenRiceConfigControls(),
               ],
             ),
           ),
-          // 第二行：下载封面 + 启用代理 + 开启整理 + 手动整理
+          // 第二行：下载相关配置
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
               children: [
                 DlCoverCheck(),
                 AsmrProxy(),
-                AutoOrganizeCheck(),
-                OrganizeButton(),
-                TranscribeButton(),
-                OrganizeAllButton(),
-                WorksIndexButton(),
-                CacheButton(),
-                BatchCacheButton(),
               ],
             ),
           ),

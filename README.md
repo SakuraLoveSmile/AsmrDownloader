@@ -2,6 +2,10 @@
 
 [https://asmr.one](https://asmr.one/)的GUI下载工具，支持 Windows / macOS。建议搭配[zDll233/Again: flutter 本地(Windows)音声播放器](https://github.com/zDll233/Again)食用。
 
+应用分两个页面（标题栏切换）：
+- **下载**：搜索作品并下载，只负责下载。
+- **作品库**：文件管理——已下载作品列表、Navidrome 整理、AI 字幕生成、vtt→lrc 转换、缓存管理、下载注册表。
+
 ![image-20241207172351-veagtwx](screenshots/image-20241207172351-veagtwx.png)
 
 ## 使用方法
@@ -27,11 +31,15 @@
         ![image-20241130171701-pzhxtq3](screenshots/image-20241130171701-pzhxtq3.png)  
         这个选项只会影响搜索的api，但是不同api提供的下载api是一样的，即不会影响下载本身。  
         只有asmr-100需要启用代理，asmr-200、asmr-300和文件下载都不需要。所以大部分时候不需要开启代理，除非asmr-200、asmr-300搜索不到，可以试试asmr-100。  
-    5. 开启整理：  
-        勾选后下载完成自动整理到 Navidrome 媒体库（见下方「Navidrome 整理」）。  
-        旁边的「整理」按钮可随时手动整理当前作品。
+4. **作品库页**（标题栏右侧标签）：  
+    下载完成后切到「作品库」即可看到已下载作品列表（自动扫描下载目录识别 RJ 号，新下载会自动出现，可手动刷新）。每行显示标题、CV、音轨数、缺字幕数、整理状态，支持：
+    - 行内操作：**整理**到 Navidrome / **AI 字幕**生成 / **vtt 转 lrc** / 打开目录；
+    - 多选批量：勾选后「整理所选」「字幕所选」；
+    - 工具栏：整理路径、自动整理开关、AI 字幕配置、批量整理、注册表、缓存管理。
 
 ## Navidrome 整理
+
+在「作品库」页整理：勾选「开启整理」后下载完成自动整理；也可在作品列表中逐行整理、勾选多个批量整理，或点「整理全部」一次性整理注册表中所有（或仅未整理的）作品。
 
 将下载的作品整理成 [Navidrome](https://www.navidrome.org/) 媒体库结构，配合 Navidrome 的文件夹浏览（或后续用 mp3tag 等工具批量打标签）使用：
 
@@ -57,16 +65,16 @@
 
 ## AI 字幕翻译（ChickenRice 联动）
 
-可调用 [Faster-Whisper-TransWithAI-ChickenRice](https://github.com/TransWithAI/Faster-Whisper-TransWithAI-ChickenRice) 为作品生成 AI 中文字幕：
+在「作品库」页调用 [Faster-Whisper-TransWithAI-ChickenRice](https://github.com/TransWithAI/Faster-Whisper-TransWithAI-ChickenRice) 为作品生成 AI 中文字幕：
 
 - **基于「同名字幕是否存在」自动判断**：若某个音轨已有 `.lrc` / `.vtt` / `.srt` 官方字幕，则跳过 AI 翻译（官方字幕够用，不浪费算力）；仅对**没有任何字幕的音轨**调用 AI 生成中文字幕。
 - **用法**：
   1. 自行下载 ChickenRice 对应 release（按你的显卡选 CUDA/AMD/CPU 版本），解压到本地。
-  2. 在应用搜索框右侧的 **AI字幕** 控件里点击 `code` 图标选择其 `infer.exe`。
-  3. 选择任务（翻译=中文 / 转录=原文）和设备（auto/cuda/cpu）。
-  4. 点 **字幕** 按钮手动为当前作品生成，或勾选 **自动** 在下载完成后自动翻译。
+  2. 在作品库页的 **AI字幕** 控件点「选择脚本」，选择其 **`.bat` 启动脚本**（如 `运行(翻译)(GPU).bat`）——翻译/转录与设备由所选 bat 决定；也可选 `infer.exe`（此时用旁边的下拉选择任务与设备）。
+  3. 在作品列表中勾选作品后点工具栏 **字幕**（或点行内的字幕按钮）生成；勾选 **自动** 则下载完成后自动翻译。
 - 生成的字幕与音轨同名（`xxx.lrc`），Navidrome 整理时会被自动采纳并内嵌为歌词标签。
-- 注意：首次运行会下载/加载 Whisper 模型，较耗时、占用 GPU 显存；进程可通过取消按钮中断。
+- **vtt 转 lrc**：作品行内「歌词」按钮把 `.vtt` 字幕批量转为同名 `.lrc`（已有 `.lrc` 不覆盖）。
+- 注意：首次运行会下载/加载 Whisper 模型，较耗时、占用 GPU 显存；进程可通过取消按钮中断（bat 模式会连子进程一并终止）。
 
 ## 功能特色
 
