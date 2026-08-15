@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:asmr_downloader/services/transcribe/chicken_rice_config.dart';
 import 'package:asmr_downloader/services/transcribe/chicken_rice_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   group('ChickenRiceConfig', () {
@@ -116,28 +118,56 @@ void main() {
       expect(cmd, isNot(contains('D:\\a 1 D:\\b 2')));
     });
 
-    test('bat 模式：经 cmd /c call 调用，只传目录，不带任务/设备参数', () {
-      const cfg = ChickenRiceConfig(scriptPath: 'C:\\t\\运行(翻译)(GPU).bat');
+    test('bat 模式：解析 bat 内 infer.exe 参数并直调（绕开 cmd 转码）', () {
+      final bat = createBatScript(_officialBatTemplate);
+      final cfg = ChickenRiceConfig(scriptPath: bat.path);
       final cmd = ChickenRiceService(cfg).buildCommand(['D:\\asmr\\RJ1']);
-      expect(cmd.take(4), ['cmd.exe', '/d', '/c', 'call']);
-      expect(cmd[4], 'C:\\t\\运行(翻译)(GPU).bat');
-      expect(cmd[5], 'D:\\asmr\\RJ1');
-      expect(cmd.length, 6);
-      expect(cmd.any((a) => a.startsWith('--task')), isFalse);
-      expect(cmd.any((a) => a.startsWith('--device')), isFalse);
-      expect(cmd.any((a) => a.startsWith('--sub_formats')), isFalse);
+      // Windows 语义：bat 目录 + \\infer.exe（macOS 测试里为反斜杠形式）
+      expect(cmd.first, endsWith('infer.exe'));
+      expect(cmd.first, contains(p.basename(p.dirname(bat.path))));
+      // bat 的参数被解析并去引号（device/task/后缀均来自 bat 内容）
+      expect(cmd, contains('--device=cuda'));
+      expect(cmd, contains('--task=translate'));
+      expect(
+          cmd,
+          contains(
+              '--audio_suffixes=mp3,wav,flac,m4a,aac,ogg,wma,mp4,mkv,avi,mov,webm,flv,wmv'));
+      expect(cmd, contains('--sub_formats=srt,vtt,lrc'));
+      // 不经 cmd.exe
+      expect(cmd.any((a) => a.toLowerCase() == 'cmd.exe'), isFalse);
+      // 目录为最后一个参数
+      expect(cmd.last, 'D:\\asmr\\RJ1');
+      bat.deleteSync();
     });
 
-    test('bat 模式：overwrite 必须放在目录之前（argparse REMAINDER 兼容）', () {
-      const cfg = ChickenRiceConfig(
-        scriptPath: 'C:\\t\\run.bat',
-        overwrite: true,
-      );
-      final cmd = ChickenRiceService(cfg).buildCommand(['D:\\dir']);
+    test('bat 模式：多目录独立 argv + overwrite 在目录之前', () {
+      final bat = createBatScript(_officialBatTemplate);
+      final cfg = ChickenRiceConfig(scriptPath: bat.path, overwrite: true);
+      final cmd = ChickenRiceService(cfg).buildCommand(['D:\\a', 'D:\\b']);
       // --overwrite 在目录前，否则会被 base_dirs(REMAINDER) 吞掉
-      expect(cmd[5], '--overwrite');
-      expect(cmd[6], 'D:\\dir');
+      final owIdx = cmd.indexOf('--overwrite');
+      expect(owIdx, greaterThan(0));
+      expect(cmd.sublist(owIdx + 1), ['D:\\a', 'D:\\b']);
+      expect(cmd.last, 'D:\\b');
+      bat.deleteSync();
+    });
+
+    test('bat 模式：无法解析出 infer.exe 时回退 cmd call', () {
+      final bat = createBatScript('@echo off\necho no infer here\npause');
+      final cmd = ChickenRiceService(ChickenRiceConfig(scriptPath: bat.path))
+          .buildCommand(['D:\\dir']);
+      expect(cmd.take(4), ['cmd.exe', '/d', '/c', 'call']);
+      expect(cmd[4], bat.path);
       expect(cmd.last, 'D:\\dir');
+      bat.deleteSync();
+    });
+
+    test('bat 模式：infer.exe 调用行无参数时不解析（回退 cmd call）', () {
+      final bat = createBatScript('@echo off\n"%cpath%\\infer.exe" %*\npause');
+      final cmd = ChickenRiceService(ChickenRiceConfig(scriptPath: bat.path))
+          .buildCommand(['D:\\dir']);
+      expect(cmd.take(4), ['cmd.exe', '/d', '/c', 'call']);
+      bat.deleteSync();
     });
   });
 
@@ -329,6 +359,41 @@ void main() {
       tmp.deleteSync();
     });
   });
+}
+
+/// 官方 release bat 的结构模板（UTF-8）。
+const String _officialBatTemplate = '''@echo off
+chcp 65001
+set cpath=%~dp0
+set cpath=%cpath:~0,-1%
+if "%~1"=="" goto prompt_input
+"%cpath%\\infer.exe" --audio_suffixes="mp3,wav,flac,m4a,aac,ogg,wma,mp4,mkv,avi,mov,webm,flv,wmv" --sub_formats="srt,vtt,lrc" --device="cuda" --task="translate" %*
+goto end
+
+:prompt_input
+echo 请将音视频文件拖到此窗口，然后按回车:
+set "input_files="
+set /p "input_files="
+if defined input_files goto run_input
+goto no_input
+
+:run_input
+"%cpath%\\infer.exe" --audio_suffixes="mp3,wav,flac,m4a,aac,ogg,wma,mp4,mkv,avi,mov,webm,flv,wmv" --sub_formats="srt,vtt,lrc" --device="cuda" --task="translate" %input_files%
+goto end
+
+:no_input
+echo 未提供输入文件。
+
+:end
+pause
+''';
+
+/// 创建内容为 [content]（UTF-8）的临时 bat 文件。
+File createBatScript(String content) {
+  final dir = Directory.systemTemp.createTempSync('cr_bat');
+  final f = File(p.join(dir.path, '运行(翻译)(GPU).bat'));
+  f.writeAsStringSync(content, encoding: utf8);
+  return f;
 }
 
 File createTempScript(String name) {

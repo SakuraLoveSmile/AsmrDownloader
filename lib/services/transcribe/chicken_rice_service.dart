@@ -158,11 +158,25 @@ class ChickenRiceService {
   /// 拼接传给 ChickenRice 的命令（base_dirs 为 [dirs]，每个目录独立参数）。
   List<String> buildCommand(List<String> dirs) {
     if (config.isBat) {
-      // bat 模式：任务/设备由 bat 决定，只传目录 + 可选 --overwrite。
-      // call 前缀避免 cmd /c 对首引号参数的剥离规则破坏带空格路径。
-      // 注意：--overwrite 必须放在目录**之前** —— ChickenRice 的 base_dirs
-      // 是 argparse.REMAINDER，位置参数之后的任何 token（含 --overwrite）
-      // 都会被吞进 base_dirs 而静默失效。
+      // bat 模式：**解析 bat 内 infer.exe 的调用行并直调 exe**，不再经
+      // cmd.exe 传参。原因（Windows 实测）：
+      // 1. cmd 按 OEM 代码页（中文系统=GBK）转码命令行，日文假名等
+      //    非 GBK 字符会被转成 '?'，ASMR 作品目录名几乎必然含日文 →
+      //    目录损坏；Dart Process.start 走 UTF-16 直传，无此问题。
+      // 2. 含全角括号的 bat 路径（如 运行(翻译)(GPU).bat）经 cmd 裸传
+      //    会被 cmd 误解析（'不是内部或外部命令'）。
+      // 解析保留所选 bat 的参数（device/task/compute_type/batch 等）。
+      final parsed = _parseBatInvocation();
+      if (parsed != null) {
+        final args = <String>[parsed.exePath, ...parsed.args];
+        // --overwrite 必须放在目录**之前** —— ChickenRice 的 base_dirs
+        // 是 argparse.REMAINDER，位置参数之后的任何 token（含 --overwrite）
+        // 都会被吞进 base_dirs 而静默失效。
+        if (config.overwrite) args.add('--overwrite');
+        args.addAll(dirs);
+        return args;
+      }
+      // 解析失败（自定义 bat）：回退 cmd call（与旧行为一致）。
       final args = <String>[
         'cmd.exe',
         '/d',
@@ -324,6 +338,44 @@ class ChickenRiceService {
     caseSensitive: false,
   );
 
+  /// 解析 bat 内 infer.exe 的调用行（如
+  /// `"%cpath%\\infer.exe" --device="cuda" --task="translate" %*`），
+  /// 提取 exe 绝对路径与全部 `--参数`，以便**直调 exe 绕开 cmd**。
+  /// 官方 release 的所有 bat 均为此结构；解析失败返回 null（回退 cmd call）。
+  _BatInvocation? _parseBatInvocation() {
+    final file = File(config.scriptPath);
+    if (!file.existsSync()) return null;
+    final bytes = file.readAsBytesSync();
+    final text = utf8.decode(bytes, allowMalformed: true);
+    final batDir = p.dirname(config.scriptPath);
+    final exeRe = RegExp(r'"([^"]*infer\.exe)"');
+    final argRe = RegExp(r'--[\w-]+(?:="[^"]*"|=?\S+)?');
+    for (final raw in text.split('\n')) {
+      if (!raw.contains('infer.exe')) continue;
+      final args = <String>[];
+      for (final m in argRe.allMatches(raw)) {
+        var s = m.group(0)!;
+        final eq = s.indexOf('=');
+        if (eq > 0 && s.length > eq + 1 && s.endsWith('"')) {
+          // --key="value" → --key=value（去掉值两侧引号）
+          s = s.substring(0, eq + 1) + s.substring(eq + 2, s.length - 1);
+        }
+        args.add(s);
+      }
+      if (args.isEmpty) continue;
+      var exe = exeRe.firstMatch(raw)?.group(1) ?? '';
+      if (exe.isEmpty) {
+        final bare = RegExp(r'(?:\S+[/\\])?infer\.exe').firstMatch(raw);
+        exe = bare?.group(0) ?? '';
+      }
+      if (exe.isEmpty) continue;
+      exe = exe.replaceAll('%cpath%', batDir).replaceAll('%~dp0', batDir);
+      if (!p.isAbsolute(exe)) exe = p.join(batDir, exe);
+      return _BatInvocation(exe, args);
+    }
+    return null;
+  }
+
   /// 从 ChickenRice 输出行解析进度：文件级进度（n/total + 文件名）优先，
   /// 其次 VAD 块进度（x/y）。文件级进度用于总进度，VAD 仅作次级刷新，
   /// 避免两者混用导致百分比回跳。
@@ -359,4 +411,12 @@ class ChickenRiceService {
     if (_noFilesRe.hasMatch(line)) return 0;
     return null;
   }
+}
+
+/// bat 内 infer.exe 调用解析结果：exe 绝对路径 + 参数列表。
+class _BatInvocation {
+  final String exePath;
+  final List<String> args;
+
+  _BatInvocation(this.exePath, this.args);
 }
