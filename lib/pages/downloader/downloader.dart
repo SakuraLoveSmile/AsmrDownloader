@@ -2,6 +2,8 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
 import 'package:flutter/material.dart';
@@ -34,6 +36,8 @@ class Downloader extends StatelessWidget {
             child: Row(
               children: [
                 DlCoverCheck(),
+                DownloadThreadsSelector(),
+                ParallelDownloadsSelector(),
                 AsmrProxy(),
               ],
             ),

@@ -40,6 +40,7 @@ class UIService {
       ..read(currentDlNoProvider.notifier).state = 0
       ..read(totalTaskCntProvider.notifier).state = 0
       ..read(currentFileNameProvider.notifier).state = ''
+      ..read(activeFileNamesProvider.notifier).state = const []
       ..read(downloadSpeedProvider.notifier).state = 0
       ..read(downloadEtaProvider.notifier).state = Duration.zero;
     if (Platform.isWindows) {
@@ -121,6 +122,26 @@ class UIService {
       ..read(dlCoverProvider.notifier).state = value
       ..read(configFileProvider).addOrUpdate({'dlCover': value});
     Log.info('dlCover: $value');
+  }
+
+  void onDownloadThreadsChanged(int? value) {
+    if (value == null || value == ref.read(downloadThreadsProvider)) return;
+
+    ref
+      ..read(downloadThreadsProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'downloadThreads': value});
+    Log.info('downloadThreads: $value');
+  }
+
+  void onParallelDownloadCountChanged(int? value) {
+    if (value == null || value == ref.read(parallelDownloadCountProvider)) {
+      return;
+    }
+
+    ref
+      ..read(parallelDownloadCountProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'parallelDownloadCount': value});
+    Log.info('parallelDownloadCount: $value');
   }
 
   void onAutoOrganizeChanged(bool? value) {
@@ -228,13 +249,12 @@ class UIService {
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
     final completed = await ref.read(chickenRiceServiceProvider).runOnDir(
-      sourceDir,
-      onProgress: (progress) {
-        ref.read(transcribeProgressProvider.notifier).state = progress;
-      },
-      isCancelled: () =>
-          ref.read(transcribeCancelRequestedProvider),
-    );
+          sourceDir,
+          onProgress: (progress) {
+            ref.read(transcribeProgressProvider.notifier).state = progress;
+          },
+          isCancelled: () => ref.read(transcribeCancelRequestedProvider),
+        );
 
     ref
       ..read(transcribeStatusProvider.notifier).state =
@@ -277,13 +297,12 @@ class UIService {
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
     final completed = await ref.read(chickenRiceServiceProvider).runOnDir(
-      sourceDir,
-      onProgress: (progress) {
-        ref.read(transcribeProgressProvider.notifier).state = progress;
-      },
-      isCancelled: () =>
-          ref.read(transcribeCancelRequestedProvider),
-    );
+          sourceDir,
+          onProgress: (progress) {
+            ref.read(transcribeProgressProvider.notifier).state = progress;
+          },
+          isCancelled: () => ref.read(transcribeCancelRequestedProvider),
+        );
     ref
       ..read(transcribeStatusProvider.notifier).state =
           completed ? TranscribeStatus.done : TranscribeStatus.failed
@@ -350,30 +369,30 @@ class UIService {
     final workInfo = ref.read(workInfoProvider).value;
     final cvNames = ref.read(cvLsProvider).join('&');
     final result = await ref.read(organizeServiceProvider).organizeWork(
-      sourceId: sourceId,
-      sourceDir: sourceDir,
-      targetRoot: navidromePath,
-      workInfo: workInfo,
-      fallbackTitle: ref.read(titleProvider),
-      fallbackCvNames: cvNames,
-      fallbackCircle: ref.read(circleNameProvider),
-      coverBytes: coverBytes,
-    );
+          sourceId: sourceId,
+          sourceDir: sourceDir,
+          targetRoot: navidromePath,
+          workInfo: workInfo,
+          fallbackTitle: ref.read(titleProvider),
+          fallbackCvNames: cvNames,
+          fallbackCircle: ref.read(circleNameProvider),
+          coverBytes: coverBytes,
+        );
 
     // 补录注册表（含整理时间），批量整理依赖它
     if (result != null) {
       await ref.read(worksIndexProvider).upsert(WorkEntry(
-        sourceId: sourceId,
-        dlPath: ref.read(downloadPathProvider),
-        dirName: p.basename(ref.read(voiceWorkPathProvider)),
-        title: ref.read(titleProvider),
-        cvNames: cvNames,
-        circleName: ref.read(circleNameProvider),
-        releaseDate: ref.read(releaseDateProvider),
-        tags: ref.read(tagLsProvider),
-        coverUrl: ref.read(coverUrlProvider),
-        organizedAt: DateTime.now().toIso8601String(),
-      ));
+            sourceId: sourceId,
+            dlPath: ref.read(downloadPathProvider),
+            dirName: p.basename(ref.read(voiceWorkPathProvider)),
+            title: ref.read(titleProvider),
+            cvNames: cvNames,
+            circleName: ref.read(circleNameProvider),
+            releaseDate: ref.read(releaseDateProvider),
+            tags: ref.read(tagLsProvider),
+            coverUrl: ref.read(coverUrlProvider),
+            organizedAt: DateTime.now().toIso8601String(),
+          ));
       ref.invalidate(worksLibraryProvider);
       ref.invalidate(unorganizedCountProvider);
     }
@@ -407,9 +426,9 @@ class UIService {
       cvNames: item.cvNames,
       circleName: item.circleName,
     );
-    final outcome =
-        await ref.read(organizeServiceProvider).organizeEntry(entry,
-            targetRoot: navidromePath);
+    final outcome = await ref
+        .read(organizeServiceProvider)
+        .organizeEntry(entry, targetRoot: navidromePath);
     final result = outcome.result;
     if (result != null) {
       // 补录整理时间（含解析后的元数据回写）
@@ -429,8 +448,7 @@ class UIService {
       showSnack('自动整理未执行：未设置整理路径或作品未下载');
       return;
     }
-    showSnack(
-        '自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
+    showSnack('自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
   }
 
   /// 弹出用户可见的提示（无 BuildContext 时走全局 scaffoldMessengerKey）。
@@ -460,9 +478,8 @@ class UIService {
 
   /// 在系统文件管理器中打开指定目录（不存在时回退到下载根目录）。
   void openFolderForDir(String path) {
-    final dir = Directory(path).existsSync()
-        ? path
-        : ref.read(downloadPathProvider);
+    final dir =
+        Directory(path).existsSync() ? path : ref.read(downloadPathProvider);
 
     if (Platform.isWindows) {
       Process.run('explorer "$dir"', []);

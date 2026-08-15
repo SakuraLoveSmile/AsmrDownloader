@@ -103,5 +103,9 @@ final processProvider = StateProvider<double>((ref) => 0);
 
 final currentFileNameProvider = StateProvider<String>((ref) => '');
 
+/// 并行下载时当前正在下载的文件名列表，按任务队列顺序展示。
+final activeFileNamesProvider = StateProvider<List<String>>((ref) => const []);
+
+/// 已完成下载的文件数（并行下载后语义由「开始数」改为「完成数」）。
 final currentDlNoProvider = StateProvider<int>((ref) => 0);
 final totalTaskCntProvider = StateProvider<int>((ref) => 0);

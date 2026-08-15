@@ -326,6 +326,29 @@ class AsmrApi {
     }
   }
 
+  /// 探测文件服务器是否支持 Range 分段下载（多线程下载的前置检查）。
+  /// 返回 null 表示探测本身失败（网络抖动等），由调用方按「不支持」处理。
+  Future<bool?> supportsRangeDownload(String url,
+      {CancelToken? cancelToken}) async {
+    try {
+      final response = await _apiDio.get(
+        url,
+        options: Options(
+          headers: {'range': 'bytes=0-0'},
+          responseType: ResponseType.bytes,
+        ),
+        cancelToken: cancelToken,
+      );
+      return response.statusCode == HttpStatus.partialContent;
+    } on DioException catch (e) {
+      Log.warning('range support probe failed\nurl: $url\nerror: $e');
+      return null;
+    } catch (e) {
+      Log.error('range support probe failed\nurl: $url\nunhandled error: $e');
+      return null;
+    }
+  }
+
   Future<Uint8List?> getCoverBytes(String url) async {
     try {
       final response = await get(
