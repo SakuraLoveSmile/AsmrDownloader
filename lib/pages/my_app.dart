@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:asmr_downloader/pages/app_shell.dart';
 import 'package:asmr_downloader/pages/components/initialization.dart';
-import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_title_bar.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_close_handler.dart';
@@ -49,13 +49,14 @@ class MyApp extends StatelessWidget {
                     child: Column(
                       children: [
                         WindowTitleBar(),
-                        const Downloader(),
+                        const Expanded(child: AppShell()),
                       ],
                     ),
                   )
                 : const Column(
                     children: [
-                      Downloader(),
+                      AppNavTabs(standalone: true),
+                      Expanded(child: AppShell()),
                     ],
                   ),
           ),

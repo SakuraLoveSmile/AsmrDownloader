@@ -6,11 +6,14 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
+import 'package:asmr_downloader/services/transcribe/vtt_converter.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -140,23 +143,25 @@ class UIService {
     Log.info('autoTranscribe: $value');
   }
 
-  /// 设置 infer.exe 路径（手动输入/选择）
-  void setChickenRiceExePath(String path) {
+  /// 设置 ChickenRice 脚本路径（.bat/.cmd/infer.exe；手动输入/选择）
+  void setChickenRiceScriptPath(String path) {
     ref
-      ..read(chickenRiceExePathProvider.notifier).state = path
+      ..read(chickenRiceScriptPathProvider.notifier).state = path
       ..read(configFileProvider).addOrUpdate({'chickenRiceExePath': path});
-    Log.info('chickenRiceExePath: $path');
+    Log.info('chickenRiceScriptPath: $path');
   }
 
-  /// 通过文件选择器选取 infer.exe
-  Future<void> pickChickenRiceExe() async {
-    final result =
-        await FilePicker.platform.pickFiles(type: FileType.any);
+  /// 通过文件选择器选取 ChickenRice 脚本（.bat/.cmd）或 infer.exe
+  Future<void> pickChickenRiceScript() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['bat', 'cmd', 'exe'],
+    );
     final files = result?.files;
     if (files == null || files.isEmpty) return;
     final path = files.first.path;
     if (path == null) return;
-    setChickenRiceExePath(path);
+    setChickenRiceScriptPath(path);
   }
 
   /// 设置计算设备（auto/cuda/cpu）
@@ -178,19 +183,23 @@ class UIService {
     ref.read(transcribeCancelRequestedProvider.notifier).state = true;
   }
 
-  /// 对当前作品执行 ChickenRice 字幕翻译。
-  /// 返回 true 表示已启动/完成；false 表示未执行（无作品/正在运行/无字幕缺口）。
-  /// [pickExeIfEmpty] 为 true 且未配置 exe 时弹出文件选择器引导选择。
-  Future<bool> transcribeCurrentWork({bool pickExeIfEmpty = false}) async {
+  /// 对指定作品执行 ChickenRice 字幕翻译。
+  /// 返回 true 表示已启动/完成；false 表示未执行（脚本未配置/正在运行/无字幕缺口）。
+  /// [pickScriptIfEmpty] 为 true 且未配置脚本时弹出文件选择器引导选择。
+  Future<bool> transcribeWork(
+    String sourceId,
+    String sourceDir, {
+    bool pickScriptIfEmpty = false,
+  }) async {
     if (!ref.read(chickenRiceConfigProvider).isConfigured) {
-      if (!pickExeIfEmpty) {
-        showSnack('未配置 ChickenRice 可执行文件');
+      if (!pickScriptIfEmpty) {
+        showSnack('未配置 ChickenRice 启动脚本');
         return false;
       }
-      await pickChickenRiceExe();
+      await pickChickenRiceScript();
       if (!ref.read(chickenRiceConfigProvider).isConfigured) return false;
     }
-    final probe = ref.read(chickenRiceServiceProvider).probeExe();
+    final probe = ref.read(chickenRiceServiceProvider).probeScript();
     if (probe != null) {
       showSnack('ChickenRice 不可用：$probe');
       return false;
@@ -199,21 +208,13 @@ class UIService {
       showSnack('字幕翻译正在进行中');
       return false;
     }
-
-    final sourceId = ref.read(sourceIdProvider);
-    if (sourceId == null) {
-      showSnack('请先搜索作品');
-      return false;
-    }
-    final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
     if (!Directory(sourceDir).existsSync()) {
-      showSnack('作品目录不存在，请先下载');
+      showSnack('作品目录不存在：$sourceDir');
       return false;
     }
 
     // 预判：统计缺字幕的音轨数，给用户反馈
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(sourceDir);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(sourceDir);
     if (missing.isEmpty) {
       showSnack('所有音轨已有字幕，无需 AI 翻译');
       return true;
@@ -221,6 +222,7 @@ class UIService {
     Log.info('transcribe: $sourceId missing ${missing.length} subtitle tracks');
 
     ref
+      ..read(activeTranscribeSourceIdProvider.notifier).state = sourceId
       ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
       ..read(transcribeProgressProvider.notifier).state = null
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
@@ -234,30 +236,42 @@ class UIService {
           ref.read(transcribeCancelRequestedProvider),
     );
 
-    ref.read(transcribeStatusProvider.notifier).state =
-        completed ? TranscribeStatus.done : TranscribeStatus.failed;
-    ref.read(transcribeCancelRequestedProvider.notifier).state = false;
+    ref
+      ..read(transcribeStatusProvider.notifier).state =
+          completed ? TranscribeStatus.done : TranscribeStatus.failed
+      ..read(transcribeCancelRequestedProvider.notifier).state = false
+      ..read(activeTranscribeSourceIdProvider.notifier).state = null;
     showSnack(completed ? '字幕翻译完成' : '字幕翻译失败或已取消');
+    ref.invalidate(worksLibraryProvider);
     return true;
   }
 
   /// 供「下载完成自动翻译」调用的非 UI 版本（无上下文提示直接执行）。
-  /// 与 transcribeCurrentWork 共用，仅在未配置时静默跳过。
+  /// 目录优先从注册表取（下载完成已 upsert），兜底按当前搜索上下文计算。
   Future<bool> autoTranscribe(String sourceId) async {
     final cfg = ref.read(chickenRiceConfigProvider);
     if (!cfg.isConfigured) return false;
-    final probe = ref.read(chickenRiceServiceProvider).probeExe();
+    final probe = ref.read(chickenRiceServiceProvider).probeScript();
     if (probe != null) {
       Log.warning('chickenRice autoTranscribe skipped: $probe');
       return false;
     }
 
-    // 自动触发时需要 sourceDir，但当前可能已没有搜索上下文。
-    // 从 voiceWorkPath 计算：
-    final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
-    if (!Directory(sourceDir).existsSync()) return false;
+    String? sourceDir;
+    final entry = await ref.read(worksIndexProvider).get(sourceId);
+    if (entry != null && Directory(entry.sourceDir).existsSync()) {
+      sourceDir = entry.sourceDir;
+    } else {
+      final fallback = p.join(ref.read(voiceWorkPathProvider), sourceId);
+      if (Directory(fallback).existsSync()) sourceDir = fallback;
+    }
+    if (sourceDir == null) {
+      Log.warning('chickenRice autoTranscribe skipped: dir missing: $sourceId');
+      return false;
+    }
 
     ref
+      ..read(activeTranscribeSourceIdProvider.notifier).state = sourceId
       ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
       ..read(transcribeProgressProvider.notifier).state = null
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
@@ -270,9 +284,12 @@ class UIService {
       isCancelled: () =>
           ref.read(transcribeCancelRequestedProvider),
     );
-    ref.read(transcribeStatusProvider.notifier).state =
-        completed ? TranscribeStatus.done : TranscribeStatus.failed;
-    ref.read(transcribeCancelRequestedProvider.notifier).state = false;
+    ref
+      ..read(transcribeStatusProvider.notifier).state =
+          completed ? TranscribeStatus.done : TranscribeStatus.failed
+      ..read(transcribeCancelRequestedProvider.notifier).state = false
+      ..read(activeTranscribeSourceIdProvider.notifier).state = null;
+    ref.invalidate(worksLibraryProvider);
     return completed;
   }
 
@@ -357,22 +374,51 @@ class UIService {
         coverUrl: ref.read(coverUrlProvider),
         organizedAt: DateTime.now().toIso8601String(),
       ));
+      ref.invalidate(worksLibraryProvider);
+      ref.invalidate(unorganizedCountProvider);
     }
 
     return result;
   }
 
-  /// 手动整理当前作品到 Navidrome 媒体库结构
-  Future<void> organizeToNavidrome(BuildContext context) async {
-    final result = await organizeCurrentWork(pickPathIfEmpty: true);
-
-    if (!context.mounted) return;
-    if (result == null) {
-      showSnack('整理失败：请先搜索并下载作品', context: context);
-      return;
+  /// 对作品库中的单个作品执行整理（离线优先：注册表元数据 → 目录名解析）。
+  /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器。
+  /// 返回整理结果；未执行成功返回 null。
+  Future<OrganizeResult?> organizeWorkFor(
+    WorksListItem item, {
+    bool pickPathIfEmpty = false,
+  }) async {
+    var navidromePath = ref.read(navidromePathProvider);
+    if (navidromePath.isEmpty) {
+      if (!pickPathIfEmpty) {
+        Log.warning('organize skipped: navidromePath not set');
+        return null;
+      }
+      await pickNavidromePath();
+      navidromePath = ref.read(navidromePathProvider);
+      if (navidromePath.isEmpty) return null;
     }
-    showSnack(context: context,
-        '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
+
+    final entry = WorkEntry(
+      sourceId: item.sourceId,
+      dlPath: item.dlPath,
+      dirName: item.dirName,
+      title: item.title,
+      cvNames: item.cvNames,
+      circleName: item.circleName,
+    );
+    final outcome =
+        await ref.read(organizeServiceProvider).organizeEntry(entry,
+            targetRoot: navidromePath);
+    final result = outcome.result;
+    if (result != null) {
+      // 补录整理时间（含解析后的元数据回写）
+      await ref.read(worksIndexProvider).upsert(outcome.resolvedEntry
+          .copyWith(organizedAt: DateTime.now().toIso8601String()));
+    }
+    ref.invalidate(worksLibraryProvider);
+    ref.invalidate(unorganizedCountProvider);
+    return result;
   }
 
   /// 下载完成后的自动整理（路径未设置时弹目录选择器）
@@ -406,20 +452,33 @@ class UIService {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void openFolder() async {
+  void openFolder() {
     final vkSourceIdPath =
         p.join(ref.read(voiceWorkPathProvider), ref.read(sourceIdProvider));
+    openFolderForDir(vkSourceIdPath);
+  }
 
-    final path = Directory(vkSourceIdPath).existsSync()
-        ? vkSourceIdPath
+  /// 在系统文件管理器中打开指定目录（不存在时回退到下载根目录）。
+  void openFolderForDir(String path) {
+    final dir = Directory(path).existsSync()
+        ? path
         : ref.read(downloadPathProvider);
 
     if (Platform.isWindows) {
-      Process.run('explorer "$path"', []);
+      Process.run('explorer "$dir"', []);
     } else {
-      Process.run('open', [path]);
+      Process.run('open', [dir]);
     }
-    Log.info('open folder: "$path"');
+    Log.info('open folder: "$dir"');
+  }
+
+  /// 把作品目录内的 .vtt 字幕批量转换为同名 .lrc（跳过已有 .lrc）。
+  /// 返回转换数量。
+  Future<int> convertVttToLrcForWork(String sourceDir) async {
+    final count = await VttConverter.convertAll(sourceDir);
+    showSnack(count == 0 ? '没有可转换的 vtt 字幕' : '已转换 $count 个字幕为 lrc');
+    ref.invalidate(worksLibraryProvider);
+    return count;
   }
 
   Future<void> onExit(BuildContext context) async {

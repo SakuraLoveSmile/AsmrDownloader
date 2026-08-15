@@ -1,6 +1,6 @@
 import 'package:asmr_downloader/models/track_item.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/batch_organize_dialog.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/works_index_dialog.dart';
+import 'package:asmr_downloader/pages/library/tools/batch_organize_dialog.dart';
+import 'package:asmr_downloader/pages/library/tools/works_index_dialog.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

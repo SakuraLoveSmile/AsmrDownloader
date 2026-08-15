@@ -58,6 +58,16 @@ class SubtitleGapDetector {
     return result;
   }
 
+  /// 返回指定目录下音轨文件总数（递归，扩展名不区分大小写）。
+  static int countAudioFiles(
+    String sourceDir, {
+    List<String> audioExtensions = kAudioExtensions,
+  }) {
+    if (!Directory(sourceDir).existsSync()) return 0;
+    final audioExt = {for (final e in audioExtensions) e.toLowerCase()};
+    return _collectAudioFiles(sourceDir, audioExt).length;
+  }
+
   /// 判断某个音频（按不带扩展名的 [stem]）是否已有同名字幕。
   ///
   /// 覆盖两种命名：

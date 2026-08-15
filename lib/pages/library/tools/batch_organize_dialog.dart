@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/common/config_providers.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/works_index_dialog.dart';
+import 'package:asmr_downloader/pages/library/tools/works_index_dialog.dart';
+import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
@@ -90,6 +91,10 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
       },
       isCancelled: () => _cancelled,
     );
+
+    // 整理结果变化：刷新作品库列表与 tab badge
+    ref.invalidate(worksLibraryProvider);
+    ref.invalidate(unorganizedCountProvider);
 
     if (mounted) {
       setState(() {

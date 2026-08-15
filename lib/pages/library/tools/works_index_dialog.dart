@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:flutter/material.dart';
@@ -41,12 +42,20 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('已清理 $cleaned 条缺失条目')));
+    _invalidateLibrary();
     await _reload();
   }
 
   Future<void> _remove(WorkEntry entry) async {
     await ref.read(worksIndexProvider).remove(entry.sourceId);
+    _invalidateLibrary();
     await _reload();
+  }
+
+  /// 注册表变化后刷新作品库列表与 tab badge
+  void _invalidateLibrary() {
+    ref.invalidate(worksLibraryProvider);
+    ref.invalidate(unorganizedCountProvider);
   }
 
   @override

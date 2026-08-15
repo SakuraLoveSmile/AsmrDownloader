@@ -5,6 +5,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
+import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
@@ -128,6 +129,9 @@ class DownloadManager {
       tags: ref.read(tagLsProvider),
       coverUrl: ref.read(coverUrlProvider),
     ));
+    // 新作品入库：刷新作品库列表与 badge
+    ref.invalidate(worksLibraryProvider);
+    ref.invalidate(unorganizedCountProvider);
     if (Platform.isWindows) {
       await WindowsTaskbar.setFlashTaskbarAppIcon(
         mode: TaskbarFlashMode.all | TaskbarFlashMode.timernofg,

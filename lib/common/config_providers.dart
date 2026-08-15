@@ -29,8 +29,9 @@ final onlyOrganizeUnorganizedProvider = StateProvider<bool>((ref) => true);
 
 // ---------- ChickenRice（AI 字幕翻译） ----------
 
-/// infer.exe（或 bat）的绝对路径
-final chickenRiceExePathProvider = StateProvider<String>((ref) => '');
+/// ChickenRice 启动脚本（.bat / .cmd）或 infer.exe 的绝对路径。
+/// 配置持久化 key 沿用 chickenRiceExePath（向后兼容老配置）。
+final chickenRiceScriptPathProvider = StateProvider<String>((ref) => '');
 
 /// 计算设备：auto / cuda / cpu
 final chickenRiceDeviceProvider = StateProvider<String>((ref) => 'auto');
@@ -41,14 +42,14 @@ final chickenRiceTaskProvider = StateProvider<String>((ref) => 'translate');
 /// 下载完成后自动调用 ChickenRice 生成 AI 字幕（带开关）
 final autoTranscribeProvider = StateProvider<bool>((ref) => false);
 
-/// 是否已启用 ChickenRice 能力（exe 已配置）
+/// 是否已启用 ChickenRice 能力（脚本已配置）
 final chickenRiceConfiguredProvider =
-    Provider<bool>((ref) => ref.watch(chickenRiceExePathProvider).isNotEmpty);
+    Provider<bool>((ref) => ref.watch(chickenRiceScriptPathProvider).isNotEmpty);
 
 /// 当前生效的 ChickenRice 配置（聚合）
 final chickenRiceConfigProvider = Provider<ChickenRiceConfig>((ref) {
   return ChickenRiceConfig(
-    exePath: ref.watch(chickenRiceExePathProvider),
+    scriptPath: ref.watch(chickenRiceScriptPathProvider),
     device: ref.watch(chickenRiceDeviceProvider),
     task: ref.watch(chickenRiceTaskProvider),
   );
