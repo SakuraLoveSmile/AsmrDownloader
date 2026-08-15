@@ -15,37 +15,37 @@ class Downloader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 第一行：搜索 + 下载路径 + API channel
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                SearchBox(),
-                DownloadPathPicker(),
-                AsmrApiChannel(),
-              ],
-            ),
+    // 注意：Downloader 是 IndexedStack 的子页，不能再包 Expanded，
+    // 由 Column 直接撑满 IndexedStack 的约束。
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 第一行：搜索 + 下载路径 + API channel
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              SearchBox(),
+              DownloadPathPicker(),
+              AsmrApiChannel(),
+            ],
           ),
-          // 第二行：下载相关配置
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                DlCoverCheck(),
-                DownloadThreadsSelector(),
-                ParallelDownloadsSelector(),
-                AsmrProxy(),
-              ],
-            ),
+        ),
+        // 第二行：下载相关配置
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              DlCoverCheck(),
+              DownloadThreadsSelector(),
+              ParallelDownloadsSelector(),
+              AsmrProxy(),
+            ],
           ),
-          SizedBox(height: 20),
-          SearchResult(),
-        ],
-      ),
+        ),
+        SizedBox(height: 20),
+        SearchResult(),
+      ],
     );
   }
 }
