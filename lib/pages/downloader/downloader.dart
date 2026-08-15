@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_api_channel.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/debug_mode_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
@@ -39,6 +40,7 @@ class Downloader extends StatelessWidget {
               DlCoverCheck(),
               DownloadThreadsSelector(),
               ParallelDownloadsSelector(),
+              DebugModeCheck(),
               AsmrProxy(),
             ],
           ),

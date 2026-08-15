@@ -133,6 +133,16 @@ class UIService {
     Log.info('downloadThreads: $value');
   }
 
+  void onDebugModeChanged(bool? value) {
+    if (value == null || value == ref.read(debugModeProvider)) return;
+
+    ref
+      ..read(debugModeProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'debugMode': value});
+    Log.setFileOutputEnabled(value);
+    Log.info('debugMode: $value');
+  }
+
   void onParallelDownloadCountChanged(int? value) {
     if (value == null || value == ref.read(parallelDownloadCountProvider)) {
       return;

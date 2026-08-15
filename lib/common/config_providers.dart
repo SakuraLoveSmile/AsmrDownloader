@@ -36,6 +36,10 @@ const maxTotalDownloadConnections = 16;
 /// 当前文件级并行数，默认 2；并行时会自动压低单文件线程数。
 final parallelDownloadCountProvider = StateProvider<int>((ref) => 2);
 
+/// Debug 模式开关：开启后把日志输出到文件，便于在 Windows 等平台排查问题。
+/// 默认 debug 构建关闭、release 构建开启（保持历史行为）。
+final debugModeProvider = StateProvider<bool>((ref) => false);
+
 final proxyProvider = StateProvider<String>((ref) => 'DIRECT');
 
 final apiChannelProvider = StateProvider<String>((ref) => 'asmr-200');
