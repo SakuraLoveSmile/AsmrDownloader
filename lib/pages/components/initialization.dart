@@ -4,7 +4,9 @@ import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
@@ -97,6 +99,11 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
   final savedParallel = (config['parallelDownloadCount'] as num?)?.toInt() ?? 2;
   ref.read(parallelDownloadCountProvider.notifier).state =
       parallelDownloadOptions.contains(savedParallel) ? savedParallel : 2;
+
+  // Debug 模式：默认 debug 构建关闭、release 构建开启（保持历史文件日志行为）
+  final savedDebugMode = config['debugMode'] as bool? ?? !kDebugMode;
+  ref.read(debugModeProvider.notifier).state = savedDebugMode;
+  Log.setFileOutputEnabled(savedDebugMode);
 
   ref.read(autoOrganizeProvider.notifier).state =
       config['autoOrganize'] as bool? ?? false;
