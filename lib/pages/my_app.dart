@@ -19,6 +19,7 @@ class MyApp extends StatelessWidget {
     return Initialization(
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
         scaffoldMessengerKey: scaffoldMessengerKey,
         localizationsDelegates: [
           GlobalMaterialLocalizations.delegate,

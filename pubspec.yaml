@@ -1,13 +1,15 @@
 name: asmr_downloader
 description: "asmr downloader"
 publish_to: "none"
-version: 0.6.1
+version: 0.7.0
 
 environment:
   sdk: ^3.5.3
 
 dependencies:
+  archive: ^3.6.1
   collection: ^1.18.0
+  crypto: ^3.0.3
   desktop_drop: ^0.7.1
   dio: ^5.7.0
   drift: ^2.18.0
