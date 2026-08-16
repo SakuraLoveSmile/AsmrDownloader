@@ -111,10 +111,13 @@ class WorksLibraryService {
       dlPath: src.dlPath,
       sourceDir: sourceDir,
       organizedAt: src.organizedAt,
-      trackCount: SubtitleGapDetector.countAudioFiles(sourceDir),
+      // 用异步扫描版本：列表构建在 UI isolate 上，同步遍历大量目录会卡顿
+      trackCount: await SubtitleGapDetector.countAudioFilesAsync(sourceDir),
       missingSubtitleCount:
-          SubtitleGapDetector.findMissingSubtitleTracks(sourceDir).length,
-      convertibleVttCount: VttConverter.findConvertibleVtts(sourceDir).length,
+          (await SubtitleGapDetector.findMissingSubtitleTracksAsync(sourceDir))
+              .length,
+      convertibleVttCount:
+          (await VttConverter.findConvertibleVttsAsync(sourceDir)).length,
     );
   }
 }

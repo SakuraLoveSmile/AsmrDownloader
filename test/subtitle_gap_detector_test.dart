@@ -111,4 +111,47 @@ void main() {
         SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing, isEmpty);
   });
+
+  group('异步版本（UI 链路用，不阻塞主线程）', () {
+    test('与同步版本结果一致（含子目录/多命名）', () async {
+      audio('e01.wav');
+      audio('e02.flac');
+      sub('e01.lrc');
+      sub('e02.flac.vtt');
+      final subDir = Directory(p.join(workDir.path, '特典'))
+        ..createSync();
+      File(p.join(subDir.path, 'ex01.wav'))
+          .writeAsBytesSync(List.filled(100, 1));
+
+      final syncNames = SubtitleGapDetector.findMissingSubtitleTracks(
+              workDir.path)
+          .map((f) => p.basename(f.path))
+          .toList()
+        ..sort();
+      final asyncNames =
+          (await SubtitleGapDetector.findMissingSubtitleTracksAsync(
+                  workDir.path))
+              .map((f) => p.basename(f.path))
+              .toList()
+            ..sort();
+      expect(asyncNames, syncNames);
+      expect(asyncNames, ['ex01.wav']);
+    });
+
+    test('countAudioFilesAsync 与同步版本一致', () async {
+      audio('e01.wav');
+      audio('e02.flac');
+      sub('e01.lrc');
+      expect(await SubtitleGapDetector.countAudioFilesAsync(workDir.path),
+          SubtitleGapDetector.countAudioFiles(workDir.path));
+    });
+
+    test('目录不存在时返回空', () async {
+      expect(
+        await SubtitleGapDetector.findMissingSubtitleTracksAsync(
+            p.join(testBase.path, 'not_exist')),
+        isEmpty,
+      );
+    });
+  });
 }

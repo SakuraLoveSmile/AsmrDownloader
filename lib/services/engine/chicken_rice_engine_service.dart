@@ -179,11 +179,15 @@ class ModelFileSpec {
   final String remoteName;
   final String destRelPath;
 
+  /// 预期文件大小（tree API 给出；0 = 未知，落盘时不做大小校验）
+  final int size;
+
   /// 已知的远端改名（如 VAD：model.onnx → whisper_vad.onnx）
   const ModelFileSpec({
     required this.repo,
     required this.remoteName,
     required this.destRelPath,
+    this.size = 0,
   });
 }
 
@@ -268,9 +272,9 @@ class ChickenRiceEngineService {
   static String hfFileUrl(String repo, String file, {bool mirror = false}) =>
       '${mirror ? hfMirrorHost : hfHost}/$repo/resolve/main/$file';
 
-  /// HF API 文件树（拿主模型文件清单与大小）
-  static String hfTreeApiUrl(String repo) =>
-      '$hfHost/api/models/$repo/tree/main';
+  /// HF API 文件树（拿主模型文件清单与大小；[mirror]=true 用 hf-mirror.com）
+  static String hfTreeApiUrl(String repo, {bool mirror = false}) =>
+      '${mirror ? hfMirrorHost : hfHost}/api/models/$repo/tree/main';
 
   /// 任务对应的默认主模型 HF 仓库
   static String mainModelRepo(String task) => task == 'transcribe'
@@ -665,7 +669,7 @@ class ChickenRiceEngineService {
 
   // ------------------------------------------------------------ models
 
-  /// 下载全部模型到 [modelsDir]；文件已存在则跳过（补下载语义）。
+  /// 下载全部模型到 [modelsDir]；文件已存在且大小相符则跳过（补下载语义）。
   Future<bool> _downloadModels(
     String modelsDir,
     String task,
@@ -673,20 +677,20 @@ class ChickenRiceEngineService {
     void Function(EngineInstallState) emit,
   ) async {
     final modelRepo = mainModelRepo(task);
-
+  
     // 主模型文件清单：HF API 获取（含大小），失败则用已知必备文件兜底
     final mainFiles = await _fetchMainModelFiles(modelRepo, token);
     final specs = <ModelFileSpec>[
       ...fixedModelSpecs,
-      for (final f in mainFiles)
-        ModelFileSpec(repo: modelRepo, remoteName: f, destRelPath: f),
+      ...mainFiles,
     ];
-
+  
     for (var i = 0; i < specs.length; i++) {
       if (_cancelRequested || token.isCancelled) return false;
       final spec = specs[i];
       final destPath = p.join(modelsDir, spec.destRelPath);
-      if (File(destPath).existsSync()) continue;
+      // 存在且大小相符才跳过：中断残留的不完整文件（含 0 字节）会被重下
+      if (await _isFileComplete(destPath, spec.size)) continue;
 
       emit(EngineInstallState(
           phase: EnginePhase.downloadingModels,
@@ -698,6 +702,7 @@ class ChickenRiceEngineService {
         repo: spec.repo,
         remoteName: spec.remoteName,
         destPath: destPath,
+        fileSize: spec.size,
         token: token,
         onProgress: (received, total) => emit(EngineInstallState(
             phase: EnginePhase.downloadingModels,
@@ -710,15 +715,40 @@ class ChickenRiceEngineService {
       );
       if (!ok) return false;
     }
+
+    // 落盘终检：主模型权重必须真实存在且非空，避免「安装成功但
+    // model.bin 缺失/不完整」的假完成（此前跳过逻辑不验大小，
+    // 中断残留的不完整文件会被误认为已下载）。
+    final weights = File(p.join(modelsDir, 'model.bin'));
+    if (!await weights.exists() || await weights.length() == 0) {
+      Log.error('engine model incomplete after download: '
+          'model.bin missing or empty in $modelsDir');
+      emit(const EngineInstallState(
+          phase: EnginePhase.failed,
+          message: '主模型下载不完整',
+          error: 'model.bin 缺失或不完整，重新安装可补下（已有文件自动跳过）'));
+      return false;
+    }
     return true;
   }
 
+  /// 文件已存在且完整：[expectedSize] 为 0 时仅要求存在（非严格校验）。
+  Future<bool> _isFileComplete(String path, int expectedSize) async {
+    final file = File(path);
+    if (!await file.exists()) return false;
+    if (expectedSize <= 0) return true;
+    return await file.length() == expectedSize;
+  }
+
   /// 下载单个 HF 文件：主源失败自动回退 hf-mirror.com（与上游一致）。
+  /// [fileSize] 已知时透传给下载器做落盘大小校验（大小不符的残留
+  /// 文件会被删除重下）。
   Future<bool> _downloadHfFile({
     required String repo,
     required String remoteName,
     required String destPath,
     required CancelToken token,
+    int fileSize = 0,
     void Function(int, int)? onProgress,
   }) async {
     final urls = [
@@ -730,6 +760,7 @@ class ChickenRiceEngineService {
       final ok = await downloader.download(
         url: url,
         savePath: destPath,
+        fileSize: fileSize,
         threadCount: 1,
         cancelToken: token,
         onProgress: onProgress,
@@ -740,34 +771,70 @@ class ChickenRiceEngineService {
     }
     return false;
   }
-
-  /// 主模型仓库的文件清单（按扩展名过滤）；API 不可用时返回必备文件兜底。
-  Future<List<String>> _fetchMainModelFiles(
+  
+  /// 主模型必备权重文件（清单兜底合并用）：即使 tree API 返回的清单
+  /// 异常缺项，model.bin 也一定会进入下载清单。
+  static const List<String> _essentialMainModelFiles = ['model.bin'];
+  
+  /// 主模型仓库的文件清单（按扩展名过滤，含文件大小）：主源 API 失败
+  /// 自动回退 hf-mirror.com（国内直连 huggingface.co 常不可达）；
+  /// 两者都失败时用已知必备文件兜底。必备文件（model.bin）无论清单
+  /// 结果如何都会合并进去，避免 API 异常时权重被静默漏下。
+  Future<List<ModelFileSpec>> _fetchMainModelFiles(
       String repo, CancelToken token) async {
-    try {
-      final resp = await _apiDio.get<List<dynamic>>(hfTreeApiUrl(repo),
-          cancelToken: token);
-      final files = <String>[];
-      for (final item in resp.data ?? const []) {
-        final m = item as Map<String, dynamic>;
-        if (m['type'] != 'file') continue;
-        final path = m['path'] as String? ?? '';
-        if (_mainModelExtensions.any((e) => path.toLowerCase().endsWith(e))) {
-          files.add(path);
+    final urls = [hfTreeApiUrl(repo), hfTreeApiUrl(repo, mirror: true)];
+    for (final url in urls) {
+      try {
+        final resp = await _apiDio.get<List<dynamic>>(url, cancelToken: token);
+        final files = <ModelFileSpec>[];
+        for (final item in resp.data ?? const []) {
+          final m = item as Map<String, dynamic>;
+          if (m['type'] != 'file') continue;
+          final path = m['path'] as String? ?? '';
+          if (!_mainModelExtensions.any((e) => path.toLowerCase().endsWith(e))) {
+            continue;
+          }
+          files.add(ModelFileSpec(
+            repo: repo,
+            remoteName: path,
+            destRelPath: path,
+            size: (m['size'] as num?)?.toInt() ?? 0,
+          ));
         }
+        if (files.isNotEmpty) {
+          return _withEssentialFiles(files, repo);
+        }
+      } catch (e) {
+        Log.warning('fetch hf model tree failed: $url\nerror: $e');
       }
-      if (files.isNotEmpty) return files;
-    } catch (e) {
-      Log.warning('fetch hf model tree failed: $repo\nerror: $e');
     }
-    // 兜底：常见文件名（与上游 download_models.py 一致）
-    return const [
-      'config.json',
-      'model.bin',
-      'preprocessor_config.json',
-      'tokenizer.json',
-      'vocabulary.json',
-    ];
+    // 兜底：常见文件名（与上游 download_models.py 一致；大小未知）
+    Log.warning('using fallback main model file list: $repo');
+    return _withEssentialFiles([
+      for (final f in const [
+        'config.json',
+        'model.bin',
+        'preprocessor_config.json',
+        'tokenizer.json',
+        'vocabulary.json',
+      ])
+        ModelFileSpec(repo: repo, remoteName: f, destRelPath: f),
+    ], repo);
+  }
+  
+  /// 确保必备权重文件在清单内（去重，以 API 返回的规格/大小为准）。
+  static List<ModelFileSpec> _withEssentialFiles(
+      List<ModelFileSpec> files, String repo) {
+    final result = [...files];
+    for (final essential in _essentialMainModelFiles) {
+      if (!result.any((s) => s.destRelPath == essential)) {
+        result.add(ModelFileSpec(
+            repo: repo, remoteName: essential, destRelPath: essential));
+        Log.warning('main model file list missing essential file, '
+            'force-added: $essential');
+      }
+    }
+    return result;
   }
 
   // ------------------------------------------------------------- probe

@@ -45,9 +45,12 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
     _refreshProbe();
   }
 
-  Future<void> _refreshProbe() async {
+  Future<void> _refreshProbe([String? dir]) async {
     setState(() => _probing = true);
-    final result = await ref.read(uiServiceProvider).probeEngine();
+    // 支持探测任意候选目录（新选的安装目录也能即时检测已有引擎）
+    final result = await ref
+        .read(chickenRiceEngineServiceProvider)
+        .probe(dir ?? ref.read(chickenRiceEngineInstallDirProvider));
     if (mounted) {
       setState(() {
         _probe = result;
@@ -60,6 +63,8 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
     final dir = await FilePicker.platform.getDirectoryPath();
     if (dir == null || !mounted) return;
     setState(() => _installDir = dir);
+    // 选完立即探测：目录里已有完整引擎时可直接一键启用，无需重装
+    await _refreshProbe(dir);
   }
 
   Future<void> _startInstall() async {
@@ -80,6 +85,14 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
     final state = ref.watch(engineInstallStateProvider);
     final busy = state.busy;
     final ui = ref.read(uiServiceProvider);
+    // 探测到完整引擎但当前配置未指向它 → 可一键启用（无需重装）
+    final scriptPath = ref.watch(chickenRiceScriptPathProvider);
+    final probe = _probe;
+    final canLinkExisting = !busy &&
+        probe != null &&
+        probe.installed &&
+        probe.modelsReady &&
+        probe.exePath != scriptPath;
 
     return AlertDialog(
       title: const Text('AI 翻译引擎（内置安装）'),
@@ -192,12 +205,24 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
             onPressed: ui.cancelEngineInstall,
             child: const Text('取消安装'),
           )
-        else
+        else ...[
+          if (canLinkExisting)
+            FilledButton.tonal(
+              onPressed: () async {
+                final exe =
+                    await ui.linkInstalledEngine(installDir: _installDir);
+                if (exe != null && context.mounted) {
+                  Navigator.of(context).pop();
+                }
+              },
+              child: const Text('使用已安装的引擎'),
+            ),
           FilledButton(
             onPressed: _installDir.isEmpty ? null : _startInstall,
             child: Text(
                 _probe?.installed == true ? '重新安装 / 补下模型' : '开始安装'),
           ),
+        ],
       ],
     );
   }

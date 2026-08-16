@@ -33,6 +33,31 @@ class VttConverter {
     return result;
   }
 
+  /// [findConvertibleVtts] 的异步版本（单次遍历，不阻塞调用方 isolate）。
+  static Future<List<File>> findConvertibleVttsAsync(String dir) async {
+    if (!await Directory(dir).exists()) return const [];
+
+    final lrcNames = <String>{};
+    final vtts = <File>[];
+    await for (final f in _allFilesAsync(dir)) {
+      final ext = p.extension(f.path).toLowerCase();
+      if (ext == '.lrc') {
+        lrcNames.add(p.basename(f.path).toLowerCase());
+      } else if (ext == '.vtt') {
+        vtts.add(f);
+      }
+    }
+
+    final result = <File>[];
+    for (final f in vtts) {
+      final base = p.basename(f.path).toLowerCase();
+      final lrcName = '${base.substring(0, base.length - 4)}.lrc';
+      if (lrcNames.contains(lrcName)) continue;
+      result.add(f);
+    }
+    return result;
+  }
+
   /// 转换目录内所有可转换的 vtt → lrc，返回成功转换数量。
   static Future<int> convertAll(String dir) async {
     var count = 0;
@@ -75,6 +100,27 @@ class VttConverter {
         } else if (entity is File) {
           yield entity;
         }
+      }
+    }
+  }
+
+  /// 异步递归遍历（与 [_allFiles] 同规则）。
+  static Stream<File> _allFilesAsync(String dir) async* {
+    final stack = <Directory>[Directory(dir)];
+    while (stack.isNotEmpty) {
+      final current = stack.removeLast();
+      try {
+        await for (final entity in current.list(followLinks: false)) {
+          if (entity is Directory) {
+            final name = p.basename(entity.path);
+            if (name.startsWith('.')) continue;
+            stack.add(entity);
+          } else if (entity is File) {
+            yield entity;
+          }
+        }
+      } catch (_) {
+        continue;
       }
     }
   }

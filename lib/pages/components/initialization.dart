@@ -121,4 +121,8 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['chickenRiceEngineVariant'] as String? ?? '';
   ref.read(autoTranscribeProvider.notifier).state =
       config['autoTranscribe'] as bool? ?? false;
+
+  // 内置引擎自动检测：脚本路径配置缺失/失效但安装目录内引擎完整时，
+  // 自动重新关联，避免用户已安装过引擎还要重新手动选择
+  await ref.read(uiServiceProvider).autoLinkInstalledEngine();
 });
