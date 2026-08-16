@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
+import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,7 +65,15 @@ class AppNavTabs extends ConsumerWidget {
       alignment: Alignment.centerLeft,
       child: Padding(
         padding: const EdgeInsets.only(left: 8),
-        child: tabs,
+        child: Row(
+          children: [
+            tabs,
+            const Spacer(),
+            // 版本号 + 检查更新入口
+            const UpdateEntry(),
+            const SizedBox(width: 8),
+          ],
+        ),
       ),
     );
   }

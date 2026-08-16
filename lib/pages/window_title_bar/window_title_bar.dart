@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/pages/app_shell.dart';
+import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/pages/window_title_bar/caption_buttons/window_caption_buttons.dart';
 // ignore: unused_import
 import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
@@ -30,6 +31,11 @@ class WindowTitleBar extends StatelessWidget {
                 child: AppNavTabs(),
               ),
               Expanded(child: Container()),
+              // 版本号 + 检查更新入口
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: UpdateEntry(),
+              ),
               CaptionButtons(),
             ],
           ),
