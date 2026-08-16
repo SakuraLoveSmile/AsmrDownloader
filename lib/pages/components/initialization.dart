@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/common/const.dart';
+import 'package:asmr_downloader/pages/update/update_dialog.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
+import 'package:asmr_downloader/services/update/update_providers.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:flutter/foundation.dart';
@@ -121,8 +125,28 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['chickenRiceEngineVariant'] as String? ?? '';
   ref.read(autoTranscribeProvider.notifier).state =
       config['autoTranscribe'] as bool? ?? false;
+  ref.read(autoCheckUpdateProvider.notifier).state =
+      config['autoCheckUpdate'] as bool? ?? true;
 
   // 内置引擎自动检测：脚本路径配置缺失/失效但安装目录内引擎完整时，
   // 自动重新关联，避免用户已安装过引擎还要重新手动选择
   await ref.read(uiServiceProvider).autoLinkInstalledEngine();
+
+  // 自动检查更新：延迟几秒后台执行，不阻塞启动流程；
+  // 发现新版本时弹更新对话框（同引擎引导弹窗模式）
+  if (ref.read(autoCheckUpdateProvider)) {
+    unawaited(Future.delayed(const Duration(seconds: 3), () async {
+      try {
+        final hasNew =
+            await ref.read(latestUpdateProvider.notifier).check(silent: true);
+        if (!hasNew) return;
+        final nav = navigatorKey.currentState;
+        if (nav != null && nav.mounted) {
+          await showUpdateDialog(nav.context);
+        }
+      } catch (e) {
+        Log.warning('auto check update failed\nerror: $e');
+      }
+    }));
+  }
 });

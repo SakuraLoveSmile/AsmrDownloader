@@ -17,6 +17,7 @@ import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:asmr_downloader/services/transcribe/vtt_converter.dart';
+import 'package:asmr_downloader/services/update/update_providers.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -154,6 +155,15 @@ class UIService {
       ..read(configFileProvider).addOrUpdate({'debugMode': value});
     Log.setFileOutputEnabled(value);
     Log.info('debugMode: $value');
+  }
+
+  void onAutoUpdateCheckChanged(bool? value) {
+    if (value == null || value == ref.read(autoCheckUpdateProvider)) return;
+
+    ref
+      ..read(autoCheckUpdateProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'autoCheckUpdate': value});
+    Log.info('autoCheckUpdate: $value');
   }
 
   void onParallelDownloadCountChanged(int? value) {

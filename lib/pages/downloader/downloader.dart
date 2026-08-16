@@ -1,9 +1,11 @@
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_api_channel.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/auto_update_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/debug_mode_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
@@ -38,6 +40,8 @@ class Downloader extends StatelessWidget {
             DownloadThreadsSelector(),
             ParallelDownloadsSelector(),
             DebugModeCheck(),
+            LogViewerButton(),
+            AutoUpdateCheck(),
             AsmrProxy(),
           ],
         ),
