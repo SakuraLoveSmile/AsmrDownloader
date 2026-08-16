@@ -49,7 +49,10 @@ class UIService {
       ..read(currentFileNameProvider.notifier).state = ''
       ..read(activeFileNamesProvider.notifier).state = const []
       ..read(downloadSpeedProvider.notifier).state = 0
-      ..read(downloadEtaProvider.notifier).state = Duration.zero;
+      ..read(downloadEtaProvider.notifier).state = Duration.zero
+      ..read(totalBytesProvider.notifier).state = 0
+      ..read(downloadedBytesProvider.notifier).state = 0
+      ..read(downloadSegmentsProvider.notifier).state = const [];
     if (Platform.isWindows) {
       await WindowsTaskbar.setProgress(0, 0);
     }
@@ -60,6 +63,9 @@ class UIService {
   }
 
   Future<String?> search(String input) async {
+    // 空输入静默返回（未输入/剪贴板为空），不弹「无效 sourceId」也不重置进度
+    if (input.trim().isEmpty) return null;
+
     await resetProgress();
 
     // 支持直接粘贴 asmr.one 作品页 URL：
@@ -272,6 +278,36 @@ class UIService {
         .probe(ref.read(chickenRiceEngineInstallDirProvider));
   }
 
+  /// 把 ChickenRice 配置指向安装目录内已装好的引擎（自动检测用）。
+  /// 仅当引擎完整（exe + VAD + 主模型都在）时才启用；设备为默认
+  /// auto 时按安装语义预置 cuda。成功返回 exe 路径，否则 null。
+  Future<String?> linkInstalledEngine({String? installDir}) async {
+    final String dir =
+        installDir ?? ref.read(chickenRiceEngineInstallDirProvider);
+    final probe = await ref.read(chickenRiceEngineServiceProvider).probe(dir);
+    if (!probe.installed || !probe.modelsReady || probe.exePath == null) {
+      return null;
+    }
+    if (dir != ref.read(chickenRiceEngineInstallDirProvider)) {
+      setChickenRiceEngineInstallDir(dir);
+    }
+    setChickenRiceScriptPath(probe.exePath!);
+    if (ref.read(chickenRiceDeviceProvider) == 'auto') {
+      setChickenRiceDevice('cuda');
+    }
+    Log.info('linked installed engine: ${probe.exePath}');
+    return probe.exePath;
+  }
+
+  /// 启动自动检测：配置的脚本路径缺失/失效，但内置安装目录内的引擎
+  /// 完整时自动关联启用，避免用户已安装过引擎还要重新手动选择。
+  Future<void> autoLinkInstalledEngine() async {
+    final configured = ref.read(chickenRiceScriptPathProvider);
+    if (configured.isNotEmpty && File(configured).existsSync()) return;
+    if (ref.read(chickenRiceEngineInstallDirProvider).isEmpty) return;
+    await linkInstalledEngine();
+  }
+
   /// 运行日志环形缓冲上限（供日志弹窗实时展示，超出丢弃最旧）
   static const int _kTranscribeLogCap = 300;
 
@@ -335,17 +371,29 @@ class UIService {
       return false;
     }
 
+    // 先切运行态（指示器立即显示「启动中…」、取消可用），再异步扫描
+    // 字幕缺口 —— 扫描放最后才做，避免多作品目录同步遍历卡死主线程，
+    // 表现为点击后无响应几秒才开始翻译。
+    ref
+      ..read(activeTranscribeSourceIdProvider.notifier).state =
+          works.first.sourceId
+      ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
+      ..read(transcribeProgressProvider.notifier).state = null
+      ..read(transcribeLogLinesProvider.notifier).state = const []
+      ..read(transcribeCancelRequestedProvider.notifier).state = false;
+    _appendTranscribeLog('扫描字幕缺口…');
+
     // 预判：聚合每个作品的缺口目录；无缺口/目录缺失的作品跳过
     final targets = <String>[];
     var noGap = 0;
     var notExist = 0;
     for (final w in works) {
-      if (!Directory(w.sourceDir).existsSync()) {
+      if (!await Directory(w.sourceDir).exists()) {
         notExist++;
         continue;
       }
       final missing =
-          SubtitleGapDetector.findMissingSubtitleTracks(w.sourceDir);
+          await SubtitleGapDetector.findMissingSubtitleTracksAsync(w.sourceDir);
       if (missing.isEmpty) {
         noGap++;
         continue;
@@ -357,6 +405,11 @@ class UIService {
       targets.addAll(missing.map((f) => f.path));
     }
     if (targets.isEmpty) {
+      // 无缺口：退回空闲并清掉扫描日志，避免留下孤立的「扫描字幕缺口…」
+      ref
+        ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.idle
+        ..read(activeTranscribeSourceIdProvider.notifier).state = null
+        ..read(transcribeLogLinesProvider.notifier).state = const [];
       showSnack(works.length == 1
           ? '所有音轨已有字幕，无需 AI 翻译'
           : '所选作品音轨均已有字幕，无需 AI 翻译');
@@ -364,14 +417,6 @@ class UIService {
     }
     Log.info('transcribeWorks: ${works.length} works -> ${targets.length} '
         'missing tracks (noGap=$noGap, notExist=$notExist)');
-
-    ref
-      ..read(activeTranscribeSourceIdProvider.notifier).state =
-          works.first.sourceId
-      ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.running
-      ..read(transcribeProgressProvider.notifier).state = null
-      ..read(transcribeLogLinesProvider.notifier).state = const []
-      ..read(transcribeCancelRequestedProvider.notifier).state = false;
 
     final result = await ref.read(chickenRiceServiceProvider).run(
           dirs: targets,

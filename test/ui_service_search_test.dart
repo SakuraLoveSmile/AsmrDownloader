@@ -57,4 +57,15 @@ void main() {
     expect(result, isNull);
     expect(container.read(searchTextProvider), isNull);
   });
+
+  test('空输入静默返回 null，不弹提示也不改变搜索状态', () async {
+    final container = makeContainer();
+    addTearDown(container.dispose);
+
+    for (final input in ['', '   ', '\n']) {
+      final result = await container.read(uiServiceProvider).search(input);
+      expect(result, isNull);
+    }
+    expect(container.read(searchTextProvider), isNull);
+  });
 }

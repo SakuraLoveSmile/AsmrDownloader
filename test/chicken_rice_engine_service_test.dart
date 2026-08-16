@@ -266,6 +266,106 @@ void main() {
       // 引用原服务避免未使用告警
       expect(svc, isNotNull);
     });
+
+    test('API 清单缺 model.bin → 兜底合并后仍会下载', () async {
+      final zipBytes = buildFakeZip();
+      final hash = sha256.convert(zipBytes).toString();
+      final manifestJson = json.encode({
+        'name': 'rt.zip',
+        'hash': hash,
+        'size': zipBytes.length,
+        'chunk_size': zipBytes.length,
+        'chunks': ['rt.zip.0000'],
+      });
+      final releaseJson = json.encode({
+        'tag_name': 'vTEST',
+        'assets': [
+          {
+            'name':
+                '${ChickenRiceEngineService.assetBaseName('cu128')}.manifest',
+            'browser_download_url':
+                'https://fake.test/${ChickenRiceEngineService.assetBaseName('cu128')}.manifest',
+          }
+        ],
+      });
+      // tree API 只返回 config.json（模拟清单异常缺项）
+      final treeJson = json.encode([
+        {'type': 'file', 'path': 'config.json', 'size': 100},
+      ]);
+      final downloader = _FakeDownloader(zipBytes);
+      final svc = ChickenRiceEngineService(
+        downloader: downloader,
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({
+            'api.github.com': releaseJson,
+            '.manifest': manifestJson,
+            'tree/main': treeJson,
+          }),
+        freeSpaceBytes: (dir) async => 1 << 62,
+      );
+      final tmp = Directory.systemTemp.createTempSync('eng_inst_nobinlist');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: (_) {},
+      );
+      expect(exe, isNotNull);
+      // model.bin 被兜底合并进清单并实际下载
+      expect(downloader.downloadedUrls.any((u) => u.endsWith('/model.bin')),
+          isTrue);
+      expect(
+          File(p.join(tmp.path, 'rt', 'models', 'model.bin')).existsSync(),
+          isTrue);
+      tmp.deleteSync(recursive: true);
+    });
+
+    test('model.bin 下载失败/缺失 → 安装不得假成功', () async {
+      final zipBytes = buildFakeZip();
+      final hash = sha256.convert(zipBytes).toString();
+      final manifestJson = json.encode({
+        'name': 'rt.zip',
+        'hash': hash,
+        'size': zipBytes.length,
+        'chunk_size': zipBytes.length,
+        'chunks': ['rt.zip.0000'],
+      });
+      final releaseJson = json.encode({
+        'tag_name': 'vTEST',
+        'assets': [
+          {
+            'name':
+                '${ChickenRiceEngineService.assetBaseName('cu128')}.manifest',
+            'browser_download_url':
+                'https://fake.test/${ChickenRiceEngineService.assetBaseName('cu128')}.manifest',
+          }
+        ],
+      });
+      // 假下载器：model.bin 直接失败（主源+镜像都失败）
+      final downloader = _FakeDownloader(zipBytes, failPaths: ['model.bin']);
+      final svc = ChickenRiceEngineService(
+        downloader: downloader,
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({
+            'api.github.com': releaseJson,
+            '.manifest': manifestJson,
+            'huggingface.co/api': '[]',
+          }),
+        freeSpaceBytes: (dir) async => 1 << 62,
+      );
+      final states = <EngineInstallState>[];
+      final tmp = Directory.systemTemp.createTempSync('eng_inst_binfail');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: states.add,
+      );
+      expect(exe, isNull);
+      expect(states.any((s) => s.phase == EnginePhase.failed), isTrue);
+      expect(states.any((s) => s.phase == EnginePhase.done), isFalse);
+      tmp.deleteSync(recursive: true);
+    });
   });
 }
 
@@ -296,9 +396,12 @@ class _FakeAdapter implements HttpClientAdapter {
 
 /// 假下载器：分卷直接写入预置 zip 字节，模型文件写入占位内容。
 class _FakeDownloader extends ChunkDownloader {
-  _FakeDownloader(this.zipBytes);
+  _FakeDownloader(this.zipBytes, {this.failPaths = const []});
 
   final List<int> zipBytes;
+
+  /// savePath 命中其中任一子串时模拟下载失败
+  final List<String> failPaths;
   final downloadedUrls = <String>[];
 
   @override
@@ -311,6 +414,7 @@ class _FakeDownloader extends ChunkDownloader {
     void Function(int received, int total)? onProgress,
   }) async {
     downloadedUrls.add(url);
+    if (failPaths.any((s) => savePath.contains(s))) return false;
     final f = File(savePath)..createSync(recursive: true);
     if (savePath.contains('.asmr_engine_dl')) {
       f.writeAsBytesSync(zipBytes);

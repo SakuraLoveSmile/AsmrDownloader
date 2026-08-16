@@ -138,6 +138,9 @@ class DownloadManager {
     _totalBytes = tasks.fold(0, (sum, t) => sum + math.max(0, t.size));
 
     ref.read(totalTaskCntProvider.notifier).state = tasks.length;
+    ref.read(totalBytesProvider.notifier).state = _totalBytes;
+    // 立即发布一轮全排队状态的分段，让进度条先展示文件构成
+    _refreshAggregateProgress(force: true);
 
     // 启动文件级并行 worker
     final parallelCount = _effectiveParallelCount();
@@ -362,6 +365,7 @@ class DownloadManager {
     _activeCancelTokens.add(task.cancelToken);
     _activeTasks.add(task);
     _updateActiveFileNames();
+    _refreshAggregateProgress(force: true);
 
     final ok = task.kind == _DownloadTaskKind.memory
         ? await _writeMemoryTask(task)
@@ -475,11 +479,30 @@ class DownloadManager {
 
     ref.read(processProvider.notifier).state = progress;
     ref.read(downloadSpeedProvider.notifier).state = totalSpeed;
+    ref.read(downloadedBytesProvider.notifier).state = doneBytes;
+    _publishSegments();
 
     final remaining = math.max(0, _totalBytes - doneBytes);
     ref.read(downloadEtaProvider.notifier).state = totalSpeed > 0
         ? Duration(seconds: (remaining / totalSpeed).round())
         : Duration.zero;
+  }
+
+  /// 发布本轮全部任务的分段进度（含排队/下载中/完成/失败），供分段进度条展示。
+  void _publishSegments() {
+    ref.read(downloadSegmentsProvider.notifier).state = [
+      for (final task in _tasks)
+        DownloadSegment(
+          title: task.title,
+          size: math.max(task.size, 0),
+          fraction: task.status == DownloadStatus.completed
+              ? 1.0
+              : task.size > 0
+                  ? (task.receivedBytes / task.size).clamp(0.0, 1.0)
+                  : task.progress,
+          status: task.status,
+        ),
+    ];
   }
 
   /// 总字节未知（异常数据）时按文件数兜底。

@@ -87,6 +87,54 @@ class SubtitleGapDetector {
     return count;
   }
 
+  /// [findMissingSubtitleTracks] 的异步版本：用异步目录遍历代替
+  /// listSync，不阻塞调用方 isolate（UI 链路应使用本方法，
+  /// 否则多作品/多音轨时主线程会明显卡顿）。
+  static Future<List<File>> findMissingSubtitleTracksAsync(
+    String sourceDir, {
+    List<String> audioExtensions = kAudioExtensions,
+    List<String> subtitleExtensions = kSubtitleExtensions,
+  }) async {
+    final result = <File>[];
+    if (!await Directory(sourceDir).exists()) return result;
+
+    final audioExt = {for (final e in audioExtensions) e.toLowerCase()};
+    final subExt = {for (final e in subtitleExtensions) e.toLowerCase()};
+
+    final audios = <File>[];
+    final subtitleKeys = <String>{};
+    await for (final file in _allFilesAsync(sourceDir)) {
+      final name = p.basename(file.path).toLowerCase();
+      final ext = p.extension(name);
+      if (audioExt.contains(ext)) {
+        audios.add(file);
+      } else if (subExt.contains(ext)) {
+        subtitleKeys.add(name.substring(0, name.length - ext.length));
+      }
+    }
+
+    for (final audio in audios) {
+      if (!_hasSubtitleKey(subtitleKeys, audio)) {
+        result.add(audio);
+      }
+    }
+    return result;
+  }
+
+  /// [countAudioFiles] 的异步版本（不阻塞调用方 isolate）。
+  static Future<int> countAudioFilesAsync(
+    String sourceDir, {
+    List<String> audioExtensions = kAudioExtensions,
+  }) async {
+    if (!await Directory(sourceDir).exists()) return 0;
+    final audioExt = {for (final e in audioExtensions) e.toLowerCase()};
+    var count = 0;
+    await for (final file in _allFilesAsync(sourceDir)) {
+      if (audioExt.contains(p.extension(file.path).toLowerCase())) count++;
+    }
+    return count;
+  }
+
   /// 用单次遍历收集的 [subtitleKeys] 判断 [audio] 是否已有同名字幕。
   ///
   /// 覆盖两种命名：
@@ -126,6 +174,27 @@ class SubtitleGapDetector {
         } else if (entity is File) {
           yield entity;
         }
+      }
+    }
+  }
+
+  /// 异步递归遍历（与 [_allFiles] 同规则：跳过隐藏目录、不跟随软链）。
+  static Stream<File> _allFilesAsync(String dir) async* {
+    final stack = <Directory>[Directory(dir)];
+    while (stack.isNotEmpty) {
+      final current = stack.removeLast();
+      try {
+        await for (final entity in current.list(followLinks: false)) {
+          if (entity is Directory) {
+            final name = p.basename(entity.path);
+            if (name.startsWith('.')) continue;
+            stack.add(entity);
+          } else if (entity is File) {
+            yield entity;
+          }
+        }
+      } catch (_) {
+        continue;
       }
     }
   }

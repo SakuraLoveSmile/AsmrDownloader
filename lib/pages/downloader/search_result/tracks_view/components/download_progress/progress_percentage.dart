@@ -8,6 +8,12 @@ class ProgressPercentage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final process = ref.watch(processProvider);
-    return Center(child: Text('${(process * 100).toStringAsFixed(2)}%'));
+    // 一位小数 + 等宽数字，避免高频刷新时文字抖动
+    return Center(
+      child: Text(
+        '${(process * 100).toStringAsFixed(1)}%',
+        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+      ),
+    );
   }
 }

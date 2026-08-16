@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_button.dart';
+import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_bytes.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_count.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_speed.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/progress_bar.dart';
@@ -15,12 +16,15 @@ class DownloadProgress extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.only(left: tracksLPadding, bottom: 10.0),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DownloadButton(),
           SizedBox(width: spacing),
           ProgressBar(),
           SizedBox(width: spacing),
           ProgressPercentage(),
+          SizedBox(width: spacing),
+          DownloadBytes(),
           SizedBox(width: spacing),
           DownloadSpeed(),
           Spacer(),

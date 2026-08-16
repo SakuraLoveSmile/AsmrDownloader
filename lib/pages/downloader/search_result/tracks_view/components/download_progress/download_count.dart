@@ -7,13 +7,17 @@ class DownloadCount extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appWidth = MediaQuery.of(context).size.width;
     // currentDlNoProvider 在并行下载下表示「已完成文件数」
     final currentDl = ref.watch(currentDlNoProvider);
     final total = ref.watch(totalTaskCntProvider);
-    return SizedBox(
-      width: appWidth * 0.07,
-      child: Center(child: Text('$currentDl / $total')),
+    final activeCnt = ref.watch(activeFileNamesProvider).length;
+    // 下载中补充展示并行文件数，与分段进度条呼应
+    final text = activeCnt > 0
+        ? '$currentDl / $total · 下载中 $activeCnt'
+        : '$currentDl / $total';
+    return Text(
+      text,
+      style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
     );
   }
 }

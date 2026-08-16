@@ -140,6 +140,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
     final downloading =
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
     final invalid = _inputText.isNotEmpty && !_isValidInput(_inputText);
+    // 空输入时禁用提交，避免回车/点击触发「无效 sourceId」提示
+    final canSubmit = !downloading && _inputText.trim().isNotEmpty;
 
     // 非法输入时覆盖边框为错误色，其余情况沿用主题输入框样式
     final errorBorder = OutlineInputBorder(
@@ -181,15 +183,14 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                         invalid ? errorBorder.copyWith(borderSide: BorderSide(color: scheme.error, width: 1.4)) : null,
                   ),
                   onChanged: (value) => setState(() => _inputText = value),
-                  onSubmitted: (_) =>
-                      downloading ? null : _searchInput(_inputText),
+                  onSubmitted:
+                      (_) => canSubmit ? _searchInput(_inputText) : null,
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.only(left: 5.0),
                 child: IconButton(
-                  onPressed:
-                      downloading ? null : () => _searchInput(_inputText),
+                  onPressed: canSubmit ? () => _searchInput(_inputText) : null,
                   icon: Icon(Icons.search,
                       color: invalid ? scheme.error : null),
                   tooltip: '搜索',

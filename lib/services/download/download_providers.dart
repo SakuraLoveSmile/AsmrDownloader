@@ -109,3 +109,33 @@ final activeFileNamesProvider = StateProvider<List<String>>((ref) => const []);
 /// 已完成下载的文件数（并行下载后语义由「开始数」改为「完成数」）。
 final currentDlNoProvider = StateProvider<int>((ref) => 0);
 final totalTaskCntProvider = StateProvider<int>((ref) => 0);
+
+/// 本轮下载的总字节数（0 表示服务端未给出文件大小）。
+final totalBytesProvider = StateProvider<int>((ref) => 0);
+
+/// 已下载字节数（已完成文件 + 在途文件的增量），由 DownloadManager 实时更新。
+final downloadedBytesProvider = StateProvider<int>((ref) => 0);
+
+/// 单个文件的进度分段，用于分段进度条展示。
+class DownloadSegment {
+  const DownloadSegment({
+    required this.title,
+    required this.size,
+    required this.fraction,
+    required this.status,
+  });
+
+  final String title;
+
+  /// 文件总字节数（未知时为 0）
+  final int size;
+
+  /// 该文件自身进度 0.0 ~ 1.0
+  final double fraction;
+
+  final DownloadStatus status;
+}
+
+/// 本轮全部任务的分段进度，按任务队列顺序，由 DownloadManager 实时更新。
+final downloadSegmentsProvider =
+    StateProvider<List<DownloadSegment>>((ref) => const []);
