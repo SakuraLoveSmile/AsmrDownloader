@@ -169,7 +169,12 @@ class SearchBoxState extends ConsumerState<SearchBox> {
         child: Row(
           children: [
             ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 160, maxWidth: 280),
+              constraints: BoxConstraints(
+                minWidth: 160,
+                maxWidth: (MediaQuery.sizeOf(context).width * 0.29)
+                    .clamp(220.0, 300.0)
+                    .toDouble(),
+              ),
               child: TextField(
                 controller: _controller,
                 decoration: InputDecoration(

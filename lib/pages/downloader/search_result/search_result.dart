@@ -10,15 +10,16 @@ class SearchResult extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            flex: 2,
-            child: WorkInfo(horizontalPadding: _horizontalPadding),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SizedBox(
+              width: double.infinity,
+              child: WorkInfo(horizontalPadding: _horizontalPadding),
+            ),
           ),
           Expanded(
-            flex: 3,
             child: TracksView(horizontalPadding: _horizontalPadding),
           ),
         ],

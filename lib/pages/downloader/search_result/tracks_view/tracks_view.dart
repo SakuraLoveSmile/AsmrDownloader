@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class TracksView extends ConsumerWidget {
-  const TracksView({super.key, this.horizontalPadding = 20.0});
+  const TracksView({super.key, this.horizontalPadding = 12.0});
   final double horizontalPadding;
 
   static const _tracksLPadding = 20.0;
@@ -18,7 +18,8 @@ class TracksView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tracksLoadingState = ref.watch(tracksLoadingStateProvider);
     return Padding(
-      padding: EdgeInsets.only(right: horizontalPadding, bottom: 10.0),
+      padding: EdgeInsets.only(
+          left: horizontalPadding, right: horizontalPadding, bottom: 10.0),
       child: tracksLoadingState.when(
         data: (_) {
           // 尚未搜索：显示引导而非空白

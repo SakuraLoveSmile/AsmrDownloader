@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class WorkInfo extends ConsumerWidget {
-  const WorkInfo({super.key, this.horizontalPadding = 20.0});
+  const WorkInfo({super.key, this.horizontalPadding = 12.0});
   final double horizontalPadding;
 
   static const _verticalPadding = 10.0;
