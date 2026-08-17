@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:asmr_downloader/services/cache/cache_database.dart';
 import 'package:asmr_downloader/services/cache/cache_service.dart';
+import 'package:drift/drift.dart' as drift;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -35,6 +36,41 @@ void main() {
     await service.saveWorkInfo('RJ01619789', {'title': '标题B'});
     expect((await service.getWorkInfo('RJ01619789'))?['title'], '标题B');
     expect(await service.getCacheCount(), 1);
+  });
+
+  test('列表查询返回全部 workInfo 且按缓存时间倒序', () async {
+    await db.into(db.workInfoEntries).insert(
+          WorkInfoEntriesCompanion.insert(
+            sourceId: 'RJ1',
+            workInfoJson: '{}',
+            cachedAt: drift.Value(DateTime(2026, 1, 1)),
+          ),
+        );
+    await db.into(db.workInfoEntries).insert(
+          WorkInfoEntriesCompanion.insert(
+            sourceId: 'RJ2',
+            workInfoJson: '{}',
+            cachedAt: drift.Value(DateTime(2026, 2, 1)),
+          ),
+        );
+
+    final entries = await service.listWorkInfoEntries();
+    expect(entries.map((entry) => entry.sourceId), ['RJ2', 'RJ1']);
+    expect(entries.map((entry) => entry.cachedAt), [
+      DateTime(2026, 2, 1),
+      DateTime(2026, 1, 1),
+    ]);
+  });
+
+  test('列表查询只返回存在 tracks 或封面的 sourceId', () async {
+    await service.saveWorkInfo('RJ1', {});
+    await service.saveTracks('RJ1', []);
+    await service.saveTracks('RJ2', []);
+    await service.saveCover('RJ2', Uint8List.fromList([1]));
+    await service.saveCover('RJ3', Uint8List.fromList([2]));
+
+    expect(await service.listTracksSourceIds(), {'RJ1', 'RJ2'});
+    expect(await service.listCoverSourceIds(), {'RJ2', 'RJ3'});
   });
 
   test('tracks 增查（List JSON 往返）', () async {

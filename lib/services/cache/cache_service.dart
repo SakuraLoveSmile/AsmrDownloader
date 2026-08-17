@@ -34,6 +34,50 @@ class CacheService {
     }
   }
 
+  /// 列出全部 workInfo，按最近缓存时间倒序。
+  Future<List<WorkInfoEntry>> listWorkInfoEntries() async {
+    try {
+      final query = _db.select(_db.workInfoEntries)
+        ..orderBy([(t) => OrderingTerm.desc(t.cachedAt)]);
+      return await query.get();
+    } catch (e) {
+      Log.warning('list workInfo cache failed\n' 'error: $e');
+      return [];
+    }
+  }
+
+  /// 只读取 tracks 主键，避免批量加载原始 JSON。
+  Future<Set<String>> listTracksSourceIds() async {
+    try {
+      final query = _db.selectOnly(_db.tracksEntries)
+        ..addColumns([_db.tracksEntries.sourceId]);
+      final rows = await query.get();
+      return rows
+          .map((row) => row.read(_db.tracksEntries.sourceId))
+          .whereType<String>()
+          .toSet();
+    } catch (e) {
+      Log.warning('list tracks cache ids failed\n' 'error: $e');
+      return {};
+    }
+  }
+
+  /// 只读取封面主键，避免批量加载 BLOB。
+  Future<Set<String>> listCoverSourceIds() async {
+    try {
+      final query = _db.selectOnly(_db.coverEntries)
+        ..addColumns([_db.coverEntries.sourceId]);
+      final rows = await query.get();
+      return rows
+          .map((row) => row.read(_db.coverEntries.sourceId))
+          .whereType<String>()
+          .toSet();
+    } catch (e) {
+      Log.warning('list cover cache ids failed\n' 'error: $e');
+      return {};
+    }
+  }
+
   Future<void> saveWorkInfo(String sourceId, Map<String, dynamic> data) async {
     try {
       await _db.into(_db.workInfoEntries).insertOnConflictUpdate(

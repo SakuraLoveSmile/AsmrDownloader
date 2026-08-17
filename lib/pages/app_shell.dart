@@ -1,16 +1,17 @@
 import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
+import 'package:asmr_downloader/pages/media_library/media_library.dart';
 import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 当前显示的页面：0 = 下载，1 = 作品库
+/// 当前显示的页面：0 = 下载，1 = 作品库，2 = 媒体库
 final currentPageProvider = StateProvider<int>((ref) => 0);
 
-/// 应用外壳：下载 / 作品库双页面。
+/// 应用外壳：下载 / 作品库 / 媒体库三页面。
 ///
-/// 用 IndexedStack 保活两个页面——切页不销毁状态，
+/// 用 IndexedStack 保活三个页面——切页不销毁状态，
 /// 下载进度、整理/字幕运行中的任务切到另一页也不被打断。
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
@@ -23,6 +24,7 @@ class AppShell extends ConsumerWidget {
       children: const [
         Downloader(),
         LibraryPage(),
+        MediaLibraryPage(),
       ],
     );
   }
@@ -38,6 +40,7 @@ class AppNavTabs extends ConsumerWidget {
   static const _tabs = <(String, IconData)>[
     ('下载', Icons.download_outlined),
     ('作品库', Icons.folder_outlined),
+    ('媒体库', Icons.photo_library_outlined),
   ];
 
   @override
