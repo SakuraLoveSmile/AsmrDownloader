@@ -12,7 +12,12 @@ class DownloadPathPicker extends ConsumerWidget {
     return Row(
       children: [
         ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 160, maxWidth: 250),
+          constraints: BoxConstraints(
+            minWidth: 160,
+            maxWidth: (MediaQuery.sizeOf(context).width * 0.25)
+                .clamp(200.0, 260.0)
+                .toDouble(),
+          ),
           child: TextField(
             enabled: false,
             decoration: InputDecoration(
