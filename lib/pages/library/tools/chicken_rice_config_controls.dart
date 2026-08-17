@@ -44,8 +44,6 @@ class ChickenRiceConfigControls extends ConsumerWidget {
           : 'AI 字幕翻译仅支持 Windows（当前平台不支持）',
       child: Opacity(
         opacity: supported ? 1.0 : 0.45,
-        child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
         child: Row(
           children: [
             Text('AI字幕',
@@ -61,8 +59,8 @@ class ChickenRiceConfigControls extends ConsumerWidget {
               initialSelection: task,
               enabled: !isBat && supported,
               dropdownMenuEntries: _tasks
-                  .map((v) => DropdownMenuEntry<String>(
-                      value: v, label: _taskLabel(v)))
+                  .map((v) =>
+                      DropdownMenuEntry<String>(value: v, label: _taskLabel(v)))
                   .toList(),
               onSelected: (v) {
                 if (v != null) ui.setChickenRiceTask(v);
@@ -104,12 +102,10 @@ class ChickenRiceConfigControls extends ConsumerWidget {
               message: '一键安装 AI 翻译引擎（自动下载运行时与模型，'
                   '装完自动配置，无需手动选择脚本）',
               child: OutlinedButton.icon(
-                onPressed: supported
-                    ? () => showEngineSetupDialog(context)
-                    : null,
+                onPressed:
+                    supported ? () => showEngineSetupDialog(context) : null,
                 icon: const Icon(Icons.download, size: 14),
-                label: const Text('安装引擎',
-                    style: TextStyle(fontSize: 12)),
+                label: const Text('安装引擎', style: TextStyle(fontSize: 12)),
               ),
             ),
             const SizedBox(width: 8),
@@ -120,7 +116,6 @@ class ChickenRiceConfigControls extends ConsumerWidget {
               onChanged: supported ? ui.onAutoTranscribeChanged : null,
             ),
           ],
-        ),
         ),
       ),
     );

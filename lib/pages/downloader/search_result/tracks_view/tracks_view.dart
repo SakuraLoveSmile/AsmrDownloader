@@ -16,66 +16,61 @@ class TracksView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appWidth = MediaQuery.of(context).size.width;
     final tracksLoadingState = ref.watch(tracksLoadingStateProvider);
-    return SizedBox(
-      width: appWidth * 0.6,
-      child: Padding(
-        padding: EdgeInsets.only(right: horizontalPadding, bottom: 10.0),
-        child: tracksLoadingState.when(
-          data: (_) {
-            // 尚未搜索：显示引导而非空白
-            if (ref.read(searchTextProvider) == null) {
-              return const EmptyGuidance();
-            }
-            final rootFolder = ref.read(rootFolderProvider);
-            if (ref.read(workInfoLoadingStateProvider).value == null ||
-                rootFolder == null) {
-              return Center(
-                child: Text('未找到音轨数据',
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant)),
-              );
-            }
-
-            return Column(
-              children: [
-                DownloadProgress(tracksLPadding: _tracksLPadding),
-                Expanded(
-                  child: Tracks(
-                    rootFolder: rootFolder,
-                    tracksLPadding: _tracksLPadding,
-                  ),
-                ),
-              ],
+    return Padding(
+      padding: EdgeInsets.only(right: horizontalPadding, bottom: 10.0),
+      child: tracksLoadingState.when(
+        data: (_) {
+          // 尚未搜索：显示引导而非空白
+          if (ref.read(searchTextProvider) == null) {
+            return const EmptyGuidance();
+          }
+          final rootFolder = ref.read(rootFolderProvider);
+          if (ref.read(workInfoLoadingStateProvider).value == null ||
+              rootFolder == null) {
+            return Center(
+              child: Text('未找到音轨数据',
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant)),
             );
-          },
-          loading: () => Center(child: const CircularProgressIndicator()),
-          error: (error, stack) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    '加载失败：$error',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.error),
-                  ),
+          }
+
+          return Column(
+            children: [
+              DownloadProgress(tracksLPadding: _tracksLPadding),
+              Expanded(
+                child: Tracks(
+                  rootFolder: rootFolder,
+                  tracksLPadding: _tracksLPadding,
                 ),
-                const SizedBox(height: 8),
-                TextButton.icon(
-                  onPressed: () => ref
-                    ..invalidate(searchResultProvider)
-                    ..invalidate(workInfoProvider)
-                    ..invalidate(rawTracksProvider)
-                    ..invalidate(coverBytesProvider),
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('重试'),
+              ),
+            ],
+          );
+        },
+        loading: () => Center(child: const CircularProgressIndicator()),
+        error: (error, stack) => Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '加载失败：$error',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () => ref
+                  ..invalidate(searchResultProvider)
+                  ..invalidate(workInfoProvider)
+                  ..invalidate(rawTracksProvider)
+                  ..invalidate(coverBytesProvider),
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
           ),
         ),
       ),

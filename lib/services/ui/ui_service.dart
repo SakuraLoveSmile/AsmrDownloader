@@ -260,7 +260,8 @@ class UIService {
   void setChickenRiceEngineInstallDir(String dir) {
     ref
       ..read(chickenRiceEngineInstallDirProvider.notifier).state = dir
-      ..read(configFileProvider).addOrUpdate({'chickenRiceEngineInstallDir': dir});
+      ..read(configFileProvider)
+          .addOrUpdate({'chickenRiceEngineInstallDir': dir});
   }
 
   /// 执行引擎安装（安装向导调用）；成功返回 infer.exe 路径并自动配置。
@@ -437,13 +438,13 @@ class UIService {
         ..read(transcribeStatusProvider.notifier).state = TranscribeStatus.idle
         ..read(activeTranscribeSourceIdProvider.notifier).state = null
         ..read(transcribeLogLinesProvider.notifier).state = const [];
-      showSnack(works.length == 1
-          ? '所有音轨已有字幕，无需 AI 翻译'
-          : '所选作品音轨均已有字幕，无需 AI 翻译');
+      showSnack(
+          works.length == 1 ? '所有音轨已有字幕，无需 AI 翻译' : '所选作品音轨均已有字幕，无需 AI 翻译');
       return false;
     }
     Log.info('transcribeWorks: ${works.length} works -> ${targets.length} '
         'missing tracks (noGap=$noGap, notExist=$notExist)');
+    _appendTranscribeLog('正在启动翻译引擎（杀毒软件首次扫描可能耗时较长）…');
 
     final result = await ref.read(chickenRiceServiceProvider).run(
           dirs: targets,
@@ -468,9 +469,7 @@ class UIService {
           ? '字幕翻译失败或已取消'
           : (result.filesProcessed == 0
               ? '未找到需要处理的文件（请检查音频格式配置）'
-              : (skipped > 0
-                  ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）'
-                  : '字幕翻译完成')),
+              : (skipped > 0 ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）' : '字幕翻译完成')),
     );
     ref.invalidate(worksLibraryProvider);
     return completed;
@@ -484,7 +483,8 @@ class UIService {
     // 互斥：已有手动/自动翻译在跑时跳过，避免并发启动多个 infer.exe
     // （模型重复加载、显存/算力争抢、状态互相覆盖）。
     if (ref.read(transcribeStatusProvider) == TranscribeStatus.running) {
-      Log.info('chickenRice autoTranscribe skipped: run in progress: $sourceId');
+      Log.info(
+          'chickenRice autoTranscribe skipped: run in progress: $sourceId');
       return false;
     }
     final probe = ref.read(chickenRiceServiceProvider).probeScript();
@@ -512,6 +512,7 @@ class UIService {
       ..read(transcribeProgressProvider.notifier).state = null
       ..read(transcribeLogLinesProvider.notifier).state = const []
       ..read(transcribeCancelRequestedProvider.notifier).state = false;
+    _appendTranscribeLog('正在启动翻译引擎（杀毒软件首次扫描可能耗时较长）…');
 
     final result = await ref.read(chickenRiceServiceProvider).runOnDir(
           sourceDir,

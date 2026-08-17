@@ -13,13 +13,10 @@ class AutoUpdateCheck extends ConsumerWidget {
     final autoCheck = ref.watch(autoCheckUpdateProvider);
     return Tooltip(
       message: '启动时自动检查 GitHub Release 新版本，发现后弹窗提示',
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: LabeledCheckbox(
-          label: '自动检查更新',
-          value: autoCheck,
-          onChanged: ref.read(uiServiceProvider).onAutoUpdateCheckChanged,
-        ),
+      child: LabeledCheckbox(
+        label: '自动检查更新',
+        value: autoCheck,
+        onChanged: ref.read(uiServiceProvider).onAutoUpdateCheckChanged,
       ),
     );
   }

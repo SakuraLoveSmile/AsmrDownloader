@@ -84,7 +84,8 @@ class OrganizeService {
     return t.isNotEmpty ? t : fallback;
   }
 
-  static String resolveCvNames(Map<String, dynamic>? workInfo, String fallback) {
+  static String resolveCvNames(
+      Map<String, dynamic>? workInfo, String fallback) {
     final vas = workInfo?['vas'];
     if (vas is List && vas.isNotEmpty) {
       return vas.map((e) => e['name'].toString()).join('&');
@@ -170,27 +171,17 @@ class OrganizeService {
     );
   }
 
-  /// 从注册表条目整理（注册表条目离线优先：直接使用注册表元数据，不现场调 API；
-  /// [fetchWorkInfo] 为 true 时（批量整理自动识别出的作品）在线拉取元数据，
-  /// 失败则降级到目录名解析；封面优先本地 {sourceId}_cover.jpg，发现的作品无本地
-  /// 封面时从 workInfo.mainCoverUrl 在线拉取（失败非致命）。
+  /// 从注册表条目整理（注册表条目离线优先：直接使用注册表元数据；
+  /// 缺少社团名时也尝试一次缓存优先的 workInfo 补齐，避免旧条目顶层降级
+  /// 为 CV；[fetchWorkInfo] 为 true 时（批量整理自动识别出的作品）同样
+  /// 拉取元数据。失败则降级到目录名解析。
   Future<OrganizeEntryOutcome> organizeEntry(WorkEntry entry,
       {required String targetRoot, bool fetchWorkInfo = false}) async {
     Map<String, dynamic>? workInfo;
-    if (fetchWorkInfo) {
-      final digits = entry.sourceId.replaceAll(RegExp(r'[^0-9]'), '');
+    if (fetchWorkInfo || entry.circleName.trim().isEmpty) {
       try {
-        // 缓存优先：搜索/浏览过的作品元数据直接复用
-        final cache = ref.read(cacheServiceProvider);
-        workInfo = await cache.getWorkInfo(entry.sourceId);
-        if (workInfo == null) {
-          workInfo = await ref.read(asmrApiProvider).getWorkInfo(digits);
-          if (workInfo != null) {
-            await cache.saveWorkInfo(entry.sourceId, workInfo);
-          }
-        } else {
-          Log.info('organizeEntry workInfo cache hit: ${entry.sourceId}');
-        }
+        // 缓存优先：命中时保持离线快速路径，未命中才请求 API。
+        workInfo = await _fetchWorkInfoCached(entry.sourceId);
       } catch (e) {
         Log.warning('fetch workInfo failed: ${entry.sourceId}\n' 'error: $e');
       }
@@ -209,7 +200,8 @@ class OrganizeService {
       try {
         coverBytes = await localCover.readAsBytes();
       } catch (e) {
-        Log.warning('read local cover failed: ${localCover.path}\n' 'error: $e');
+        Log.warning(
+            'read local cover failed: ${localCover.path}\n' 'error: $e');
       }
     }
     // 自动识别的作品通常没有本地封面，从 workInfo 在线拉取
@@ -240,14 +232,17 @@ class OrganizeService {
       sourceId: entry.sourceId,
       dlPath: entry.dlPath,
       dirName: entry.dirName,
-      title:
-          workInfo != null ? resolveTitle(workInfo, fallbackTitle) : fallbackTitle,
+      title: workInfo != null
+          ? resolveTitle(workInfo, fallbackTitle)
+          : fallbackTitle,
       cvNames: workInfo != null
           ? resolveCvNames(workInfo, fallbackCvNames)
           : fallbackCvNames,
-      circleName:
-          workInfo != null ? resolveCircle(workInfo, entry.circleName) : entry.circleName,
-      releaseDate: workInfo != null ? resolveRelease(workInfo) : entry.releaseDate,
+      circleName: workInfo != null
+          ? resolveCircle(workInfo, entry.circleName)
+          : entry.circleName,
+      releaseDate:
+          workInfo != null ? resolveRelease(workInfo) : entry.releaseDate,
       tags: workInfo != null ? resolveTags(workInfo) : entry.tags,
       coverUrl: workInfo != null
           ? (workInfo['mainCoverUrl']?.toString() ?? entry.coverUrl)

@@ -11,15 +11,24 @@ class TranscribeProgress {
   final int done;
   final int total;
   final String currentFile;
+  final int? subDone;
+  final int? subTotal;
 
   const TranscribeProgress({
     required this.done,
     required this.total,
     required this.currentFile,
+    this.subDone,
+    this.subTotal,
   });
 
   double get percentage =>
       total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0).toDouble();
+
+  double? get subPercentage =>
+      subDone == null || subTotal == null || subTotal == 0
+          ? null
+          : (subDone! / subTotal!).clamp(0.0, 1.0).toDouble();
 }
 
 /// 一个正在运行的外部进程句柄，支持主动终止。
@@ -56,8 +65,9 @@ class RealProcessRunner implements ProcessRunner {
       command.first,
       command.skip(1).toList(),
       workingDirectory: workingDirectory,
-      environment:
-          environment == null ? null : {...Platform.environment, ...environment},
+      environment: environment == null
+          ? null
+          : {...Platform.environment, ...environment},
     );
     // 诊断：Process.start 本身若耗时异常（杀软扫描/SmartScreen 等）
     // 会在这里暴露；正常应为毫秒级。
@@ -197,9 +207,8 @@ class ChickenRiceService {
         // 输出格式由本应用配置统一控制（默认只出 lrc，与 Navidrome
         // 整理链路对齐）：去掉 bat 自带的 --sub_formats（官方 bat 为
         // srt,vtt,lrc），换成 config.subFormats。
-        final batArgs = parsed.args
-            .where((a) => !a.startsWith('--sub_formats'))
-            .toList();
+        final batArgs =
+            parsed.args.where((a) => !a.startsWith('--sub_formats')).toList();
         final args = <String>[
           parsed.exePath,
           ...batArgs,
@@ -279,9 +288,7 @@ class ChickenRiceService {
       return TranscribeResult(success: false, exitCode: -1, error: '$e');
     }
     final result = await _await(handle,
-        onProgress: onProgress,
-        onOutput: onOutput,
-        isCancelled: isCancelled);
+        onProgress: onProgress, onOutput: onOutput, isCancelled: isCancelled);
     _cleanupWrapper(wrapperPath);
     return result;
   }
@@ -299,8 +306,7 @@ class ChickenRiceService {
     try {
       final tmpDir = _tempDir ?? Directory.systemTemp;
       final wrapper = File(p.join(
-          tmpDir.path,
-          'asmr_cr_${DateTime.now().microsecondsSinceEpoch}.bat'));
+          tmpDir.path, 'asmr_cr_${DateTime.now().microsecondsSinceEpoch}.bat'));
       final buf = StringBuffer()
         ..writeln('@echo off')
         ..writeln('chcp 65001 >nul')
@@ -358,6 +364,7 @@ class ChickenRiceService {
       void Function(String line)? onOutput,
       required bool Function() isCancelled}) async {
     final stderrLines = <String>[];
+    final progressState = _ProgressState();
     // 处理文件数：null = 未解析；0 = 明确「未找到要处理的文件」。
     int? filesProcessed;
     final cancelled = Completer<bool>();
@@ -368,12 +375,11 @@ class ChickenRiceService {
 
     final subOut = handle.stdout.listen(
       (line) {
-        _parseProgress(line, onProgress);
+        _parseProgress(line, onProgress, progressState);
         // 非空行实时转发给 UI（启动横幅/模型加载/VAD 进度等）
         if (line.trim().isNotEmpty) onOutput?.call(line);
       },
-      onError: (Object e) =>
-          Log.warning('chickenRice stdout stream error: $e'),
+      onError: (Object e) => Log.warning('chickenRice stdout stream error: $e'),
       onDone: () {
         if (!outDone.isCompleted) outDone.complete();
       },
@@ -381,7 +387,7 @@ class ChickenRiceService {
     final subErr = handle.stderr.listen(
       (line) {
         // 每文件进度（logger 输出走 stderr）同样参与进度解析
-        _parseProgress(line, onProgress);
+        _parseProgress(line, onProgress, progressState);
         filesProcessed = _parseFilesProcessed(line, filesProcessed);
         if (line.trim().isNotEmpty) {
           onOutput?.call(line);
@@ -389,8 +395,7 @@ class ChickenRiceService {
           stderrLines.add(line);
         }
       },
-      onError: (Object e) =>
-          Log.warning('chickenRice stderr stream error: $e'),
+      onError: (Object e) => Log.warning('chickenRice stderr stream error: $e'),
       onDone: () {
         if (!errDone.isCompleted) errDone.complete();
       },
@@ -423,7 +428,8 @@ class ChickenRiceService {
     subOut.cancel();
     subErr.cancel();
     if (exitCode == 0 && !wasCancelled) {
-      Log.info('chickenRice completed, exit code 0, filesProcessed=$filesProcessed');
+      Log.info(
+          'chickenRice completed, exit code 0, filesProcessed=$filesProcessed');
       return TranscribeResult(
         success: true,
         exitCode: 0,
@@ -451,7 +457,11 @@ class ChickenRiceService {
   );
 
   /// VAD 块进度（stdout print 输出），形如 VAD进度：3/120 块（2.5%）...
-  static final RegExp _vadProgressRe = RegExp(r'(\d+)\s*/\s*(\d+)');
+  /// 只接受 ChickenRice 的明确 VAD 前缀，避免把日期和其他比例误判为进度。
+  static final RegExp _vadProgressRe = RegExp(
+    r'VAD\s*(?:进度|Progress)\s*[:：]\s*(\d+)\s*/\s*(\d+)',
+    caseSensitive: false,
+  );
 
   /// 处理文件计数（stderr）：
   /// zh: 找到 3 个文件待处理 / en: Found 3 files to process
@@ -512,8 +522,8 @@ class ChickenRiceService {
   /// 从 ChickenRice 输出行解析进度：文件级进度（n/total + 文件名）优先，
   /// 其次 VAD 块进度（x/y）。文件级进度用于总进度，VAD 仅作次级刷新，
   /// 避免两者混用导致百分比回跳。
-  void _parseProgress(
-      String line, void Function(TranscribeProgress)? onProgress) {
+  void _parseProgress(String line,
+      void Function(TranscribeProgress)? onProgress, _ProgressState state) {
     if (onProgress == null) return;
     final fileMatch = _fileProgressRe.firstMatch(line);
     if (fileMatch != null) {
@@ -522,6 +532,11 @@ class ChickenRiceService {
       if (done == null || total == null || total <= 0) return;
       final raw = fileMatch.group(3)!.trim();
       final name = raw.split(RegExp(r'[\\/]')).last;
+      state
+        ..hasFileProgress = true
+        ..done = done
+        ..total = total
+        ..currentFile = name;
       onProgress(
           TranscribeProgress(done: done, total: total, currentFile: name));
       return;
@@ -531,7 +546,19 @@ class ChickenRiceService {
     final done = int.tryParse(m.group(1)!);
     final total = int.tryParse(m.group(2)!);
     if (done == null || total == null || total <= 0) return;
-    onProgress(TranscribeProgress(done: done, total: total, currentFile: ''));
+    if (state.hasFileProgress) {
+      onProgress(TranscribeProgress(
+        done: state.done,
+        total: state.total,
+        currentFile: state.currentFile,
+        subDone: done,
+        subTotal: total,
+      ));
+    } else {
+      // Before the engine emits file-level progress, VAD is the only useful
+      // signal available and is shown as a temporary overall progress.
+      onProgress(TranscribeProgress(done: done, total: total, currentFile: ''));
+    }
   }
 
   /// 解析处理文件数：找到 N 个文件待处理 → N；未找到要处理的文件 → 0。
@@ -544,6 +571,13 @@ class ChickenRiceService {
     if (_noFilesRe.hasMatch(line)) return 0;
     return null;
   }
+}
+
+class _ProgressState {
+  bool hasFileProgress = false;
+  int done = 0;
+  int total = 0;
+  String currentFile = '';
 }
 
 /// bat 内 infer.exe 调用解析结果：exe 绝对路径 + 参数列表。

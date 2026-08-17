@@ -54,7 +54,8 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('清空缓存'),
-        content: const Text('将删除全部 workInfo / tracks / 封面缓存，下次访问需重新请求 API。确定继续吗？'),
+        content:
+            const Text('将删除全部 workInfo / tracks / 封面缓存，下次访问需重新请求 API。确定继续吗？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -90,7 +91,9 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
     try {
       await ref.read(cacheServiceProvider).exportTo(targetPath);
       if (!mounted) return;
-      ref.read(uiServiceProvider).showSnack(context: context, '缓存已导出到 $targetPath');
+      ref
+          .read(uiServiceProvider)
+          .showSnack(context: context, '缓存已导出到 $targetPath');
     } catch (e) {
       if (!mounted) return;
       ref.read(uiServiceProvider).showSnack(context: context, '导出失败: $e');
@@ -194,8 +197,7 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!,
-                  style: TextStyle(color: theme.colorScheme.error)),
+              Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ],
           ],
         ),
@@ -216,17 +218,12 @@ class CacheButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: OutlinedButton(
-          onPressed: () => showDialog(
-            context: context,
-            builder: (_) => const CacheDialog(),
-          ),
-          child: const Text('缓存'),
-        ),
+    return OutlinedButton(
+      onPressed: () => showDialog(
+        context: context,
+        builder: (_) => const CacheDialog(),
       ),
+      child: const Text('缓存'),
     );
   }
 }

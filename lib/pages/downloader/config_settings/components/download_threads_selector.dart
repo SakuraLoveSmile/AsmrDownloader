@@ -14,23 +14,19 @@ class DownloadThreadsSelector extends ConsumerWidget {
     return Tooltip(
       message: '单文件分段并发下载的连接数（每段至少 1 MiB）。'
           '服务器不支持 Range 时自动回退单线程',
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: Row(
-          children: [
-            const Text('下载线程'),
-            const SizedBox(width: 6),
-            DropdownMenu<int>(
-              initialSelection: value,
-              dropdownMenuEntries: downloadThreadOptions
-                  .map((option) => DropdownMenuEntry<int>(
-                      value: option,
-                      label: option == 1 ? '单线程' : '$option 线程'))
-                  .toList(),
-              onSelected: ref.read(uiServiceProvider).onDownloadThreadsChanged,
-            ),
-          ],
-        ),
+      child: Row(
+        children: [
+          const Text('下载线程'),
+          const SizedBox(width: 6),
+          DropdownMenu<int>(
+            initialSelection: value,
+            dropdownMenuEntries: downloadThreadOptions
+                .map((option) => DropdownMenuEntry<int>(
+                    value: option, label: option == 1 ? '单线程' : '$option 线程'))
+                .toList(),
+            onSelected: ref.read(uiServiceProvider).onDownloadThreadsChanged,
+          ),
+        ],
       ),
     );
   }

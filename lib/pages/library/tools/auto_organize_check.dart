@@ -13,13 +13,10 @@ class AutoOrganizeCheck extends ConsumerWidget {
     final autoOrganize = ref.watch(autoOrganizeProvider);
     return Tooltip(
       message: '下载完成后自动整理到 Navidrome 媒体库（整理路径未设置时自动整理会跳过）',
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: LabeledCheckbox(
-          label: '开启整理',
-          value: autoOrganize,
-          onChanged: ref.read(uiServiceProvider).onAutoOrganizeChanged,
-        ),
+      child: LabeledCheckbox(
+        label: '开启整理',
+        value: autoOrganize,
+        onChanged: ref.read(uiServiceProvider).onAutoOrganizeChanged,
       ),
     );
   }

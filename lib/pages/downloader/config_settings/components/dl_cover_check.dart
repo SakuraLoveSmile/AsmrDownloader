@@ -12,13 +12,10 @@ class DlCoverCheck extends ConsumerWidget {
     final dlCover = ref.watch(dlCoverProvider);
     return Tooltip(
       message: '下载搜索结果中的封面图（分辨率不高，不推荐。根目录通常附赠更高清图片）',
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: LabeledCheckbox(
-          label: '下载封面',
-          value: dlCover,
-          onChanged: ref.read(uiServiceProvider).onDlCoverChanged,
-        ),
+      child: LabeledCheckbox(
+        label: '下载封面',
+        value: dlCover,
+        onChanged: ref.read(uiServiceProvider).onDlCoverChanged,
       ),
     );
   }

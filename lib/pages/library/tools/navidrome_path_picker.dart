@@ -10,33 +10,27 @@ class NavidromePathPicker extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final navidromePath = ref.watch(navidromePathProvider);
-    return SizedBox(
-      height: 50.0,
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 180,
-              child: TextField(
-                enabled: false,
-                decoration: InputDecoration(
-                  hintText: navidromePath.isEmpty ? '选择整理路径' : navidromePath,
-                ),
-              ),
+    return Row(
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 160, maxWidth: 220),
+          child: TextField(
+            enabled: false,
+            decoration: InputDecoration(
+              hintText: navidromePath.isEmpty ? '选择整理路径' : navidromePath,
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: 5.0),
-              child: IconButton(
-                onPressed: ref.read(uiServiceProvider).pickNavidromePath,
-                icon: const Icon(Icons.folder),
-                tooltip: '选择整理路径',
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        Padding(
+          padding: const EdgeInsets.only(left: 5.0),
+          child: IconButton(
+            onPressed: ref.read(uiServiceProvider).pickNavidromePath,
+            icon: const Icon(Icons.folder),
+            tooltip: '选择整理路径',
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
     );
   }
 }

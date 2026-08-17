@@ -619,6 +619,114 @@ void main() {
       expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
     });
 
+    test('注册表 circle 为空时，organizeEntry 使用缓存补齐社团名', () async {
+      final cacheDb = CacheDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(cacheDb.close);
+      final cache = CacheService(cacheDb);
+      await cache.saveWorkInfo('RJ200001', {
+        'title': '缓存标题',
+        'circle': {'name': '缓存社团'},
+        'vas': [
+          {'name': '缓存CV'},
+        ],
+      });
+      final container = makeContainer(apiThrows: true, cache: cache);
+      addTearDown(container.dispose);
+      createWork('RJ200001');
+      final source = WorkEntry(
+        sourceId: 'RJ200001',
+        dlPath: dlPath.path,
+        dirName: 'CV1&CV2-测试标题',
+        title: '旧标题',
+        cvNames: '旧CV',
+      );
+
+      final outcome = await container.read(organizeServiceProvider).organizeEntry(
+            source,
+            targetRoot: targetRoot.path,
+          );
+
+      expect(outcome.resolvedEntry.circleName, '缓存社团');
+      expect(
+        File(p.join(
+          targetRoot.path,
+          '缓存社团',
+          'RJ200001 - 缓存CV - 缓存标题',
+          'RJ200001',
+          'e01_舔耳.wav',
+        )).existsSync(),
+        isTrue,
+      );
+    });
+
+    test('注册表 circle 为空时，缓存未命中则在线补齐', () async {
+      final container = makeContainer(works: {
+        '200002': {
+          'title': '在线标题',
+          'circle': {'name': '在线社团'},
+          'vas': [
+            {'name': '在线CV'},
+          ],
+        },
+      });
+      addTearDown(container.dispose);
+      createWork('RJ200002');
+      final source = WorkEntry(
+        sourceId: 'RJ200002',
+        dlPath: dlPath.path,
+        dirName: 'CV1&CV2-测试标题',
+        title: '旧标题',
+        cvNames: '旧CV',
+      );
+
+      final outcome = await container.read(organizeServiceProvider).organizeEntry(
+            source,
+            targetRoot: targetRoot.path,
+          );
+
+      expect(outcome.resolvedEntry.circleName, '在线社团');
+      expect(
+        File(p.join(
+          targetRoot.path,
+          '在线社团',
+          'RJ200002 - 在线CV - 在线标题',
+          'RJ200002',
+          'e01_舔耳.wav',
+        )).existsSync(),
+        isTrue,
+      );
+    });
+
+    test('补齐失败时仍使用 CV 顶层兜底', () async {
+      final container = makeContainer(apiThrows: true);
+      addTearDown(container.dispose);
+      createWork('RJ200003');
+      final source = WorkEntry(
+        sourceId: 'RJ200003',
+        dlPath: dlPath.path,
+        dirName: 'CV1&CV2-测试标题',
+        title: '',
+        cvNames: '',
+      );
+
+      final outcome = await container.read(organizeServiceProvider).organizeEntry(
+            source,
+            targetRoot: targetRoot.path,
+          );
+
+      expect(outcome.resolvedEntry.circleName, isEmpty);
+      expect(
+        File(p.join(
+          targetRoot.path,
+          'CV1&CV2',
+          'RJ200003 - CV1&CV2 - 测试标题',
+          'RJ200003',
+          'e01_舔耳.wav',
+        )).existsSync(),
+        isTrue,
+      );
+    });
+
     test('汉化版 circle 跟踪原版时缓存优先（缓存命中不请求 API）', () async {
       final cacheDb = CacheDatabase.forTesting(NativeDatabase.memory());
       addTearDown(cacheDb.close);

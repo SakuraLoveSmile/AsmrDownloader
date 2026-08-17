@@ -22,51 +22,47 @@ class WorkInfo extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final appWidth = MediaQuery.of(context).size.width;
     final workInfoLoadingState = ref.watch(workInfoLoadingStateProvider);
-    return SizedBox(
-      width: appWidth * 0.4,
-      child: Padding(
-        padding:
-            EdgeInsets.only(left: horizontalPadding, right: horizontalPadding),
-        child: workInfoLoadingState.when(
-          data: (data) {
-            if (data == null) {
-              // 尚未搜索：显示引导
-              if (ref.read(searchTextProvider) == null) {
-                return const EmptyGuidance();
-              }
-              // 搜索了但拿不到 work info：
-              // 无 sourceId 说明搜索结果为空；否则进入降级模式
-              if (ref.read(sourceIdProvider) == null) {
-                return _buildNotFound(context);
-              }
-              return _buildFallbackInfo(context, ref);
+    return Padding(
+      padding:
+          EdgeInsets.only(left: horizontalPadding, right: horizontalPadding),
+      child: workInfoLoadingState.when(
+        data: (data) {
+          if (data == null) {
+            // 尚未搜索：显示引导
+            if (ref.read(searchTextProvider) == null) {
+              return const EmptyGuidance();
             }
-            return MoveWindow(
-              moveOnChildWidget: true,
-              child: ScrollConfiguration(
-                behavior:
-                    ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AsmrCover(),
-                      AsmrTitle(verticalPadding: _verticalPadding),
-                      AsmrCircleName(verticalPadding: _verticalPadding),
-                      AsmrMiscInfo(verticalPadding: _verticalPadding),
-                      AsmrTags(verticalPadding: _verticalPadding),
-                      AsmrCv(verticalPadding: _verticalPadding),
-                    ],
-                  ),
+            // 搜索了但拿不到 work info：
+            // 无 sourceId 说明搜索结果为空；否则进入降级模式
+            if (ref.read(sourceIdProvider) == null) {
+              return _buildNotFound(context);
+            }
+            return _buildFallbackInfo(context, ref);
+          }
+          return MoveWindow(
+            moveOnChildWidget: true,
+            child: ScrollConfiguration(
+              behavior:
+                  ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AsmrCover(),
+                    AsmrTitle(verticalPadding: _verticalPadding),
+                    AsmrCircleName(verticalPadding: _verticalPadding),
+                    AsmrMiscInfo(verticalPadding: _verticalPadding),
+                    AsmrTags(verticalPadding: _verticalPadding),
+                    AsmrCv(verticalPadding: _verticalPadding),
+                  ],
                 ),
               ),
-            );
-          },
-          loading: () => Center(child: const CircularProgressIndicator()),
-          error: (error, stack) => _buildErrorRetry(context, ref, error),
-        ),
+            ),
+          );
+        },
+        loading: () => Center(child: const CircularProgressIndicator()),
+        error: (error, stack) => _buildErrorRetry(context, ref, error),
       ),
     );
   }
@@ -77,8 +73,7 @@ class WorkInfo extends ConsumerWidget {
     return MoveWindow(
       moveOnChildWidget: true,
       child: ScrollConfiguration(
-        behavior:
-            ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,8 +83,8 @@ class WorkInfo extends ConsumerWidget {
                   Expanded(
                     child: Text(
                       '加载失败：$error',
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error),
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error),
                     ),
                   ),
                   TextButton.icon(
@@ -137,8 +132,7 @@ class WorkInfo extends ConsumerWidget {
     return MoveWindow(
       moveOnChildWidget: true,
       child: ScrollConfiguration(
-        behavior:
-            ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: SingleChildScrollView(
           child: _buildFallbackInfoContent(context, ref),
         ),
