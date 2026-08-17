@@ -93,6 +93,41 @@ class UpdateService {
       ..receiveTimeout = const Duration(seconds: 15)
       ..headers['User-Agent'] = 'AsmrDownloader-UpdateChecker'
       ..headers['Accept'] = 'application/vnd.github+json';
+    _installAuthFallback();
+  }
+
+  /// GitHub Token 无效（401）时自动降级为匿名重试一次：
+  /// 避免 Token 失效后更新检查/引擎安装整体不可用；
+  /// 重试成功后本实例不再携带认证头（日志提示用户检查 Token）。
+  void _installAuthFallback() {
+    _apiDio.interceptors.add(InterceptorsWrapper(
+      onError: (e, handler) async {
+        if (e.response?.statusCode == 401 &&
+            _apiDio.options.headers.containsKey('Authorization')) {
+          _apiDio.options.headers.remove('Authorization');
+          Log.warning('github token rejected (401), retrying anonymously');
+          try {
+            // 重新构造请求（不复用已消费的 requestOptions）
+            final resp = await _apiDio.request(
+              e.requestOptions.path,
+              options: Options(
+                method: e.requestOptions.method,
+                headers: Map.of(e.requestOptions.headers)
+                  ..remove('Authorization'),
+                responseType: e.requestOptions.responseType,
+                validateStatus: e.requestOptions.validateStatus,
+              ),
+            );
+            handler.resolve(resp);
+            return;
+          } catch (err) {
+            handler.next(err is DioException ? err : e);
+            return;
+          }
+        }
+        handler.next(e);
+      },
+    ));
   }
 
   static const String repo = 'SakuraLoveSmile/AsmrDownloader';
@@ -286,6 +321,10 @@ class UpdateService {
   /// 把检查请求的网络错误转换为用户可读原因（区分速率限制）。
   static UpdateCheckException _toCheckException(DioException e) {
     final status = e.response?.statusCode;
+    if (status == 401) {
+      return UpdateCheckException(
+          'GitHub Token 无效或已过期，请在设置中清除或更换');
+    }
     final remaining = e.response?.headers.value('x-ratelimit-remaining');
     if ((status == 403 && remaining == '0') || status == 429) {
       return UpdateCheckException(
@@ -433,9 +472,13 @@ class UpdateService {
     return null;
   }
 
-  /// Windows 更新脚本：等 PID 退出 → xcopy 覆盖（不删多余文件，
+  /// Windows 更新脚本：等 PID 退出（最多 60 秒）→ xcopy 覆盖（不删多余文件，
   /// 避免误删应用目录内的用户配置）→ 重启 → 自删。
-  /// ping 用作延时（detached 无控制台时 timeout 命令不可用）。
+  ///
+  /// - 用 tasklist 退出码判断进程存活（不用 find 匹配输出文本，
+  ///   避免异常输出导致等待死循环、cmd 窗口常驻关不掉）；
+  /// - WAIT 计数超时后强制继续替换，窗口不会永久挂着；
+  /// - ping 用作延时（detached 无控制台时 timeout 命令不可用）。
   static String buildWindowsScript(
       int pid, String stagingDir, String installDir, String exeName) {
     return '@echo off\r\n'
@@ -444,15 +487,19 @@ class UpdateService {
         'set "STAGING=$stagingDir"\r\n'
         'set "INSTALL=$installDir"\r\n'
         'set "EXE=$exeName"\r\n'
+        'set /a WAIT=0\r\n'
         ':wait_exit\r\n'
-        'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul\r\n'
-        'if not errorlevel 1 (\r\n'
-        '  ping -n 2 127.0.0.1 >nul\r\n'
-        '  goto wait_exit\r\n'
-        ')\r\n'
-        'xcopy "%STAGING%\\*" "%INSTALL%\\" /E /Y /Q >nul\r\n'
+        'tasklist /FI "PID eq %PID%" >nul 2>&1\r\n'
+        'if errorlevel 1 goto replace\r\n'
+        'set /a WAIT+=1\r\n'
+        'if %WAIT% GEQ 30 goto replace\r\n'
+        'ping -n 2 127.0.0.1 >nul\r\n'
+        'goto wait_exit\r\n'
+        ':replace\r\n'
+        'xcopy "%STAGING%\\*" "%INSTALL%\\" /E /Y /Q >nul 2>&1\r\n'
         'start "" "%INSTALL%\\%EXE%"\r\n'
-        'del "%~f0"\r\n';
+        'del "%~f0" >nul 2>&1\r\n'
+        'exit /b 0\r\n';
   }
 
   /// macOS 更新脚本：等 PID 退出 → 删旧 .app → 移入新 .app → open 重启。

@@ -225,6 +225,41 @@ class ChickenRiceEngineService {
         _apiDio = apiDio ?? Dio(),
         _freeSpaceBytes = freeSpaceBytes ?? _defaultFreeSpaceBytes {
     _apiDio.options.connectTimeout = const Duration(seconds: 15);
+    _installAuthFallback();
+  }
+
+  /// GitHub Token 无效（401）时自动降级为匿名重试一次：
+  /// 避免 Token 失效后安装流程整体不可用；
+  /// 重试成功后本实例不再携带认证头（日志提示用户检查 Token）。
+  void _installAuthFallback() {
+    _apiDio.interceptors.add(InterceptorsWrapper(
+      onError: (e, handler) async {
+        if (e.response?.statusCode == 401 &&
+            _apiDio.options.headers.containsKey('Authorization')) {
+          _apiDio.options.headers.remove('Authorization');
+          Log.warning('github token rejected (401), retrying anonymously');
+          try {
+            // 重新构造请求（不复用已消费的 requestOptions）
+            final resp = await _apiDio.request(
+              e.requestOptions.path,
+              options: Options(
+                method: e.requestOptions.method,
+                headers: Map.of(e.requestOptions.headers)
+                  ..remove('Authorization'),
+                responseType: e.requestOptions.responseType,
+                validateStatus: e.requestOptions.validateStatus,
+              ),
+            );
+            handler.resolve(resp);
+            return;
+          } catch (err) {
+            handler.next(err is DioException ? err : e);
+            return;
+          }
+        }
+        handler.next(e);
+      },
+    ));
   }
 
   static const String upstreamRepo =
@@ -550,6 +585,9 @@ class ChickenRiceEngineService {
   /// 此时重试无用，需等限流窗口过去（分卷/模型下载不受影响）。
   static String? _releaseFetchError(DioException e) {
     final status = e.response?.statusCode;
+    if (status == 401) {
+      return 'GitHub Token 无效或已过期，请在设置中清除或更换';
+    }
     final remaining = e.response?.headers.value('x-ratelimit-remaining');
     if ((status == 403 && remaining == '0') || status == 429) {
       return 'GitHub API 速率限制（未认证限额 60 次/小时/IP，'

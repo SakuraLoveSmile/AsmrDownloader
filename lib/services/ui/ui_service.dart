@@ -63,7 +63,9 @@ class UIService {
     return sourceId.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '').toUpperCase();
   }
 
-  Future<String?> search(String input) async {
+  /// 搜索作品。返回规范化后的 sourceId；空输入/非法输入返回 null。
+  /// [silent]=true（启动自动粘贴搜索等场景）时非法输入不弹提示。
+  Future<String?> search(String input, {bool silent = false}) async {
     // 空输入静默返回（未输入/剪贴板为空），不弹「无效 sourceId」也不重置进度
     if (input.trim().isEmpty) return null;
 
@@ -83,7 +85,9 @@ class UIService {
       searchText = normalizeInput(input);
     }
     if (!isSourceIdValid(searchText)) {
-      showSnack('无效的 sourceId，请输入 RJ/VJ/BJ 开头加数字，或粘贴 asmr.one 作品页 URL');
+      if (!silent) {
+        showSnack('无效的 sourceId，请输入 RJ/VJ/BJ 开头加数字，或粘贴 asmr.one 作品页 URL');
+      }
       return null;
     }
 
@@ -99,12 +103,13 @@ class UIService {
     return searchText;
   }
 
-  Future<String?> pasteAndSearch() async {
+  /// 从剪贴板粘贴并搜索；[silent] 透传给 [search]（启动自动搜索用）。
+  Future<String?> pasteAndSearch({bool silent = false}) async {
     final clipBoardText = (await Clipboard.getData('text/plain'))?.text;
     if (clipBoardText == null) return null;
 
     // 注意：不再把旧 sourceId 写回剪贴板，避免覆盖用户剪贴板中的其他内容
-    return search(clipBoardText);
+    return search(clipBoardText, silent: silent);
   }
 
   void onApiChannelChoosed(String? newValue) {
