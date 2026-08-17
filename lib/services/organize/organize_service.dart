@@ -30,12 +30,14 @@ class BatchProgress {
   final int total;
   final int done;
   final String currentSourceId;
+  final String statusMessage;
   final List<BatchItemResult> results;
 
   const BatchProgress({
     required this.total,
     required this.done,
     required this.currentSourceId,
+    this.statusMessage = '',
     required this.results,
   });
 }
@@ -63,10 +65,12 @@ class BatchOrganizeResult {
 class OrganizeEntryOutcome {
   final OrganizeResult? result;
   final WorkEntry resolvedEntry;
+  final String? metadataNote;
 
   const OrganizeEntryOutcome({
     required this.result,
     required this.resolvedEntry,
+    this.metadataNote,
   });
 }
 
@@ -178,12 +182,21 @@ class OrganizeService {
   Future<OrganizeEntryOutcome> organizeEntry(WorkEntry entry,
       {required String targetRoot, bool fetchWorkInfo = false}) async {
     Map<String, dynamic>? workInfo;
+    String? metadataNote;
     if (fetchWorkInfo || entry.circleName.trim().isEmpty) {
       try {
         // 缓存优先：命中时保持离线快速路径，未命中才请求 API。
         workInfo = await _fetchWorkInfoCached(entry.sourceId);
+        if (workInfo == null) {
+          metadataNote = '元数据未找到，已按本地信息整理';
+        } else if (entry.circleName.trim().isEmpty &&
+            resolveCircle(workInfo, '').isEmpty) {
+          metadataNote = '元数据不完整（缺少社团名），已按本地信息整理';
+        }
       } catch (e) {
         Log.warning('fetch workInfo failed: ${entry.sourceId}\n' 'error: $e');
+        final errorText = e.toString().replaceFirst('Exception: ', '');
+        metadataNote = '元数据获取失败（$errorText），已按本地信息整理';
       }
     }
 
@@ -249,7 +262,11 @@ class OrganizeService {
           : entry.coverUrl,
       organizedAt: entry.organizedAt,
     );
-    return OrganizeEntryOutcome(result: result, resolvedEntry: resolved);
+    return OrganizeEntryOutcome(
+      result: result,
+      resolvedEntry: resolved,
+      metadataNote: metadataNote,
+    );
   }
 
   /// 缓存优先拉取 workInfo（供汉化版原版 circle 跟踪等场景复用）。
@@ -280,7 +297,7 @@ class OrganizeService {
       }
     }
 
-    final data = await ref.read(asmrApiProvider).getWorkInfo(digits);
+    final data = await ref.read(asmrApiProvider).getWorkInfoOrThrow(digits);
     if (data != null) {
       final respSourceId = data['source_id']?.toString().toUpperCase();
       if (respSourceId != null && respSourceId.isNotEmpty) {
@@ -290,6 +307,27 @@ class OrganizeService {
       }
     }
     return data;
+  }
+
+  /// 判断整理时是否需要访问网络获取 workInfo。
+  Future<bool> _hasCachedWorkInfo(String id) async {
+    final cache = ref.read(cacheServiceProvider);
+    final digits = id.replaceAll(RegExp(r'[^0-9]'), '');
+    String? cacheKey;
+    if (RegExp(r'^(RJ|VJ|BJ)\d+$', caseSensitive: false).hasMatch(id)) {
+      cacheKey = id.toUpperCase();
+    } else if (digits.isNotEmpty) {
+      cacheKey = await cache.findSourceIdByDigits(digits);
+    }
+    if (cacheKey == null) return false;
+    return await cache.getWorkInfo(cacheKey) != null;
+  }
+
+  /// 判断整理条目是否会触发 workInfo 网络请求。
+  Future<bool> needsWorkInfoNetwork(WorkEntry entry,
+      {bool fetchWorkInfo = false}) async {
+    if (!fetchWorkInfo && entry.circleName.trim().isNotEmpty) return false;
+    return !await _hasCachedWorkInfo(entry.sourceId);
   }
 
   // ---------- 自动识别（批量整理） ----------
@@ -377,10 +415,16 @@ class OrganizeService {
         break;
       }
       final entry = entries[i];
+      final needsWorkInfo = discoveredIds.contains(entry.sourceId) ||
+          entry.circleName.trim().isEmpty;
+      final needsNetwork = needsWorkInfo &&
+          Directory(entry.sourceDir).existsSync() &&
+          !await _hasCachedWorkInfo(entry.sourceId);
       onProgress(BatchProgress(
         total: entries.length,
         done: i,
         currentSourceId: entry.sourceId,
+        statusMessage: needsNetwork ? '获取元数据中…' : '整理文件中…',
         results: List.of(results),
       ));
 
@@ -405,7 +449,8 @@ class OrganizeService {
           results.add(BatchItemResult(
               sourceId: entry.sourceId,
               success: true,
-              message: '已是最新（复制 0 跳过 ${result.skipped}）'));
+              message: _appendMetadataNote(
+                  '已是最新（复制 0 跳过 ${result.skipped}）', outcome.metadataNote)));
           await index.upsert(outcome.resolvedEntry
               .copyWith(organizedAt: DateTime.now().toIso8601String()));
         } else {
@@ -413,7 +458,9 @@ class OrganizeService {
           results.add(BatchItemResult(
               sourceId: entry.sourceId,
               success: true,
-              message: '复制 ${result.copied} 跳过 ${result.skipped}'));
+              message: _appendMetadataNote(
+                  '复制 ${result.copied} 跳过 ${result.skipped}',
+                  outcome.metadataNote)));
           await index.upsert(outcome.resolvedEntry
               .copyWith(organizedAt: DateTime.now().toIso8601String()));
         }
@@ -428,6 +475,7 @@ class OrganizeService {
       total: entries.length,
       done: entries.length,
       currentSourceId: '',
+      statusMessage: '',
       results: List.of(results),
     ));
 
@@ -439,5 +487,10 @@ class OrganizeService {
       cancelled: cancelled,
       results: results,
     );
+  }
+
+  static String _appendMetadataNote(String message, String? metadataNote) {
+    if (metadataNote == null || metadataNote.isEmpty) return message;
+    return '$message；$metadataNote';
   }
 }

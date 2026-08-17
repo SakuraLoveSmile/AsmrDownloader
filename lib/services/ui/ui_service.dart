@@ -12,6 +12,7 @@ import 'package:asmr_downloader/services/engine/engine_providers.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
+import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
@@ -625,11 +626,13 @@ class UIService {
 
   /// 对作品库中的单个作品执行整理（离线优先：注册表元数据 → 目录名解析）。
   /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器。
-  /// 返回整理结果；未执行成功返回 null。
-  Future<OrganizeResult?> organizeWorkFor(
+  /// 返回整理 outcome；未执行成功返回 null。
+  Future<OrganizeEntryOutcome?> organizeWorkFor(
     WorksListItem item, {
     bool pickPathIfEmpty = false,
   }) async {
+    showSnack('正在整理 ${item.sourceId}…');
+
     var navidromePath = ref.read(navidromePathProvider);
     if (navidromePath.isEmpty) {
       if (!pickPathIfEmpty) {
@@ -649,18 +652,22 @@ class UIService {
       cvNames: item.cvNames,
       circleName: item.circleName,
     );
-    final outcome = await ref
-        .read(organizeServiceProvider)
-        .organizeEntry(entry, targetRoot: navidromePath);
-    final result = outcome.result;
-    if (result != null) {
+    final organizer = ref.read(organizeServiceProvider);
+    if (await organizer.needsWorkInfoNetwork(entry)) {
+      showSnack('正在整理 ${item.sourceId}…需联网获取元数据，最长约 17 秒…');
+    }
+    final outcome = await organizer.organizeEntry(
+      entry,
+      targetRoot: navidromePath,
+    );
+    if (outcome.result != null) {
       // 补录整理时间（含解析后的元数据回写）
       await ref.read(worksIndexProvider).upsert(outcome.resolvedEntry
           .copyWith(organizedAt: DateTime.now().toIso8601String()));
     }
     ref.invalidate(worksLibraryProvider);
     ref.invalidate(unorganizedCountProvider);
-    return result;
+    return outcome;
   }
 
   /// 下载完成后的自动整理（路径未设置时弹目录选择器）
