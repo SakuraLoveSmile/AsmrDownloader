@@ -8,13 +8,18 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
 class AsmrApi {
-  final Dio _apiDio = Dio();
+  final Dio _apiDio;
+
+  DioException? _lastDioException;
+  static DioException? _lastDescribedDioException;
+  static String _lastApiChannel = '';
 
   /// 全局速率限制器：控制任意两次 API 请求间至少间隔 minInterval。
   /// 仅包裹 _requestWithRetry 内的实际网络请求，不影响下载等大流量传输。
   final RateLimiter? _rateLimiter;
 
   String _proxy = 'DIRECT';
+  String _apiChannel = '';
 
   String get proxy => _proxy;
 
@@ -31,17 +36,42 @@ class AsmrApi {
     Log.info('proxy set to: $proxy');
   }
 
-  AsmrApi({RateLimiter? rateLimiter}) : _rateLimiter = rateLimiter {
+  AsmrApi({RateLimiter? rateLimiter, Dio? dio})
+      : _apiDio = dio ?? Dio(),
+        _rateLimiter = rateLimiter {
     _apiDio.options
-      ..connectTimeout = Duration(seconds: 10)
+      ..connectTimeout = Duration(seconds: 5)
       ..sendTimeout = Duration(seconds: 10)
       ..receiveTimeout = Duration(seconds: 15);
   }
 
   void setApiChannel(String apiChannel) {
+    _apiChannel = apiChannel;
     _apiDio.options.baseUrl = 'https://api.$apiChannel.com/api/';
 
     Log.info('api channel set to: $apiChannel');
+  }
+
+  /// 将最后一次 Dio 网络错误转换为用户可读的提示。
+  ///
+  /// 可选参数仅供调用方直接格式化指定错误；不传时使用最近一次请求记录。
+  static String describeLastError([
+    DioException? error,
+    String? apiChannel,
+  ]) {
+    final lastError = error ?? _lastDescribedDioException;
+    if (lastError == null) return '未知网络错误';
+
+    if (lastError.type == DioExceptionType.connectionTimeout ||
+        lastError.type == DioExceptionType.connectionError) {
+      final channel = apiChannel ?? _lastApiChannel;
+      return '无法连接当前 API 线路（${channel.isEmpty ? '未知' : channel}），'
+          '请切换线路或开启代理后重试';
+    }
+
+    return lastError.message?.isNotEmpty == true
+        ? lastError.message!
+        : lastError.toString();
   }
 
   /// Logs in the user and updates the authorization header.
@@ -74,19 +104,24 @@ class AsmrApi {
     int maxTry = 3,
   }) async {
     int tryCount = 0;
+    _lastDioException = null;
     while (tryCount < maxTry) {
       try {
         tryCount++;
         // 发出请求前先过速率限制（重试同样受控，保证对网站的总请求频率可预期）
-        final response =
-            await _rateLimiter?.gate(request) ?? await request();
+        final response = await _rateLimiter?.gate(request) ?? await request();
         Log.info('[$method] request to "$path" succeeded');
         return response;
       } on DioException catch (e) {
+        _lastDioException = e;
+        _lastDescribedDioException = e;
+        _lastApiChannel = _apiChannel;
         Log.warning('[$method] request to "$path" failed\n'
             'current try: $tryCount\n'
             'error: $e');
-        await Future.delayed(Duration(seconds: 3));
+        if (tryCount < maxTry) {
+          await Future.delayed(Duration(seconds: 1));
+        }
       } catch (e) {
         Log.error('[$method] request to "$path" failed\n'
             'current try: $tryCount\n'
@@ -311,9 +346,47 @@ class AsmrApi {
     return response?.data;
   }
 
+  /// 获取作品信息；网络重试耗尽时抛出可读错误，作品不存在仍返回 null。
+  Future<Map<String, dynamic>?> getWorkInfoOrThrow(String id) async {
+    try {
+      final data = await getWorkInfo(id);
+      if (data == null &&
+          (_lastDioException?.type == DioExceptionType.connectionTimeout ||
+              _lastDioException?.type == DioExceptionType.connectionError)) {
+        throw Exception(describeLastError(_lastDioException, _apiChannel));
+      }
+      return data;
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        throw Exception(describeLastError(e, _apiChannel));
+      }
+      rethrow;
+    }
+  }
+
   Future<List<dynamic>?> getTracks(String id) async {
     final response = await get<List<dynamic>>('tracks/$id');
     return response?.data;
+  }
+
+  /// 获取音轨；网络重试耗尽时抛出可读错误，作品不存在仍返回 null。
+  Future<List<dynamic>?> getTracksOrThrow(String id) async {
+    try {
+      final data = await getTracks(id);
+      if (data == null &&
+          (_lastDioException?.type == DioExceptionType.connectionTimeout ||
+              _lastDioException?.type == DioExceptionType.connectionError)) {
+        throw Exception(describeLastError(_lastDioException, _apiChannel));
+      }
+      return data;
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        throw Exception(describeLastError(e, _apiChannel));
+      }
+      rethrow;
+    }
   }
 
   Future<int?> tryGetContentLength(String url) async {

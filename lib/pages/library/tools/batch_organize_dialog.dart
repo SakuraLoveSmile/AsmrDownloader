@@ -168,6 +168,9 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         if (p?.currentSourceId.isNotEmpty == true)
           Text('当前：${p!.currentSourceId}',
               style: Theme.of(context).textTheme.bodyMedium),
+        if (p?.statusMessage.isNotEmpty == true)
+          Text(p!.statusMessage,
+              style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         Flexible(
           child: _buildResultList(p?.results ?? const []),

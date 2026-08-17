@@ -167,15 +167,20 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     final ui = ref.read(uiServiceProvider);
     var ok = 0;
     var fail = 0;
+    final metadataNotes = <String>{};
     for (final item in items) {
-      final result = await ui.organizeWorkFor(item, pickPathIfEmpty: true);
-      if (result != null) {
+      final outcome = await ui.organizeWorkFor(item, pickPathIfEmpty: true);
+      if (outcome?.result != null) {
         ok++;
+        final note = outcome?.metadataNote;
+        if (note != null && note.isNotEmpty) metadataNotes.add(note);
       } else {
         fail++;
       }
     }
-    ui.showSnack('整理所选完成：成功 $ok，失败 $fail');
+    final noteSuffix =
+        metadataNotes.isEmpty ? '' : '；${metadataNotes.join('；')}';
+    ui.showSnack('整理所选完成：成功 $ok，失败 $fail$noteSuffix');
     if (mounted) setState(_selected.clear);
   }
 
@@ -353,11 +358,14 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
             icon: Icons.library_music_outlined,
             tooltip: '整理到 Navidrome',
             onTap: () async {
-              final result =
+              final outcome =
                   await ui.organizeWorkFor(item, pickPathIfEmpty: true);
+              final result = outcome?.result;
               if (result != null) {
+                final note = outcome?.metadataNote;
+                final suffix = note == null ? '' : '；$note';
                 ui.showSnack(
-                    '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
+                    '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个$suffix');
               } else {
                 ui.showSnack('整理未执行（未设置整理路径或目录缺失）');
               }

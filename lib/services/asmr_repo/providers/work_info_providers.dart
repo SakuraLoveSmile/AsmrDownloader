@@ -31,7 +31,7 @@ final workInfoProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
 
   Log.info('fetch workInfo, id: $id');
   final api = ref.watch(asmrApiProvider);
-  final data = await api.getWorkInfo(id);
+  final data = await api.getWorkInfoOrThrow(id);
   if (data != null && sourceId.isNotEmpty) {
     await cache.saveWorkInfo(sourceId, data);
   }

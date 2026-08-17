@@ -314,6 +314,7 @@ void main() {
       expect(result.cancelled, false);
       expect(result.results.length, 3);
       expect(progressEvents.length, greaterThanOrEqualTo(4)); // 每项 + 结尾
+      expect(progressEvents.first.statusMessage, '整理文件中…');
 
       // 成功项已记录 organizedAt
       expect((await index.get('RJ00001'))!.organizedAt, isNotNull);
@@ -468,6 +469,32 @@ void main() {
 
       expect(result.success, 1);
       expect(result.failed, 0);
+    });
+
+    test('circle 为空时推送元数据阶段并附带降级原因', () async {
+      final container = makeContainer(apiThrows: true);
+      addTearDown(container.dispose);
+      final source = entry('RJ00005');
+      await index.upsert(WorkEntry(
+        sourceId: source.sourceId,
+        dlPath: source.dlPath,
+        dirName: source.dirName,
+        title: source.title,
+        cvNames: source.cvNames,
+      ));
+
+      final progressEvents = <BatchProgress>[];
+      final result = await container.read(organizeServiceProvider).organizeAll(
+        targetRoot: targetRoot.path,
+        onlyUnorganized: true,
+        onProgress: progressEvents.add,
+        isCancelled: () => false,
+      );
+
+      expect(result.success, 1);
+      expect(progressEvents.first.statusMessage, '获取元数据中…');
+      expect(result.results.single.message, contains('元数据获取失败'));
+      expect(result.results.single.message, contains('network error'));
     });
 
     test('非 RJ 目录、位数不足、隐藏目录不识别', () async {
@@ -715,6 +742,8 @@ void main() {
           );
 
       expect(outcome.resolvedEntry.circleName, isEmpty);
+      expect(outcome.metadataNote, contains('元数据获取失败'));
+      expect(outcome.metadataNote, contains('network error'));
       expect(
         File(p.join(
           targetRoot.path,

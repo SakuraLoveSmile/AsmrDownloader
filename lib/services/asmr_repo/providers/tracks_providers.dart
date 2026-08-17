@@ -27,7 +27,7 @@ final rawTracksProvider = FutureProvider<List<dynamic>?>((ref) async {
 
   Log.info('fetch tracks, id: $id');
   final api = ref.watch(asmrApiProvider);
-  final data = await api.getTracks(id);
+  final data = await api.getTracksOrThrow(id);
   if (data != null && sourceId.isNotEmpty) {
     await cache.saveTracks(sourceId, data);
   }
