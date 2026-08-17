@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 
-import 'package:asmr_downloader/pages/library/tools/cache_dialog.dart';
+import 'package:asmr_downloader/pages/media_library/components/batch_cache_dialog.dart';
+import 'package:asmr_downloader/pages/media_library/components/cache_dialog.dart';
+import 'package:asmr_downloader/pages/media_library/components/complete_missing_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/cached_work_card.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:flutter/material.dart';
@@ -116,6 +118,14 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             onPressed: _openCacheManagement,
             icon: const Icon(Icons.settings_outlined, size: 17),
             label: const Text('缓存管理'),
+          ),
+          BatchCacheButton(
+            onClosed: () => ref.invalidate(cachedLibraryProvider),
+          ),
+          OutlinedButton.icon(
+            onPressed: _openCompleteMissing,
+            icon: const Icon(Icons.auto_fix_high_outlined, size: 17),
+            label: const Text('补全缺失'),
           ),
         ],
       ),
@@ -255,6 +265,14 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     await showDialog<void>(
       context: context,
       builder: (_) => const CacheDialog(),
+    );
+    if (mounted) ref.invalidate(cachedLibraryProvider);
+  }
+
+  Future<void> _openCompleteMissing() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const CompleteMissingDialog(),
     );
     if (mounted) ref.invalidate(cachedLibraryProvider);
   }
