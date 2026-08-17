@@ -235,6 +235,19 @@ void main() {
       expect(adapter.headersList[0]['authorization'], 'Bearer ghp_invalid');
       expect(adapter.headersList[1].containsKey('authorization'), isFalse);
     });
+
+    test('连接失败 → 提示带底层原因（非笼统网络错误）', () async {
+      final svc = UpdateService(
+        apiDio: Dio()
+          ..httpClientAdapter =
+              _ThrowingAdapter(SocketException('Connection refused')),
+      );
+      await expectLater(
+        svc.checkForUpdate('0.8.0'),
+        throwsA(isA<UpdateCheckException>().having(
+            (e) => e.message, 'message', contains('Connection refused'))),
+      );
+    });
   });
 
   group('evaluateRelease 缓存判定', () {
@@ -546,5 +559,21 @@ class _SequenceAdapter implements HttpClientAdapter {
     // 与真实 GitHub API 一致：JSON 响应带 content-type
     resp.headers[Headers.contentTypeHeader] = [Headers.jsonContentType];
     return resp;
+  }
+}
+
+/// 直接抛底层异常的适配器（模拟连接失败/超时等）。
+class _ThrowingAdapter implements HttpClientAdapter {
+  _ThrowingAdapter(this.error);
+
+  final Object error;
+
+  @override
+  void close({bool force = true}) {}
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    throw error;
   }
 }

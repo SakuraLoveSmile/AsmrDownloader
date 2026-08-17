@@ -583,6 +583,7 @@ class ChickenRiceEngineService {
   /// Release 获取失败的可读原因；null = 沿用默认网络提示。
   /// GitHub 匿名限额 60 次/小时/IP，共享代理出口时常触发 403 限流，
   /// 此时重试无用，需等限流窗口过去（分卷/模型下载不受影响）。
+  /// 网络层错误带底层原因（连接被拒/超时等），便于定位。
   static String? _releaseFetchError(DioException e) {
     final status = e.response?.statusCode;
     if (status == 401) {
@@ -594,7 +595,8 @@ class ChickenRiceEngineService {
           '共享代理出口时常见），请稍后再试；'
           '可在设置中配置 GitHub Token 提升限额';
     }
-    return null;
+    final detail = e.message ?? (e.error?.toString() ?? '');
+    return '网络错误（$detail），请检查网络/代理后重试';
   }
 
   Future<EngineManifest?> _fetchManifest(String url, CancelToken token) async {
