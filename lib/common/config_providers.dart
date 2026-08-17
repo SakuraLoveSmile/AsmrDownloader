@@ -42,6 +42,11 @@ final debugModeProvider = StateProvider<bool>((ref) => false);
 
 final proxyProvider = StateProvider<String>((ref) => 'DIRECT');
 
+/// GitHub API 认证 token（可选）：更新检查与引擎安装的 API 请求带认证后，
+/// 限额从匿名 60 次/小时/IP 提升到 5000 次/小时/账号，
+/// 共享代理出口 IP 也不会触发限流。空 = 匿名请求。
+final githubTokenProvider = StateProvider<String>((ref) => '');
+
 final apiChannelProvider = StateProvider<String>((ref) => 'asmr-200');
 
 /// 批量整理时仅处理未整理过的作品

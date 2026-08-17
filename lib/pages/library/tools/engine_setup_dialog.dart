@@ -33,6 +33,9 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
   EngineProbeResult? _probe;
   bool _probing = false;
 
+  /// 已点击「取消安装」、等待取消生效（解压等阶段需几秒才中断）
+  bool _canceling = false;
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +72,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
 
   Future<void> _startInstall() async {
     if (_installDir.isEmpty) return;
+    setState(() => _canceling = false);
     final ui = ref.read(uiServiceProvider);
     await ui.installEngine(
       installDir: _installDir,
@@ -77,6 +81,12 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
     );
     // 状态由 engineInstallStateProvider 驱动；完成后刷新探测
     if (mounted) await _refreshProbe();
+  }
+
+  void _requestCancelInstall() {
+    if (_canceling) return;
+    setState(() => _canceling = true);
+    ref.read(uiServiceProvider).cancelEngineInstall();
   }
 
   @override
@@ -202,8 +212,8 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
         ),
         if (busy)
           TextButton(
-            onPressed: ui.cancelEngineInstall,
-            child: const Text('取消安装'),
+            onPressed: _canceling ? null : _requestCancelInstall,
+            child: Text(_canceling ? '正在取消…' : '取消安装'),
           )
         else ...[
           if (canLinkExisting)

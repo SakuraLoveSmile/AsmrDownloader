@@ -6,10 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 final engineInstallStateProvider = StateProvider<EngineInstallState>(
     (ref) => EngineInstallState.idle);
 
-/// 引擎安装服务（代理设置随 proxyProvider 变化重建）
+/// 引擎安装服务（代理/Token 设置随配置变化重建）
 final chickenRiceEngineServiceProvider =
     Provider<ChickenRiceEngineService>((ref) {
   final svc = ChickenRiceEngineService();
   svc.proxy = ref.watch(proxyProvider);
+  svc.githubToken = ref.watch(githubTokenProvider);
   return svc;
 });

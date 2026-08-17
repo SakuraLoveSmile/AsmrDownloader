@@ -129,6 +129,18 @@ class UIService {
       ..read(asmrApiProvider).proxy = proxy;
   }
 
+  /// 保存 GitHub Token（空 = 清除）：持久化到配置，服务 provider
+  /// watch githubTokenProvider 后自动重建生效
+  void setGithubToken(String token) {
+    final t = token.trim();
+    if (t == ref.read(githubTokenProvider)) return;
+
+    ref
+      ..read(githubTokenProvider.notifier).state = t
+      ..read(configFileProvider).addOrUpdate({'githubToken': t});
+    Log.info('github token ${t.isEmpty ? 'cleared' : 'updated'}');
+  }
+
   void onDlCoverChanged(bool? value) {
     if (value == null) return;
 
