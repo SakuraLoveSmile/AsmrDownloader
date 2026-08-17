@@ -312,6 +312,8 @@ class UpdateService {
         releaseBody: body,
       );
     } on DioException catch (e) {
+      Log.warning('check update request failed\n'
+          'type: ${e.type}\nerror: $e');
       throw _toCheckException(e);
     } catch (e) {
       throw UpdateCheckException('检查更新失败：$e');
@@ -319,6 +321,7 @@ class UpdateService {
   }
 
   /// 把检查请求的网络错误转换为用户可读原因（区分速率限制）。
+  /// 网络层错误带底层原因（连接被拒/超时/TLS 等），便于定位。
   static UpdateCheckException _toCheckException(DioException e) {
     final status = e.response?.statusCode;
     if (status == 401) {
@@ -338,7 +341,24 @@ class UpdateService {
     if (status == 404) {
       return UpdateCheckException('未找到 Release（仓库尚未发布版本）');
     }
-    return UpdateCheckException('网络错误，请检查网络/代理后重试');
+    String hint;
+    switch (e.type) {
+      case DioExceptionType.connectionError:
+        hint = '连接失败';
+      case DioExceptionType.connectionTimeout:
+        hint = '连接超时';
+      case DioExceptionType.receiveTimeout:
+        hint = '响应超时';
+      case DioExceptionType.sendTimeout:
+        hint = '发送超时';
+      case DioExceptionType.badCertificate:
+        hint = 'TLS 证书校验失败（代理可能拦截了 HTTPS）';
+      default:
+        hint = '网络错误';
+    }
+    final detail = e.message ?? (e.error?.toString() ?? '');
+    return UpdateCheckException(
+        '$hint（$detail），请检查网络/代理后重试');
   }
 
   // ------------------------------------------------------------ download
