@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -55,25 +56,28 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
     switch (level) {
       case 'ERROR':
       case 'FATAL':
-        return Colors.redAccent;
+        return AppColors.danger;
       case 'WARN':
-        return Colors.amberAccent;
+        return AppColors.warning;
       case 'INFO':
-        return Colors.white70;
+        return Theme.of(context).colorScheme.onSurfaceVariant;
       default: // TRACE / DEBUG
-        return Colors.white38;
+        return Theme.of(context)
+            .colorScheme
+            .onSurfaceVariant
+            .withValues(alpha: 0.6);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
       animation: Log.buffer,
       builder: (context, _) {
         final entries = Log.buffer.entries;
         _scheduleScrollToEnd();
         return Dialog(
-          backgroundColor: const Color(0xFF1E1E22),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 860, maxHeight: 600),
             child: Padding(
@@ -86,31 +90,27 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
                       Expanded(
                         child: Text(
                           '应用日志（实时）· ${entries.length} 条',
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 13),
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant, fontSize: 13),
                         ),
                       ),
                       IconButton(
-                        onPressed: entries.isEmpty
-                            ? null
-                            : () => _copyAll(entries),
-                        icon: const Icon(Icons.copy_all_outlined,
-                            size: 16, color: Colors.white54),
+                        onPressed:
+                            entries.isEmpty ? null : () => _copyAll(entries),
+                        icon: const Icon(Icons.copy_all_outlined, size: 16),
                         tooltip: '复制全部日志',
                         visualDensity: VisualDensity.compact,
                       ),
                       IconButton(
                         onPressed:
                             entries.isEmpty ? null : () => Log.buffer.clear(),
-                        icon: const Icon(Icons.delete_outline,
-                            size: 17, color: Colors.white54),
+                        icon: const Icon(Icons.delete_outline, size: 17),
                         tooltip: '清空日志',
                         visualDensity: VisualDensity.compact,
                       ),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.close,
-                            size: 18, color: Colors.white54),
+                        icon: const Icon(Icons.close, size: 18),
                         tooltip: '关闭',
                         visualDensity: VisualDensity.compact,
                       ),
@@ -122,9 +122,10 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
                       width: double.infinity,
                       padding: const EdgeInsets.only(right: 8),
                       child: entries.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text('暂无日志',
-                                  style: TextStyle(color: Colors.white38)),
+                                  style: TextStyle(
+                                      color: scheme.onSurfaceVariant)),
                             )
                           : NotificationListener<ScrollUpdateNotification>(
                               // 用户手动上滑 → 暂停跟随；滚回底部 → 恢复跟随
@@ -144,8 +145,8 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
                                 itemBuilder: (_, i) {
                                   final e = entries[i];
                                   return Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 1),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 1),
                                     child: SelectableText(
                                       e.format(),
                                       style: TextStyle(

@@ -160,68 +160,65 @@ class SearchBoxState extends ConsumerState<SearchBox> {
       onDragDone: _handleDrop,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        height: 50.0,
         decoration: BoxDecoration(
           color: _dragOver
               ? scheme.primary.withValues(alpha: 0.06)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Padding(
-          padding: const EdgeInsets.only(left: 20.0),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 280,
-                child: TextField(
-                  controller: _controller,
-                  decoration: InputDecoration(
-                    hintText: '输入sourceId或作品页URL',
-                    border: invalid ? errorBorder : null,
-                    enabledBorder: invalid ? errorBorder : null,
-                    focusedBorder:
-                        invalid ? errorBorder.copyWith(borderSide: BorderSide(color: scheme.error, width: 1.4)) : null,
-                  ),
-                  onChanged: (value) => setState(() => _inputText = value),
-                  onSubmitted:
-                      (_) => canSubmit ? _searchInput(_inputText) : null,
+        child: Row(
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 160, maxWidth: 280),
+              child: TextField(
+                controller: _controller,
+                decoration: InputDecoration(
+                  hintText: '输入sourceId或作品页URL',
+                  border: invalid ? errorBorder : null,
+                  enabledBorder: invalid ? errorBorder : null,
+                  focusedBorder: invalid
+                      ? errorBorder.copyWith(
+                          borderSide:
+                              BorderSide(color: scheme.error, width: 1.4))
+                      : null,
                 ),
+                onChanged: (value) => setState(() => _inputText = value),
+                onSubmitted: (_) => canSubmit ? _searchInput(_inputText) : null,
               ),
-              Padding(
-                padding: const EdgeInsets.only(left: 5.0),
-                child: IconButton(
-                  onPressed: canSubmit ? () => _searchInput(_inputText) : null,
-                  icon: Icon(Icons.search,
-                      color: invalid ? scheme.error : null),
-                  tooltip: '搜索',
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-              IconButton(
-                onPressed: downloading ? null : _refresh,
-                icon: const Icon(Icons.refresh),
-                tooltip: '强制刷新（重新请求元数据并更新缓存）',
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 5.0),
+              child: IconButton(
+                onPressed: canSubmit ? () => _searchInput(_inputText) : null,
+                icon: Icon(Icons.search, color: invalid ? scheme.error : null),
+                tooltip: '搜索',
                 visualDensity: VisualDensity.compact,
               ),
-              IconButton(
-                onPressed: downloading
-                    ? null
-                    : () async {
-                        final newSearchText =
-                            await ref.read(uiServiceProvider).pasteAndSearch();
-                        if (newSearchText != null && mounted) {
-                          setState(() {
-                            _controller.text = newSearchText;
-                            _inputText = newSearchText;
-                          });
-                        }
-                      },
-                icon: const Icon(Icons.content_paste_go),
-                tooltip: '粘贴并搜索',
-                visualDensity: VisualDensity.compact,
-              ),
-            ],
-          ),
+            ),
+            IconButton(
+              onPressed: downloading ? null : _refresh,
+              icon: const Icon(Icons.refresh),
+              tooltip: '强制刷新（重新请求元数据并更新缓存）',
+              visualDensity: VisualDensity.compact,
+            ),
+            IconButton(
+              onPressed: downloading
+                  ? null
+                  : () async {
+                      final newSearchText =
+                          await ref.read(uiServiceProvider).pasteAndSearch();
+                      if (newSearchText != null && mounted) {
+                        setState(() {
+                          _controller.text = newSearchText;
+                          _inputText = newSearchText;
+                        });
+                      }
+                    },
+              icon: const Icon(Icons.content_paste_go),
+              tooltip: '粘贴并搜索',
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
         ),
       ),
     );

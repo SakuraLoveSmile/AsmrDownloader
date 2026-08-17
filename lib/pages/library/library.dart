@@ -7,6 +7,7 @@ import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
 import 'package:asmr_downloader/pages/library/tools/transcribe_status_indicator.dart';
 import 'package:asmr_downloader/pages/library/work_list.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/ui/toolbar_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,7 +33,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       children: [
         const SizedBox(height: 8),
         // 工具栏第一行：整理路径 + 自动整理 + AI 字幕配置
-        _ToolbarRow(
+        AppToolbarRow(
           children: [
             NavidromePathPicker(),
             AutoOrganizeCheck(),
@@ -41,7 +42,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         ),
         const SizedBox(height: 8),
         // 工具栏第二行：批量整理 / 注册表 / 缓存 / 字幕
-        _ToolbarRow(
+        AppToolbarRow(
           children: [
             OrganizeAllButton(),
             WorksIndexButton(),
@@ -65,30 +66,5 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       return;
     }
     listState.transcribeSelected();
-  }
-}
-
-/// 工具条行：浅灰底圆角容器，内部横向可滚动。
-class _ToolbarRow extends StatelessWidget {
-  const _ToolbarRow({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: children),
-        ),
-      ),
-    );
   }
 }

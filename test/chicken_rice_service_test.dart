@@ -294,7 +294,7 @@ void main() {
         ChickenRiceConfig(scriptPath: tmp.path),
         skipPlatformCheck: true,
         runner: _FakeRunner((cmd, env) => _FakeHandle(
-              stdoutLines: ['  VAD 处理中 3/120 (2.5%) on cuda'],
+              stdoutLines: ['VAD进度：3/120 块（2.5%） on cuda'],
               exitCode: 1,
             )),
       );
@@ -347,6 +347,48 @@ void main() {
       expect(received.first.done, 3);
       expect(received.first.total, 8);
       expect(received.first.currentFile, 'y.mp3');
+      tmp.deleteSync();
+    });
+
+    test('文件级进度后 VAD 不覆盖总进度，只更新当前文件子进度', () async {
+      final tmp = createTempScript('infer.bat');
+      final received = <TranscribeProgress>[];
+      final svc = ChickenRiceService(
+        ChickenRiceConfig(scriptPath: tmp.path),
+        skipPlatformCheck: true,
+        runner: _FakeRunner((cmd, env) => _FakeHandle(
+              stderrLines: [
+                '正在处理（translate，1/8）：D:\\asmr\\RJ1\\e01.wav',
+                'VAD进度：45/100 块（45%）',
+              ],
+            )),
+      );
+      final result = await svc.run(
+        dirs: ['/d'],
+        onProgress: received.add,
+      );
+      expect(result.success, isTrue);
+      expect(received, hasLength(2));
+      expect(received.last.done, 1);
+      expect(received.last.total, 8);
+      expect(received.last.currentFile, 'e01.wav');
+      expect(received.last.subDone, 45);
+      expect(received.last.subTotal, 100);
+      tmp.deleteSync();
+    });
+
+    test('非 VAD 比例文本不会触发临时进度', () async {
+      final tmp = createTempScript('infer.bat');
+      final received = <TranscribeProgress>[];
+      final svc = ChickenRiceService(
+        ChickenRiceConfig(scriptPath: tmp.path),
+        skipPlatformCheck: true,
+        runner: _FakeRunner((cmd, env) => _FakeHandle(
+              stdoutLines: ['日期 2026/08/17', '下载比例 1/2'],
+            )),
+      );
+      await svc.run(dirs: ['/d'], onProgress: received.add);
+      expect(received, isEmpty);
       tmp.deleteSync();
     });
 

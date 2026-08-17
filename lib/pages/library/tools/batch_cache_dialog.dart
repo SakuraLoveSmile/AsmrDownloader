@@ -135,9 +135,8 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
             for (final ms in const [500, 1000, 2000, 3000, 5000])
               DropdownMenuItem(
                 value: Duration(milliseconds: ms),
-                child: Text(ms < 1000
-                    ? '${ms / 1000} 秒 / 个'
-                    : '${ms ~/ 1000} 秒 / 个'),
+                child: Text(
+                    ms < 1000 ? '${ms / 1000} 秒 / 个' : '${ms ~/ 1000} 秒 / 个'),
               ),
           ],
           onChanged: (v) => setState(() => _interval = v),
@@ -151,8 +150,7 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
         ),
         if (_error != null) ...[
           const SizedBox(height: 8),
-          Text(_error!,
-              style: TextStyle(color: theme.colorScheme.error)),
+          Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
         ],
       ],
     );
@@ -182,8 +180,7 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
         ),
         if (p?.currentSourceId.isNotEmpty == true) ...[
           const SizedBox(height: 4),
-          Text('当前：${p!.currentSourceId}',
-              style: theme.textTheme.bodySmall),
+          Text('当前：${p!.currentSourceId}', style: theme.textTheme.bodySmall),
         ],
       ],
     );
@@ -255,15 +252,12 @@ class BatchCacheButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 20.0),
-      child: OutlinedButton(
-        onPressed: () => showDialog(
-          context: context,
-          builder: (_) => const BatchCacheDialog(),
-        ),
-        child: const Text('主动缓存'),
+    return OutlinedButton(
+      onPressed: () => showDialog(
+        context: context,
+        builder: (_) => const BatchCacheDialog(),
       ),
+      child: const Text('主动缓存'),
     );
   }
 }

@@ -342,23 +342,21 @@ void main() {
   });
 
   group('更新脚本生成', () {
-    test('Windows 脚本：退出码等 PID（60s 超时）→ xcopy → 重启 → 自删', () {
-      final script = UpdateService.buildWindowsScript(
+    test('Windows VBS 脚本：WMI 等 PID → 隐藏 xcopy → 重启 → 自删', () {
+      final script = UpdateService.buildWindowsVbsScript(
           4242, r'C:\tmp\staging', r'C:\app', 'AsmrDownloader.exe');
-      expect(script, contains('set "PID=4242"'));
-      expect(script, contains(r'set "STAGING=C:\tmp\staging"'));
-      expect(script, contains('set "INSTALL=C:\\app"'));
-      expect(script, contains('set "EXE=AsmrDownloader.exe"'));
-      // 退出码判断进程存活（不用 find 文本匹配，避免等待死循环）
-      expect(script, contains('tasklist /FI "PID eq %PID%" >nul 2>&1'));
-      expect(script, contains('if errorlevel 1 goto replace'));
-      // 超时保护：最多等待 30×2s，窗口不会永久挂着
-      expect(script, contains('set /a WAIT=0'));
-      expect(script, contains('if %WAIT% GEQ 30 goto replace'));
-      expect(script, contains('xcopy "%STAGING%\\*" "%INSTALL%\\" /E /Y'));
-      expect(script, contains('start "" "%INSTALL%\\%EXE%"'));
-      expect(script, contains('del "%~f0"'));
-      expect(script, contains('exit /b 0'));
+      expect(script, contains('WScript.Arguments(0)'));
+      expect(script, contains('WScript.Arguments(1)'));
+      expect(script, contains('WScript.Arguments(2)'));
+      expect(script, contains('WScript.Arguments(3)'));
+      expect(script, contains('Win32_Process'));
+      expect(script, contains('WScript.Sleep 1000'));
+      expect(script, contains('shell.Run "cmd.exe /c xcopy'));
+      expect(script, contains(', 0, True'));
+      expect(script, contains('shell.Run Quote(installExe), 1, False'));
+      expect(script, contains('fso.DeleteFile WScript.ScriptFullName'));
+      expect(script, isNot(contains('ping')));
+      expect(script, isNot(contains('tasklist')));
     });
 
     test('macOS 脚本：等 PID 退出 → 删旧 .app → 移入新 .app → open', () {
@@ -407,11 +405,11 @@ void main() {
       expect(ok, isTrue);
       expect(launched, hasLength(1));
       final scriptPath = Platform.isWindows
-          ? launched.single.$2.last // cmd /c <script>
+          ? launched.single.$2.first // wscript.exe <script> <args>
           : launched.single.$2.single; // /bin/sh <script>
-      expect(launched.single.$1, Platform.isWindows ? 'cmd' : '/bin/sh');
+      expect(launched.single.$1,
+          Platform.isWindows ? 'wscript.exe' : '/bin/sh');
       final script = File(scriptPath).readAsStringSync();
-      expect(script, contains('PID="$pid"'));
       if (Platform.isMacOS) {
         // 旧 .app = 当前进程可执行文件上溯 3 级
         final oldApp =
@@ -423,7 +421,12 @@ void main() {
                 '${p.join(tmp.path, 'staging', 'AsmrDownloader.app')}"'));
       } else if (Platform.isWindows) {
         final installDir = p.dirname(Platform.resolvedExecutable);
-        expect(script, contains('INSTALL=$installDir'));
+        expect(launched.single.$2, hasLength(5));
+        expect(launched.single.$2[1], '$pid');
+        expect(launched.single.$2[2], p.join(tmp.path, 'staging'));
+        expect(launched.single.$2[3], installDir);
+        expect(launched.single.$2[4], p.basename(Platform.resolvedExecutable));
+        expect(script, contains('WScript.Arguments'));
         expect(script, contains('xcopy'));
       }
       expect(exitCode, 0);

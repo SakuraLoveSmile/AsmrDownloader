@@ -2,6 +2,7 @@ import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/engine/chicken_rice_engine_service.dart';
 import 'package:asmr_downloader/services/engine/engine_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -116,7 +117,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
               '自动下载 ChickenRice 运行时（MIT 开源，约 3.3 GB）与 '
               'Whisper 模型（约 3.1 GB），装到所选目录后自动配置，'
               '无需手动下载和选择脚本。已下载部分支持断点续传。',
-              style: theme.textTheme.bodySmall!.copyWith(
+              style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
@@ -149,10 +150,8 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
                     initialSelection: _task,
                     label: const Text('任务'),
                     dropdownMenuEntries: const [
-                      DropdownMenuEntry(
-                          value: 'translate', label: '翻译（日→中）'),
-                      DropdownMenuEntry(
-                          value: 'transcribe', label: '转录（日文原文）'),
+                      DropdownMenuEntry(value: 'translate', label: '翻译（日→中）'),
+                      DropdownMenuEntry(value: 'transcribe', label: '转录（日文原文）'),
                     ],
                     onSelected: (v) {
                       if (v != null) setState(() => _task = v);
@@ -171,7 +170,6 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
                         labelText: '安装目录',
                         hintText: '选择剩余空间 ≥ 12 GB 的目录',
                         isDense: true,
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -187,7 +185,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
               Text(
                 '无纯 CPU 发行包；CPU 用户请在「AI字幕」处手动选择外部脚本。'
                 'AMD 变体需安装对应 ROCm 驱动。',
-                style: theme.textTheme.bodySmall!.copyWith(
+                style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
@@ -199,8 +197,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
             ],
             if (!busy && state.phase == EnginePhase.canceled) ...[
               const SizedBox(height: 8),
-              Text(state.error ?? '已取消',
-                  style: theme.textTheme.bodySmall),
+              Text(state.error ?? '已取消', style: theme.textTheme.bodySmall),
             ],
           ],
         ),
@@ -229,8 +226,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
             ),
           FilledButton(
             onPressed: _installDir.isEmpty ? null : _startInstall,
-            child: Text(
-                _probe?.installed == true ? '重新安装 / 补下模型' : '开始安装'),
+            child: Text(_probe?.installed == true ? '重新安装 / 补下模型' : '开始安装'),
           ),
         ],
       ],
@@ -243,7 +239,9 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
       return const Row(
         children: [
           SizedBox(
-              width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2)),
           SizedBox(width: 8),
           Text('正在检测已安装的引擎…'),
         ],
@@ -258,7 +256,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
         Icon(
           modelOk ? Icons.check_circle : Icons.warning_amber,
           size: 16,
-          color: modelOk ? Colors.greenAccent : Colors.orangeAccent,
+          color: modelOk ? AppColors.success : AppColors.warning,
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -281,9 +279,8 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
   }
 
   Widget _progressView(ThemeData theme, EngineInstallState state) {
-    final stepInfo = state.stepCount > 0
-        ? '（${state.stepIndex}/${state.stepCount}）'
-        : '';
+    final stepInfo =
+        state.stepCount > 0 ? '（${state.stepIndex}/${state.stepCount}）' : '';
     final bytesInfo = state.total > 0
         ? ' · ${_fmtSize(state.received)} / ${_fmtSize(state.total)}'
         : '';
@@ -293,12 +290,11 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
         Text('${state.message}$stepInfo$bytesInfo',
             style: theme.textTheme.bodyMedium),
         const SizedBox(height: 8),
-        LinearProgressIndicator(
-            value: state.total > 0 ? state.fraction : null),
+        LinearProgressIndicator(value: state.total > 0 ? state.fraction : null),
         const SizedBox(height: 8),
         Text(
           '关闭窗口不中断安装，可随时重新打开查看进度。',
-          style: theme.textTheme.bodySmall!.copyWith(
+          style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ),

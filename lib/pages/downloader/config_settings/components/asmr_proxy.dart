@@ -12,13 +12,10 @@ class AsmrProxy extends ConsumerWidget {
     final proxy = ref.watch(proxyProvider);
     return Tooltip(
       message: '检测并使用系统代理。asmr-100 需要代理，asmr-200/300 不需要，一般无需勾选',
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: LabeledCheckbox(
-          label: '启用代理',
-          value: proxy != 'DIRECT',
-          onChanged: ref.read(uiServiceProvider).onProxyChanged,
-        ),
+      child: LabeledCheckbox(
+        label: '启用代理',
+        value: proxy != 'DIRECT',
+        onChanged: ref.read(uiServiceProvider).onProxyChanged,
       ),
     );
   }

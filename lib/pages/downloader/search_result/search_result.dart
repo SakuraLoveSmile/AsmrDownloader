@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 class SearchResult extends StatelessWidget {
   const SearchResult({super.key});
-  static const _horizontalPadding = 20.0;
+  static const _horizontalPadding = 12.0;
 
   @override
   Widget build(BuildContext context) {
@@ -13,8 +13,14 @@ class SearchResult extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          WorkInfo(horizontalPadding: _horizontalPadding),
-          TracksView(horizontalPadding: _horizontalPadding),
+          Expanded(
+            flex: 2,
+            child: WorkInfo(horizontalPadding: _horizontalPadding),
+          ),
+          Expanded(
+            flex: 3,
+            child: TracksView(horizontalPadding: _horizontalPadding),
+          ),
         ],
       ),
     );

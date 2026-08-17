@@ -10,6 +10,7 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/log_
 import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
+import 'package:asmr_downloader/ui/toolbar_row.dart';
 import 'package:flutter/material.dart';
 
 /// 下载页：只负责「搜索 + 下载」。
@@ -26,7 +27,7 @@ class Downloader extends StatelessWidget {
       children: [
         const SizedBox(height: 8),
         // 第一行：搜索 + 下载路径 + API channel
-        _ToolbarRow(
+        AppToolbarRow(
           children: [
             SearchBox(),
             DownloadPathPicker(),
@@ -35,7 +36,7 @@ class Downloader extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         // 第二行：下载相关配置
-        _ToolbarRow(
+        AppToolbarRow(
           children: [
             DlCoverCheck(),
             DownloadThreadsSelector(),
@@ -47,34 +48,9 @@ class Downloader extends StatelessWidget {
             AsmrProxy(),
           ],
         ),
-        SizedBox(height: 20),
+        const SizedBox(height: 8),
         SearchResult(),
       ],
-    );
-  }
-}
-
-/// 工具条行：浅灰底圆角容器，内部横向可滚动。
-class _ToolbarRow extends StatelessWidget {
-  const _ToolbarRow({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: children),
-        ),
-      ),
     );
   }
 }

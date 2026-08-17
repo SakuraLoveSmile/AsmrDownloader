@@ -14,19 +14,14 @@ class OrganizeAllButton extends ConsumerWidget {
     final downloading =
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
 
-    return SizedBox(
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: OutlinedButton(
-          onPressed: downloading
-              ? null
-              : () => showDialog(
-                    context: context,
-                    builder: (_) => const BatchOrganizeDialog(),
-                  ),
-          child: const Text('整理全部'),
-        ),
-      ),
+    return OutlinedButton(
+      onPressed: downloading
+          ? null
+          : () => showDialog(
+                context: context,
+                builder: (_) => const BatchOrganizeDialog(),
+              ),
+      child: const Text('整理全部'),
     );
   }
 }
@@ -37,17 +32,12 @@ class WorksIndexButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return SizedBox(
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: OutlinedButton(
-          onPressed: () => showDialog(
-            context: context,
-            builder: (_) => const WorksIndexDialog(),
-          ),
-          child: const Text('注册表'),
-        ),
+    return OutlinedButton(
+      onPressed: () => showDialog(
+        context: context,
+        builder: (_) => const WorksIndexDialog(),
       ),
+      child: const Text('注册表'),
     );
   }
 }

@@ -17,24 +17,20 @@ class ParallelDownloadsSelector extends ConsumerWidget {
     return Tooltip(
       message: '同时下载的文件数。并行时会自动压低单文件线程，'
           '确保总连接数不超过 $maxTotalDownloadConnections',
-      child: Padding(
-        padding: const EdgeInsets.only(left: 20.0),
-        child: Row(
-          children: [
-            const Text('并行文件数'),
-            const SizedBox(width: 6),
-            DropdownMenu<int>(
-              initialSelection: value,
-              dropdownMenuEntries: parallelDownloadOptions
-                  .map((option) => DropdownMenuEntry<int>(
-                      value: option,
-                      label: option == 1 ? '单文件' : '$option 文件'))
-                  .toList(),
-              onSelected:
-                  ref.read(uiServiceProvider).onParallelDownloadCountChanged,
-            ),
-          ],
-        ),
+      child: Row(
+        children: [
+          const Text('并行文件数'),
+          const SizedBox(width: 6),
+          DropdownMenu<int>(
+            initialSelection: value,
+            dropdownMenuEntries: parallelDownloadOptions
+                .map((option) => DropdownMenuEntry<int>(
+                    value: option, label: option == 1 ? '单文件' : '$option 文件'))
+                .toList(),
+            onSelected:
+                ref.read(uiServiceProvider).onParallelDownloadCountChanged,
+          ),
+        ],
       ),
     );
   }

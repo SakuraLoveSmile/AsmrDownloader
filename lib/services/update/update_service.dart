@@ -325,13 +325,11 @@ class UpdateService {
   static UpdateCheckException _toCheckException(DioException e) {
     final status = e.response?.statusCode;
     if (status == 401) {
-      return UpdateCheckException(
-          'GitHub Token 无效或已过期，请在设置中清除或更换');
+      return UpdateCheckException('GitHub Token 无效或已过期，请在设置中清除或更换');
     }
     final remaining = e.response?.headers.value('x-ratelimit-remaining');
     if ((status == 403 && remaining == '0') || status == 429) {
-      return UpdateCheckException(
-          'GitHub API 速率限制（未认证限额 60 次/小时/IP，'
+      return UpdateCheckException('GitHub API 速率限制（未认证限额 60 次/小时/IP，'
           '共享代理出口时常见），请稍后再试；'
           '可在设置中配置 GitHub Token 提升限额');
     }
@@ -357,8 +355,7 @@ class UpdateService {
         hint = '网络错误';
     }
     final detail = e.message ?? (e.error?.toString() ?? '');
-    return UpdateCheckException(
-        '$hint（$detail），请检查网络/代理后重试');
+    return UpdateCheckException('$hint（$detail），请检查网络/代理后重试');
   }
 
   // ------------------------------------------------------------ download
@@ -440,7 +437,13 @@ class UpdateService {
 
       // 3) 启动脚本（detached），退出应用交给脚本接管
       final launched = Platform.isWindows
-          ? await _scriptLauncher('cmd', ['/c', scriptPath])
+          ? await _scriptLauncher('wscript.exe', [
+              scriptPath,
+              '$pid',
+              stagingDir,
+              p.dirname(exePath),
+              p.basename(exePath),
+            ])
           : await _scriptLauncher('/bin/sh', [scriptPath]);
       if (!launched) {
         Log.error('launch updater script failed: $scriptPath');
@@ -466,9 +469,9 @@ class UpdateService {
         Log.error('staging dir is empty: $stagingDir');
         return null;
       }
-      final scriptPath = p.join(scriptDir, 'asmr_updater.bat');
+      final scriptPath = p.join(scriptDir, 'asmr_updater.vbs');
       await File(scriptPath).writeAsString(
-          buildWindowsScript(pid, stagingDir, installDir, exeName));
+          buildWindowsVbsScript(pid, stagingDir, installDir, exeName));
       return scriptPath;
     }
     if (Platform.isMacOS) {
@@ -492,35 +495,48 @@ class UpdateService {
     return null;
   }
 
-  /// Windows 更新脚本：等 PID 退出（最多 60 秒）→ xcopy 覆盖（不删多余文件，
-  /// 避免误删应用目录内的用户配置）→ 重启 → 自删。
+  /// Windows 更新脚本：通过 wscript.exe 无窗口运行，等 PID 退出（最多
+  /// 60 秒）→ 隐藏 xcopy 覆盖 → 重启 → 自删。
   ///
-  /// - 用 tasklist 退出码判断进程存活（不用 find 匹配输出文本，
-  ///   避免异常输出导致等待死循环、cmd 窗口常驻关不掉）；
-  /// - WAIT 计数超时后强制继续替换，窗口不会永久挂着；
-  /// - ping 用作延时（detached 无控制台时 timeout 命令不可用）。
-  static String buildWindowsScript(
+  /// 路径不嵌入脚本：Dart 以 UTF-16 命令行参数传给 WSH，避免中文/日文
+  /// 安装路径经过 VBS 源文件代码页转码。保留参数列表是为了让该方法
+  /// 继续作为脚本内容的纯单元测试入口。
+  static String buildWindowsVbsScript(
       int pid, String stagingDir, String installDir, String exeName) {
-    return '@echo off\r\n'
-        'rem AsmrDownloader auto updater: wait exit, replace files, restart\r\n'
-        'set "PID=$pid"\r\n'
-        'set "STAGING=$stagingDir"\r\n'
-        'set "INSTALL=$installDir"\r\n'
-        'set "EXE=$exeName"\r\n'
-        'set /a WAIT=0\r\n'
-        ':wait_exit\r\n'
-        'tasklist /FI "PID eq %PID%" >nul 2>&1\r\n'
-        'if errorlevel 1 goto replace\r\n'
-        'set /a WAIT+=1\r\n'
-        'if %WAIT% GEQ 30 goto replace\r\n'
-        'ping -n 2 127.0.0.1 >nul\r\n'
-        'goto wait_exit\r\n'
-        ':replace\r\n'
-        'xcopy "%STAGING%\\*" "%INSTALL%\\" /E /Y /Q >nul 2>&1\r\n'
-        'start "" "%INSTALL%\\%EXE%"\r\n'
-        'del "%~f0" >nul 2>&1\r\n'
-        'exit /b 0\r\n';
+    return 'Option Explicit\r\n'
+        'Dim shell, fso, processId, stagingDir, installDir, exeName\r\n'
+        'Dim processSet, query, installExe, i\r\n'
+        'Set shell = CreateObject("WScript.Shell")\r\n'
+        'Set fso = CreateObject("Scripting.FileSystemObject")\r\n'
+        'If WScript.Arguments.Count < 4 Then WScript.Quit 2\r\n'
+        'processId = WScript.Arguments(0)\r\n'
+        'stagingDir = WScript.Arguments(1)\r\n'
+        'installDir = WScript.Arguments(2)\r\n'
+        'exeName = WScript.Arguments(3)\r\n'
+        'For i = 1 To 60\r\n'
+        '  query = "SELECT ProcessId FROM Win32_Process WHERE ProcessId=" & processId\r\n'
+        '  Set processSet = Nothing\r\n'
+        '  On Error Resume Next\r\n'
+        '  Set processSet = GetObject("winmgmts:\\\\.\\root\\cimv2").ExecQuery(query)\r\n'
+        '  Err.Clear\r\n'
+        '  On Error GoTo 0\r\n'
+        '  If processSet Is Nothing Then Exit For\r\n'
+        '  If processSet.Count = 0 Then Exit For\r\n'
+        '  WScript.Sleep 1000\r\n'
+        'Next\r\n'
+        'shell.Run "cmd.exe /c xcopy " & Quote(stagingDir & "\\*") & " " & Quote(installDir & "\\") & " /E /Y /Q", 0, True\r\n'
+        'installExe = fso.BuildPath(installDir, exeName)\r\n'
+        'shell.Run Quote(installExe), 1, False\r\n'
+        'fso.DeleteFile WScript.ScriptFullName, True\r\n'
+        'Function Quote(value)\r\n'
+        '  Quote = Chr(34) & value & Chr(34)\r\n'
+        'End Function\r\n';
   }
+
+  /// Backwards-compatible alias for callers that used the old test helper.
+  static String buildWindowsScript(
+          int pid, String stagingDir, String installDir, String exeName) =>
+      buildWindowsVbsScript(pid, stagingDir, installDir, exeName);
 
   /// macOS 更新脚本：等 PID 退出 → 删旧 .app → 移入新 .app → open 重启。
   static String buildMacScript(int pid, String newApp, String oldApp) {
