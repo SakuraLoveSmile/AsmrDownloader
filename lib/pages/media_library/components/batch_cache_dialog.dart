@@ -248,15 +248,20 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
 
 /// 主动缓存按钮：打开主动缓存对话框。
 class BatchCacheButton extends ConsumerWidget {
-  const BatchCacheButton({super.key});
+  const BatchCacheButton({super.key, this.onClosed});
+
+  final VoidCallback? onClosed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return OutlinedButton(
-      onPressed: () => showDialog(
-        context: context,
-        builder: (_) => const BatchCacheDialog(),
-      ),
+      onPressed: () async {
+        await showDialog<void>(
+          context: context,
+          builder: (_) => const BatchCacheDialog(),
+        );
+        onClosed?.call();
+      },
       child: const Text('主动缓存'),
     );
   }

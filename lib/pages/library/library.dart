@@ -1,6 +1,4 @@
 import 'package:asmr_downloader/pages/library/tools/auto_organize_check.dart';
-import 'package:asmr_downloader/pages/library/tools/batch_cache_dialog.dart';
-import 'package:asmr_downloader/pages/library/tools/cache_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/chicken_rice_config_controls.dart';
 import 'package:asmr_downloader/pages/library/tools/navidrome_path_picker.dart';
 import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
@@ -12,7 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 作品库 / 文件管理页：
-/// 整理（Navidrome）、AI 字幕（ChickenRice）、歌词转换、缓存、注册表，
+/// 整理（Navidrome）、AI 字幕（ChickenRice）、歌词转换、注册表，
 /// 以及已下载作品列表（多选 + 行内操作）。
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -41,13 +39,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           ],
         ),
         const SizedBox(height: 8),
-        // 工具栏第二行：批量整理 / 注册表 / 缓存 / 字幕
+        // 工具栏第二行：批量整理 / 注册表 / 字幕
         AppToolbarRow(
           children: [
             OrganizeAllButton(),
             WorksIndexButton(),
-            CacheButton(),
-            BatchCacheButton(),
             TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
           ],
         ),

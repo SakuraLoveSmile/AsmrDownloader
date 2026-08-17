@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
+import 'package:asmr_downloader/services/cache/cache_complete_service.dart';
 import 'package:asmr_downloader/services/cache/cache_database.dart';
 import 'package:asmr_downloader/services/cache/cache_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,4 +21,9 @@ final forceRefreshProvider = StateProvider<bool>((ref) => false);
 /// 批量缓存服务（主动缓存：按标签/社团/CV 分页拉取 workInfo 写入缓存）
 final batchCacheServiceProvider = Provider<BatchCacheService>((ref) {
   return BatchCacheService(ref);
+});
+
+/// 缺失 tracks / 封面补全服务。
+final cacheCompleteServiceProvider = Provider<CacheCompleteService>((ref) {
+  return CacheCompleteService(ref);
 });
