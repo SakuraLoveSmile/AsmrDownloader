@@ -29,9 +29,10 @@ class _InitializationState extends ConsumerState<Initialization> {
     super.initState();
     // init
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      // startup search
+      // startup search：剪贴板里有 RJ 号时自动搜索；
+      // 剪贴板为普通文本/空时静默忽略，不弹「无效 sourceId」
       await Future.delayed(const Duration(milliseconds: PASTE_SEARCH_DELAY_MS));
-      ref.read(uiServiceProvider).pasteAndSearch();
+      ref.read(uiServiceProvider).pasteAndSearch(silent: true);
     });
   }
 

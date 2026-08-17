@@ -367,6 +367,56 @@ void main() {
       tmp.deleteSync(recursive: true);
     });
 
+    test('Token 无效（401）→ 自动降级匿名重试成功', () async {
+      final zipBytes = buildFakeZip();
+      final hash = sha256.convert(zipBytes).toString();
+      final releaseJson = json.encode({
+        'tag_name': 'vTEST',
+        'assets': [
+          {
+            'name':
+                '${ChickenRiceEngineService.assetBaseName('cu128')}.manifest',
+            'browser_download_url':
+                'https://fake.test/${ChickenRiceEngineService.assetBaseName('cu128')}.manifest',
+          }
+        ],
+      });
+      final manifestJson = json.encode({
+        'name': 'rt.zip',
+        'hash': hash,
+        'size': zipBytes.length,
+        'chunk_size': zipBytes.length,
+        'chunks': ['rt.zip.0000'],
+      });
+      // 第一次请求 401（带无效 token），随后匿名重试/后续请求均 200；
+      // 401 body 与真实 GitHub 一致为合法 JSON（dio 5.8 默认
+      // receiveDataWhenStatusError 会对错误响应做 JSON 解码）
+      final adapter = _SequenceAdapter([
+        ResponseBody.fromString('{"message":"Bad credentials"}', 401),
+        ResponseBody.fromString(releaseJson, 200),
+        ResponseBody.fromString(manifestJson, 200),
+        ResponseBody.fromString('[]', 200),
+      ]);
+      final svc = ChickenRiceEngineService(
+        downloader: _FakeDownloader(zipBytes),
+        apiDio: Dio()..httpClientAdapter = adapter,
+        freeSpaceBytes: (dir) async => 1 << 62,
+      );
+      svc.githubToken = 'ghp_invalid';
+      final tmp = Directory.systemTemp.createTempSync('eng_401_retry');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: (_) {},
+      );
+      expect(exe, isNotNull);
+      // 第一次带无效 token，匿名重试起不再携带
+      expect(adapter.headersList[0]['authorization'], 'Bearer ghp_invalid');
+      expect(adapter.headersList[1].containsKey('authorization'), isFalse);
+      tmp.deleteSync(recursive: true);
+    });
+
     test('获取 Release 撞 403 限流 → 失败提示速率限制（非网络/代理）', () async {
       final svc = ChickenRiceEngineService(
         downloader: _FakeDownloader(buildFakeZip()),
@@ -501,6 +551,35 @@ class _FakeAdapter implements HttpClientAdapter {
       }
     }
     return ResponseBody.fromString('not found', 404);
+  }
+}
+
+/// 按顺序返回预置响应的适配器（记录每次请求头，供认证降级断言）。
+class _SequenceAdapter implements HttpClientAdapter {
+  _SequenceAdapter(this.responses);
+
+  final List<ResponseBody> responses;
+  final List<Map<String, String>> headersList = [];
+  final List<String> urls = [];
+  var _index = 0;
+
+  @override
+  void close({bool force = true}) {}
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    headersList.add({
+      for (final e in options.headers.entries)
+        e.key.toLowerCase(): '${e.value}',
+    });
+    urls.add(options.uri.toString());
+    final resp =
+        responses[_index < responses.length ? _index : responses.length - 1];
+    _index++;
+    // 与真实 GitHub API 一致：JSON 响应带 content-type
+    resp.headers[Headers.contentTypeHeader] = [Headers.jsonContentType];
+    return resp;
   }
 }
 

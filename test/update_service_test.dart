@@ -219,6 +219,22 @@ void main() {
       expect(result.info, isNotNull);
       expect(adapter.lastHeaders?.containsKey('authorization'), isFalse);
     });
+
+    test('Token 无效（401）→ 自动移除认证头匿名重试成功', () async {
+      final adapter = _SequenceAdapter([
+        // 与真实 GitHub 一致：401 body 为合法 JSON
+        ResponseBody.fromString('{"message":"Bad credentials"}', 401),
+        ResponseBody.fromString(releaseWithAsset('v9.9.9'), 200),
+      ]);
+      final svc = UpdateService(apiDio: Dio()..httpClientAdapter = adapter);
+      svc.githubToken = 'ghp_invalid';
+      final result = await svc.checkForUpdate('0.8.0');
+      expect(result.info, isNotNull);
+      expect(result.info!.version, '9.9.9');
+      // 第一次带无效 token，第二次匿名重试
+      expect(adapter.headersList[0]['authorization'], 'Bearer ghp_invalid');
+      expect(adapter.headersList[1].containsKey('authorization'), isFalse);
+    });
   });
 
   group('evaluateRelease 缓存判定', () {
@@ -313,17 +329,23 @@ void main() {
   });
 
   group('更新脚本生成', () {
-    test('Windows 脚本：等 PID 退出 → xcopy 覆盖 → 重启 → 自删', () {
+    test('Windows 脚本：退出码等 PID（60s 超时）→ xcopy → 重启 → 自删', () {
       final script = UpdateService.buildWindowsScript(
           4242, r'C:\tmp\staging', r'C:\app', 'AsmrDownloader.exe');
       expect(script, contains('set "PID=4242"'));
       expect(script, contains(r'set "STAGING=C:\tmp\staging"'));
       expect(script, contains('set "INSTALL=C:\\app"'));
       expect(script, contains('set "EXE=AsmrDownloader.exe"'));
-      expect(script, contains('tasklist /FI "PID eq %PID%"'));
+      // 退出码判断进程存活（不用 find 文本匹配，避免等待死循环）
+      expect(script, contains('tasklist /FI "PID eq %PID%" >nul 2>&1'));
+      expect(script, contains('if errorlevel 1 goto replace'));
+      // 超时保护：最多等待 30×2s，窗口不会永久挂着
+      expect(script, contains('set /a WAIT=0'));
+      expect(script, contains('if %WAIT% GEQ 30 goto replace'));
       expect(script, contains('xcopy "%STAGING%\\*" "%INSTALL%\\" /E /Y'));
       expect(script, contains('start "" "%INSTALL%\\%EXE%"'));
       expect(script, contains('del "%~f0"'));
+      expect(script, contains('exit /b 0'));
     });
 
     test('macOS 脚本：等 PID 退出 → 删旧 .app → 移入新 .app → open', () {
@@ -497,5 +519,32 @@ class _FakeDownloader extends ChunkDownloader {
       ..writeAsBytesSync(bytes);
     onProgress?.call(bytes.length, bytes.length);
     return true;
+  }
+}
+
+/// 按顺序返回预置响应的适配器（记录每次请求头，供认证降级断言）。
+class _SequenceAdapter implements HttpClientAdapter {
+  _SequenceAdapter(this.responses);
+
+  final List<ResponseBody> responses;
+  final List<Map<String, String>> headersList = [];
+  var _index = 0;
+
+  @override
+  void close({bool force = true}) {}
+
+  @override
+  Future<ResponseBody> fetch(RequestOptions options,
+      Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    headersList.add({
+      for (final e in options.headers.entries)
+        e.key.toLowerCase(): '${e.value}',
+    });
+    final resp =
+        responses[_index < responses.length ? _index : responses.length - 1];
+    _index++;
+    // 与真实 GitHub API 一致：JSON 响应带 content-type
+    resp.headers[Headers.contentTypeHeader] = [Headers.jsonContentType];
+    return resp;
   }
 }
