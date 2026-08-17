@@ -366,15 +366,112 @@ void main() {
       expect(states.any((s) => s.phase == EnginePhase.done), isFalse);
       tmp.deleteSync(recursive: true);
     });
+
+    test('获取 Release 撞 403 限流 → 失败提示速率限制（非网络/代理）', () async {
+      final svc = ChickenRiceEngineService(
+        downloader: _FakeDownloader(buildFakeZip()),
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({'api.github.com': '{}'},
+              statusOverride: 403,
+              responseHeaders: {'x-ratelimit-remaining': '0'}),
+        freeSpaceBytes: (dir) async => 1 << 62,
+      );
+      final states = <EngineInstallState>[];
+      final tmp = Directory.systemTemp.createTempSync('eng_rl_403');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: states.add,
+      );
+      expect(exe, isNull);
+      final failed = states.lastWhere((s) => s.phase == EnginePhase.failed);
+      expect(failed.error, contains('速率限制'));
+      tmp.deleteSync(recursive: true);
+    });
+
+    test('获取 Release 阶段取消 → 判定为已取消而非「安装失败」', () async {
+      final svc = buildService(
+          zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
+      final states = <EngineInstallState>[];
+      final tmp = Directory.systemTemp.createTempSync('eng_cancel_fetch');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: (s) {
+          states.add(s);
+          // 模拟用户在获取 Release 信息时点「取消安装」
+          if (s.phase == EnginePhase.fetchingRelease) svc.requestCancel();
+        },
+      );
+      expect(exe, isNull);
+      expect(states.last.phase, EnginePhase.canceled);
+      // 用户主动取消不应误报为安装失败
+      expect(states.any((s) => s.phase == EnginePhase.failed), isFalse);
+      tmp.deleteSync(recursive: true);
+    });
+
+    test('解压阶段取消 → 终止 tar 并判定为已取消（不继续模型下载）', () async {
+      final svc = buildService(
+          zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
+      final states = <EngineInstallState>[];
+      final tmp = Directory.systemTemp.createTempSync('eng_cancel_extract');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: (s) {
+          states.add(s);
+          // 模拟用户在解压阶段点「取消安装」
+          if (s.phase == EnginePhase.extracting) svc.requestCancel();
+        },
+      );
+      expect(exe, isNull);
+      expect(states.last.phase, EnginePhase.canceled);
+      // 取消后不得继续走模型下载/伪完成
+      expect(states.any((s) => s.phase == EnginePhase.downloadingModels),
+          isFalse);
+      expect(states.any((s) => s.phase == EnginePhase.done), isFalse);
+      tmp.deleteSync(recursive: true);
+    });
+
+    test('模型下载阶段取消 → 判定为已取消', () async {
+      final svc = buildService(
+          zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
+      final states = <EngineInstallState>[];
+      final tmp = Directory.systemTemp.createTempSync('eng_cancel_models');
+      final exe = await svc.install(
+        installDir: tmp.path,
+        variant: 'cu128',
+        task: 'translate',
+        onState: (s) {
+          states.add(s);
+          // 模拟用户在模型下载阶段点「取消安装」
+          if (s.phase == EnginePhase.downloadingModels) svc.requestCancel();
+        },
+      );
+      expect(exe, isNull);
+      expect(states.last.phase, EnginePhase.canceled);
+      expect(states.any((s) => s.phase == EnginePhase.done), isFalse);
+      tmp.deleteSync(recursive: true);
+    });
   });
 }
 
 /// 按 URL 关键字返回预置响应的假 Dio 适配器。
 class _FakeAdapter implements HttpClientAdapter {
-  _FakeAdapter(this.responses);
+  _FakeAdapter(this.responses,
+      {this.statusOverride, this.responseHeaders});
 
   /// key = URL 包含的子串，value = 响应体
   final Map<String, String> responses;
+
+  /// 非 null 时强制返回该状态码（模拟 403 限流等）
+  final int? statusOverride;
+
+  /// 附加响应头（如 x-ratelimit-remaining）
+  final Map<String, String>? responseHeaders;
 
   @override
   void close({bool force = true}) {}
@@ -382,12 +479,25 @@ class _FakeAdapter implements HttpClientAdapter {
   @override
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    // 与真实 dio 一致：token 已取消的请求直接抛 cancel 异常
+    final token = options.cancelToken;
+    if (token != null && token.isCancelled) {
+      throw DioException(
+        requestOptions: options,
+        type: DioExceptionType.cancel,
+        error: token.cancelError,
+      );
+    }
     final url = options.uri.toString();
     for (final entry in responses.entries) {
       if (url.contains(entry.key)) {
-        return ResponseBody.fromString(entry.value, 200, headers: {
-          Headers.contentTypeHeader: [Headers.jsonContentType],
-        });
+        return ResponseBody.fromString(entry.value, statusOverride ?? 200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+              for (final h in responseHeaders?.entries ??
+                  const <MapEntry<String, String>>[])
+                h.key: [h.value],
+            });
       }
     }
     return ResponseBody.fromString('not found', 404);

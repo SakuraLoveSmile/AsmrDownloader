@@ -5,6 +5,7 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/debu
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/github_token_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
@@ -42,6 +43,7 @@ class Downloader extends StatelessWidget {
             DebugModeCheck(),
             LogViewerButton(),
             AutoUpdateCheck(),
+            GithubTokenButton(),
             AsmrProxy(),
           ],
         ),

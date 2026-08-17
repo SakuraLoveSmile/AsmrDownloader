@@ -256,7 +256,20 @@ class ChickenRiceEngineService {
     );
   }
 
-  /// 请求取消进行中的安装（当前请求结束后生效）
+  /// GitHub API 认证 token（可选）：认证后限额 5000 次/小时/账号，
+  /// 避免匿名 60 次/小时/IP 限流（读取公开仓库无需任何 scope）。
+  /// 空 = 移除认证头，恢复匿名请求。
+  set githubToken(String token) {
+    final t = token.trim();
+    if (t.isEmpty) {
+      _apiDio.options.headers.remove('Authorization');
+    } else {
+      _apiDio.options.headers['Authorization'] = 'Bearer $t';
+    }
+  }
+
+  /// 请求取消进行中的安装：终止当前网络请求与解压进程，
+  /// 流程在最近的取消检查点结束（已下载部分保留，可断点续传）。
   void requestCancel() {
     _cancelRequested = true;
     _activeToken?.cancel('安装已取消');
@@ -342,12 +355,12 @@ class ChickenRiceEngineService {
       // 1) 发现 Release：tag + manifest 资产 URL
       emit(const EngineInstallState(
           phase: EnginePhase.fetchingRelease, message: '获取上游 Release 信息…'));
-      final release = await _fetchLatestRelease(token);
+      final (release, releaseError) = await _fetchLatestRelease(token);
       if (release == null) {
-        emit(const EngineInstallState(
+        emit(EngineInstallState(
             phase: EnginePhase.failed,
             message: '获取上游 Release 失败',
-            error: '无法访问 GitHub API（检查网络/代理）'));
+            error: releaseError ?? '无法访问 GitHub API（检查网络/代理）'));
         return null;
       }
       final tagName = release['tag_name'] as String? ?? '';
@@ -441,8 +454,11 @@ class ChickenRiceEngineService {
       // 6) 解压（系统 tar 优先，archive 包兜底）
       emit(const EngineInstallState(
           phase: EnginePhase.extracting, message: '解压运行时（可能需要几分钟）…'));
-      final extracted = await _extract(zipPath, installDir);
+      final extracted = await _extract(zipPath, installDir, token);
       if (!extracted) {
+        if (_cancelRequested || token.isCancelled) {
+          return _emitCanceled(emit);
+        }
         emit(const EngineInstallState(
             phase: EnginePhase.failed,
             message: '解压失败',
@@ -510,16 +526,37 @@ class ChickenRiceEngineService {
 
   // ------------------------------------------------------- release api
 
-  Future<Map<String, dynamic>?> _fetchLatestRelease(CancelToken token) async {
+  /// 获取上游最新 Release；失败返回 (null, 可读原因)，成功 (json, null)。
+  Future<(Map<String, dynamic>?, String?)> _fetchLatestRelease(
+      CancelToken token) async {
     try {
       final resp = await _apiDio.get<Map<String, dynamic>>(_releaseApiUrl,
           cancelToken: token,
           options: Options(headers: {'Accept': 'application/vnd.github+json'}));
-      return resp.data;
+      return (resp.data, null);
+    } on DioException catch (e) {
+      // 取消向上传播：由 install 统一判定为「已取消」而非「安装失败」
+      if (e.type == DioExceptionType.cancel) rethrow;
+      Log.warning('fetch upstream release failed: $e');
+      return (null, _releaseFetchError(e));
     } catch (e) {
       Log.warning('fetch upstream release failed: $e');
-      return null;
+      return (null, null);
     }
+  }
+
+  /// Release 获取失败的可读原因；null = 沿用默认网络提示。
+  /// GitHub 匿名限额 60 次/小时/IP，共享代理出口时常触发 403 限流，
+  /// 此时重试无用，需等限流窗口过去（分卷/模型下载不受影响）。
+  static String? _releaseFetchError(DioException e) {
+    final status = e.response?.statusCode;
+    final remaining = e.response?.headers.value('x-ratelimit-remaining');
+    if ((status == 403 && remaining == '0') || status == 429) {
+      return 'GitHub API 速率限制（未认证限额 60 次/小时/IP，'
+          '共享代理出口时常见），请稍后再试；'
+          '可在设置中配置 GitHub Token 提升限额';
+    }
+    return null;
   }
 
   Future<EngineManifest?> _fetchManifest(String url, CancelToken token) async {
@@ -528,6 +565,11 @@ class ChickenRiceEngineService {
           cancelToken: token, options: Options(responseType: ResponseType.plain));
       return EngineManifest.fromJson(
           json.decode(resp.data ?? '') as Map<String, dynamic>);
+    } on DioException catch (e) {
+      // 取消向上传播（同 _fetchLatestRelease）
+      if (e.type == DioExceptionType.cancel) rethrow;
+      Log.warning('fetch manifest failed: $url\nerror: $e');
+      return null;
     } catch (e) {
       Log.warning('fetch manifest failed: $url\nerror: $e');
       return null;
@@ -606,18 +648,28 @@ class ChickenRiceEngineService {
 
   /// 解压 zip 到 [destDir]：优先系统 tar（Windows 10+ 自带），
   /// 失败回退 archive 包（3.5GB 大文件下内存占用较高，仅兜底）。
-  Future<bool> _extract(String zipPath, String destDir) async {
+  /// [token] 取消时终止 tar 进程（大包解压耗时数分钟，需可中断）。
+  Future<bool> _extract(
+      String zipPath, String destDir, CancelToken token) async {
     try {
-      final result = await Process.run('tar', ['-xf', zipPath, '-C', destDir]);
-      if (result.exitCode == 0) {
+      final process =
+          await Process.start('tar', ['-xf', zipPath, '-C', destDir]);
+      // 消费 stdout 避免管道缓冲塞满卡住 tar
+      unawaited(process.stdout.drain<void>());
+      // 取消联动：kill 解压进程，await exitCode 随即返回
+      unawaited(token.whenCancel.then((_) => process.kill()));
+      final stderrText = await process.stderr.transform(utf8.decoder).join();
+      final exitCode = await process.exitCode;
+      if (token.isCancelled || _cancelRequested) return false;
+      if (exitCode == 0) {
         Log.info('engine extracted via tar: $destDir');
         return true;
       }
-      Log.warning('tar extract failed (exit ${result.exitCode}): '
-          '${result.stderr}');
+      Log.warning('tar extract failed (exit $exitCode): $stderrText');
     } catch (e) {
       Log.warning('tar unavailable, fallback to archive package: $e');
     }
+    if (token.isCancelled || _cancelRequested) return false;
     try {
       // 兜底：archive 包内存解包（3.5GB 大文件下内存占用高，仅 tar 不可用时）
       final bytes = File(zipPath).readAsBytesSync();
@@ -804,6 +856,10 @@ class ChickenRiceEngineService {
         if (files.isNotEmpty) {
           return _withEssentialFiles(files, repo);
         }
+      } on DioException catch (e) {
+        // 取消向上传播（同 _fetchLatestRelease）
+        if (e.type == DioExceptionType.cancel) rethrow;
+        Log.warning('fetch hf model tree failed: $url\nerror: $e');
       } catch (e) {
         Log.warning('fetch hf model tree failed: $url\nerror: $e');
       }

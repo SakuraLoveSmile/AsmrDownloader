@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:asmr_downloader/services/update/update_service.dart';
@@ -6,10 +8,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// 更新服务单例（代理随 proxyProvider 变化自动重建）
+/// 更新服务单例（代理/Token 随配置变化自动重建）
 final updateServiceProvider = Provider<UpdateService>((ref) {
   final svc = UpdateService();
   svc.proxy = ref.watch(proxyProvider);
+  svc.githubToken = ref.watch(githubTokenProvider);
   return svc;
 });
 
@@ -46,17 +49,42 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
   bool _installing = false;
   String? _downloadedZipPath;
 
+  /// 启动自动检查的最小间隔：GitHub 匿名限额 60 次/小时/IP，
+  /// 共享代理出口时极易触发 403 限流，频繁检查得不偿失。
+  static const _autoCheckInterval = Duration(hours: 6);
+
   /// 检查更新；返回 true = 发现新版本。
   /// [silent]=true 为启动自动检查：不进入 loading 态（不影响入口 UI），
-  /// 失败也不对外抛错。
+  /// 失败也不对外抛错，且受 [_autoCheckInterval] 节流（间隔内不发请求，
+  /// 上次结论有新版则恢复展示）。
   Future<bool> check({bool silent = false}) async {
     try {
       if (!silent) state = const AsyncLoading();
       final current = await ref.read(appVersionProvider.future);
-      final info =
-          await ref.read(updateServiceProvider).checkForUpdate(current);
-      state = AsyncData(info);
-      return info != null;
+      final cache = await _readCheckCache();
+
+      if (silent) {
+        final lastAt = cache['lastCheckAt'] as int? ?? 0;
+        final withinInterval =
+            DateTime.now().millisecondsSinceEpoch - lastAt <
+                _autoCheckInterval.inMilliseconds;
+        if (withinInterval) {
+          final info = UpdateService.evaluateRelease(
+              cache['releaseBody'] as String?, current);
+          if (info != null) state = AsyncData(info);
+          return info != null;
+        }
+      }
+
+      final result = await ref.read(updateServiceProvider).checkForUpdate(
+            current,
+            etag: cache['etag'] as String?,
+            cachedReleaseBody: cache['releaseBody'] as String?,
+          );
+      // 缓存 ETag/响应体/时间：下次条件请求 304 不消耗速率配额
+      unawaited(_writeCheckCache(result));
+      state = AsyncData(result.info);
+      return result.info != null;
     } catch (e, st) {
       Log.warning('check update failed\nerror: $e');
       state = AsyncError(e, st);
@@ -70,11 +98,35 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
     if (hasNew) return true;
     final ui = UIService(ref);
     if (state is AsyncError) {
-      ui.showSnack('检查更新失败，请检查网络/代理后重试');
+      final error = (state as AsyncError).error;
+      ui.showSnack(error is UpdateCheckException
+          ? '检查更新失败：${error.message}'
+          : '检查更新失败，请检查网络/代理后重试');
     } else {
       ui.showSnack('当前已是最新版本');
     }
     return false;
+  }
+
+  Future<Map<String, dynamic>> _readCheckCache() async {
+    try {
+      final config = await ref.read(configFileProvider).read();
+      return (config['updateCheckCache'] as Map?)
+              ?.cast<String, dynamic>() ??
+          const <String, dynamic>{};
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
+  }
+
+  Future<void> _writeCheckCache(UpdateCheckResult result) {
+    return ref.read(configFileProvider).addOrUpdate({
+      'updateCheckCache': {
+        'lastCheckAt': DateTime.now().millisecondsSinceEpoch,
+        'etag': result.etag,
+        'releaseBody': result.releaseBody,
+      },
+    });
   }
 
   /// 下载更新包（不安装）。返回 null = 成功（zip 已就绪，待

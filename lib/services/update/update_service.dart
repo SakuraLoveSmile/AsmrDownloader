@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -36,6 +37,35 @@ class UpdateInfo {
 
   /// Release 网页地址（手动下载兜底）
   final String htmlUrl;
+}
+
+/// 一次更新检查的结果：携带 ETag 与响应体供调用方缓存，
+/// 下次检查作条件请求（Release 未变化时返回 304，不消耗速率配额）。
+class UpdateCheckResult {
+  const UpdateCheckResult({
+    required this.info,
+    required this.etag,
+    required this.releaseBody,
+  });
+
+  /// 新版本信息；null = 当前已是最新
+  final UpdateInfo? info;
+
+  /// 本次响应的 ETag（304 时沿用传入值）
+  final String? etag;
+
+  /// 最新 Release 的原始 JSON（304 时沿用传入值）
+  final String? releaseBody;
+}
+
+/// 更新检查失败（message 为用户可读原因，区分速率限制等）。
+class UpdateCheckException implements Exception {
+  UpdateCheckException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// 应用自动更新服务：检测 GitHub Release 新版本、下载安装包、
@@ -88,6 +118,18 @@ class UpdateService {
         return client;
       },
     );
+  }
+
+  /// GitHub API 认证 token（可选）：认证后限额 5000 次/小时/账号，
+  /// 避免匿名 60 次/小时/IP 限流（读取公开仓库无需任何 scope）。
+  /// 空 = 移除认证头，恢复匿名请求。
+  set githubToken(String token) {
+    final t = token.trim();
+    if (t.isEmpty) {
+      _apiDio.options.headers.remove('Authorization');
+    } else {
+      _apiDio.options.headers['Authorization'] = 'Bearer $t';
+    }
   }
 
   /// 请求取消进行中的下载
@@ -175,23 +217,89 @@ class UpdateService {
 
   // --------------------------------------------------------------- check
 
-  /// 检查是否有新版本；无新版/请求失败返回 null（静默，不打扰用户）。
-  Future<UpdateInfo?> checkForUpdate(String currentVersion) async {
+  /// 从 Release JSON 响应体判定新版本（无网络；供检查与节流缓存复用）。
+  /// 无新版/解析失败返回 null。
+  static UpdateInfo? evaluateRelease(
+      String? releaseBody, String currentVersion) {
     final suffix = platformAssetSuffix;
-    if (suffix == null) return null;
-    try {
-      final resp =
-          await _apiDio.getUri<Map<String, dynamic>>(Uri.parse(releaseApiUrl));
-      final release = resp.data;
-      if (release == null) return null;
-      final info = parseRelease(release, assetSuffix: suffix);
-      if (info == null) return null;
-      if (!isNewerVersion(currentVersion, info.version)) return null;
-      return info;
-    } catch (e) {
-      Log.warning('check update failed\nerror: $e');
+    if (suffix == null || releaseBody == null || releaseBody.isEmpty) {
       return null;
     }
+    try {
+      final release = json.decode(releaseBody) as Map<String, dynamic>;
+      final info = parseRelease(release, assetSuffix: suffix);
+      if (info == null) return null;
+      return isNewerVersion(currentVersion, info.version) ? info : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 检查是否有新版本；无新版返回 info = null，失败抛
+  /// [UpdateCheckException]（含用户可读原因）。
+  ///
+  /// [etag]/[cachedReleaseBody] 为上次成功检查的缓存：带 ETag 发起
+  /// 条件请求，Release 未变化时 GitHub 返回 304 且不消耗速率配额
+  /// （匿名限额 60 次/小时/IP，共享代理出口 IP 时极易触发 403 限流）。
+  Future<UpdateCheckResult> checkForUpdate(
+    String currentVersion, {
+    String? etag,
+    String? cachedReleaseBody,
+  }) async {
+    final suffix = platformAssetSuffix;
+    if (suffix == null) {
+      return UpdateCheckResult(
+          info: null, etag: etag, releaseBody: cachedReleaseBody);
+    }
+    try {
+      final resp = await _apiDio.getUri<String>(
+        Uri.parse(releaseApiUrl),
+        options: Options(
+          responseType: ResponseType.plain,
+          // 304 = ETag 命中（Release 未变化），按成功处理
+          validateStatus: (status) => status == 200 || status == 304,
+          headers: etag == null ? null : {'if-none-match': etag},
+        ),
+      );
+      final newEtag = resp.headers.value(HttpHeaders.etagHeader) ?? etag;
+      if (resp.statusCode == 304) {
+        // Release 未变化：复用上次响应体重新判定（当前版本可能已升级）
+        return UpdateCheckResult(
+          info: evaluateRelease(cachedReleaseBody, currentVersion),
+          etag: newEtag,
+          releaseBody: cachedReleaseBody,
+        );
+      }
+      final body = resp.data;
+      return UpdateCheckResult(
+        info: evaluateRelease(body, currentVersion),
+        etag: newEtag,
+        releaseBody: body,
+      );
+    } on DioException catch (e) {
+      throw _toCheckException(e);
+    } catch (e) {
+      throw UpdateCheckException('检查更新失败：$e');
+    }
+  }
+
+  /// 把检查请求的网络错误转换为用户可读原因（区分速率限制）。
+  static UpdateCheckException _toCheckException(DioException e) {
+    final status = e.response?.statusCode;
+    final remaining = e.response?.headers.value('x-ratelimit-remaining');
+    if ((status == 403 && remaining == '0') || status == 429) {
+      return UpdateCheckException(
+          'GitHub API 速率限制（未认证限额 60 次/小时/IP，'
+          '共享代理出口时常见），请稍后再试；'
+          '可在设置中配置 GitHub Token 提升限额');
+    }
+    if (status == 403) {
+      return UpdateCheckException('GitHub API 拒绝访问（403）');
+    }
+    if (status == 404) {
+      return UpdateCheckException('未找到 Release（仓库尚未发布版本）');
+    }
+    return UpdateCheckException('网络错误，请检查网络/代理后重试');
   }
 
   // ------------------------------------------------------------ download

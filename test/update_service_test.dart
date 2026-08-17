@@ -118,34 +118,145 @@ void main() {
           ],
         });
 
-    test('发现新版本 → 返回 UpdateInfo', () async {
+    test('发现新版本 → info 含版本与地址，响应体可缓存', () async {
       final svc = buildService(releaseWithAsset('v9.9.9'));
-      final info = await svc.checkForUpdate('0.8.0');
-      expect(info, isNotNull);
-      expect(info!.version, '9.9.9');
-      expect(info.assetUrl, 'https://fake.test/pkg.zip');
+      final result = await svc.checkForUpdate('0.8.0');
+      expect(result.info, isNotNull);
+      expect(result.info!.version, '9.9.9');
+      expect(result.info!.assetUrl, 'https://fake.test/pkg.zip');
+      expect(result.releaseBody, contains('v9.9.9'));
     });
 
-    test('已是最新 / 更低版本 → null', () async {
+    test('已是最新 / 更低版本 → info 为 null', () async {
       final svc = buildService(releaseWithAsset('v0.8.0'));
-      expect(await svc.checkForUpdate('0.8.0'), isNull);
+      expect((await svc.checkForUpdate('0.8.0')).info, isNull);
       final older = buildService(releaseWithAsset('v0.7.0'));
-      expect(await older.checkForUpdate('0.8.0'), isNull);
+      expect((await older.checkForUpdate('0.8.0')).info, isNull);
     });
 
-    test('Release 缺当前平台 asset → null 不抛异常', () async {
+    test('Release 缺当前平台 asset → info 为 null 不抛异常', () async {
       final svc = buildService(json.encode({
         'tag_name': 'v9.9.9',
         'assets': <Map<String, dynamic>>[],
       }));
-      expect(await svc.checkForUpdate('0.8.0'), isNull);
+      expect((await svc.checkForUpdate('0.8.0')).info, isNull);
     });
 
-    test('网络失败（404）→ null 不抛异常', () async {
+    test('网络失败（404）→ 抛 UpdateCheckException', () async {
       final svc = UpdateService(
         apiDio: Dio()..httpClientAdapter = _FakeAdapter(const {}),
       );
-      expect(await svc.checkForUpdate('0.8.0'), isNull);
+      await expectLater(
+        svc.checkForUpdate('0.8.0'),
+        throwsA(isA<UpdateCheckException>()),
+      );
+    });
+
+    test('304（ETag 命中）→ 复用缓存响应体判定，不重新解析网络响应', () async {
+      final body = releaseWithAsset('v9.9.9');
+      final svc = UpdateService(
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({'api.github.com': body},
+              statusOverride: 304),
+      );
+      final result = await svc.checkForUpdate(
+        '0.8.0',
+        etag: 'W/"cached"',
+        cachedReleaseBody: body,
+      );
+      expect(result.info, isNotNull);
+      expect(result.info!.version, '9.9.9');
+      // 304 无新响应：etag/body 沿用传入值
+      expect(result.etag, 'W/"cached"');
+      expect(result.releaseBody, body);
+    });
+
+    test('403 且配额耗尽 → 抛异常并提示速率限制', () async {
+      final svc = UpdateService(
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({'api.github.com': '{}'},
+              statusOverride: 403,
+              responseHeaders: {'x-ratelimit-remaining': '0'}),
+      );
+      await expectLater(
+        svc.checkForUpdate('0.8.0'),
+        throwsA(isA<UpdateCheckException>().having(
+            (e) => e.message, 'message', contains('速率限制'))),
+      );
+    });
+
+    test('403 但配额未耗尽 → 提示拒绝访问而非限流', () async {
+      final svc = UpdateService(
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({'api.github.com': '{}'},
+              statusOverride: 403,
+              responseHeaders: {'x-ratelimit-remaining': '59'}),
+      );
+      await expectLater(
+        svc.checkForUpdate('0.8.0'),
+        throwsA(isA<UpdateCheckException>().having(
+            (e) => e.message, 'message', contains('403'))),
+      );
+    });
+
+    test('配置 githubToken → API 请求携带 Bearer 认证头', () async {
+      final adapter =
+          _FakeAdapter({'api.github.com': releaseWithAsset('v9.9.9')});
+      final svc = UpdateService(apiDio: Dio()..httpClientAdapter = adapter);
+      svc.githubToken = ' ghp_test123 ';
+      final result = await svc.checkForUpdate('0.8.0');
+      expect(result.info, isNotNull);
+      expect(adapter.lastHeaders?['authorization'], 'Bearer ghp_test123');
+    });
+
+    test('清除 githubToken → 不再携带认证头', () async {
+      final adapter =
+          _FakeAdapter({'api.github.com': releaseWithAsset('v9.9.9')});
+      final svc = UpdateService(apiDio: Dio()..httpClientAdapter = adapter);
+      svc.githubToken = 'ghp_test123';
+      svc.githubToken = '';
+      final result = await svc.checkForUpdate('0.8.0');
+      expect(result.info, isNotNull);
+      expect(adapter.lastHeaders?.containsKey('authorization'), isFalse);
+    });
+  });
+
+  group('evaluateRelease 缓存判定', () {
+    // asset 后缀随平台（Windows/macOS 测试环境均可运行）
+    final suffix = UpdateService.platformAssetSuffix!;
+
+    test('缓存响应体 → 判定新版本', () {
+      final body = json.encode({
+        'tag_name': 'v9.9.9',
+        'assets': [
+          {
+            'name': 'AsmrDownloader-v9.9.9$suffix',
+            'browser_download_url': 'https://fake.test/win.zip',
+          },
+        ],
+      });
+      final info = UpdateService.evaluateRelease(body, '0.8.0');
+      expect(info, isNotNull);
+      expect(info!.version, '9.9.9');
+    });
+
+    test('当前版本已起上缓存 → null（升级后不再提示旧结论）', () {
+      final body = json.encode({
+        'tag_name': 'v0.9.0',
+        'assets': [
+          {
+            'name': 'AsmrDownloader-v0.9.0$suffix',
+            'browser_download_url': 'https://fake.test/win.zip',
+          },
+        ],
+      });
+      expect(UpdateService.evaluateRelease(body, '0.9.0'), isNull);
+    });
+
+    test('空/非法响应体 → null 不抛异常', () {
+      expect(UpdateService.evaluateRelease(null, '0.8.0'), isNull);
+      expect(UpdateService.evaluateRelease('', '0.8.0'), isNull);
+      expect(UpdateService.evaluateRelease('not json', '0.8.0'), isNull);
     });
   });
 
@@ -323,10 +434,20 @@ void main() {
 
 /// 按 URL 关键字返回预置响应的假 Dio 适配器。
 class _FakeAdapter implements HttpClientAdapter {
-  _FakeAdapter(this.responses);
+  _FakeAdapter(this.responses,
+      {this.statusOverride, this.responseHeaders});
 
   /// key = URL 包含的子串，value = 响应体
   final Map<String, String> responses;
+
+  /// 非 null 时强制返回该状态码（模拟 304/403 等）
+  final int? statusOverride;
+
+  /// 附加响应头（如 x-ratelimit-remaining）
+  final Map<String, String>? responseHeaders;
+
+  /// 最近一次请求的头（key 转小写；供认证头断言）
+  Map<String, String>? lastHeaders;
 
   @override
   void close({bool force = true}) {}
@@ -334,12 +455,20 @@ class _FakeAdapter implements HttpClientAdapter {
   @override
   Future<ResponseBody> fetch(RequestOptions options,
       Stream<Uint8List>? requestStream, Future<void>? cancelFuture) async {
+    lastHeaders = {
+      for (final e in options.headers.entries)
+        e.key.toLowerCase(): '${e.value}',
+    };
     final url = options.uri.toString();
     for (final entry in responses.entries) {
       if (url.contains(entry.key)) {
-        return ResponseBody.fromString(entry.value, 200, headers: {
-          Headers.contentTypeHeader: [Headers.jsonContentType],
-        });
+        return ResponseBody.fromString(entry.value, statusOverride ?? 200,
+            headers: {
+              Headers.contentTypeHeader: [Headers.jsonContentType],
+              for (final h in responseHeaders?.entries ??
+                  const <MapEntry<String, String>>[])
+                h.key: [h.value],
+            });
       }
     }
     return ResponseBody.fromString('not found', 404);
