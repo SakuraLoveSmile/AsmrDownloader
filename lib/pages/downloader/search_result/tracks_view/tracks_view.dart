@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/pages/downloader/search_result/empty_guidance.dart';
+import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_list_panel.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_progress.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
@@ -39,6 +40,7 @@ class TracksView extends ConsumerWidget {
           return Column(
             children: [
               DownloadProgress(tracksLPadding: _tracksLPadding),
+              DownloadListPanel(tracksLPadding: _tracksLPadding),
               Expanded(
                 child: Tracks(
                   rootFolder: rootFolder,
