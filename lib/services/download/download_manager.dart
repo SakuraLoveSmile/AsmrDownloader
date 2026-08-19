@@ -4,12 +4,14 @@ import 'dart:math' as math;
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/download/download_queue.dart';
 import 'package:asmr_downloader/services/download/multi_thread_downloader.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -58,6 +60,37 @@ class _DownloadTask {
   int finalBytes = 0; // 完成后实际计入总进度的字节数
 }
 
+/// 单次 run 下载结果的简化分类，供队列循环决定是否继续下一个。
+/// completed = 全部成功；failed = 部分失败；aborted = 被取消或被新一轮抢占。
+enum _RunOutcome { completed, failed, aborted }
+
+/// 下载开始时对作品上下文的快照。下载中允许搜索新作品，
+/// 若收尾时重读全局 provider 会把注册表写成新作品的数据，
+/// 故在此快照，收尾一律用快照值。
+class _RunContext {
+  final String sourceId;
+  final String voiceWorkPath;
+  final String downloadPath;
+  final String title;
+  final List<String> cvNames;
+  final String circleName;
+  final String releaseDate;
+  final List<String> tags;
+  final String coverUrl;
+
+  _RunContext({
+    required this.sourceId,
+    required this.voiceWorkPath,
+    required this.downloadPath,
+    required this.title,
+    required this.cvNames,
+    required this.circleName,
+    required this.releaseDate,
+    required this.tags,
+    required this.coverUrl,
+  });
+}
+
 class DownloadManager {
   final Ref ref;
   DownloadManager(this.ref);
@@ -87,10 +120,61 @@ class DownloadManager {
   int _totalBytes = 0;
   DateTime _lastAggregateRefresh = DateTime.fromMillisecondsSinceEpoch(0);
 
+  /// 是否正处在队列下载循环中（区别于单次手动下载）。
+  /// 队列循环会在作品间自动衔接，取消时终止整个循环。
+  bool _inQueueLoop = false;
+
+  /// 队列本轮累计的成功/失败计数，循环结束后统一提示。
+  int _queueSuccessCnt = 0;
+  int _queueFailedCnt = 0;
+
+  /// 下载入口：手动点击或队列循环调用。
+  /// 外层 while 循环串行处理队列中的作品，作品内沿用文件级并行。
+  /// 第一个作品（手动下载）完成后会继续处理下载期间入队的作品，
+  /// 仅当确实处理了队列作品时才提示队列统计。
   Future<void> run() async {
     final runSeq = ++_runSeq;
     _currentRunSeq = runSeq;
     _cancelRequested = false;
+    _inQueueLoop = false;
+    _queueSuccessCnt = 0;
+    _queueFailedCnt = 0;
+
+    while (true) {
+      final outcome = await _runOnce(runSeq);
+      if (runSeq != _runSeq) return; // 被新一轮抢占
+      if (_cancelRequested) {
+        // 用户取消：终止整个队列循环，条目保留
+        _finalizeQueueIfLoop(runSeq, canceled: true);
+        return;
+      }
+      if (outcome == _RunOutcome.aborted) {
+        // 校验失败等：结束（取消已在上面处理）
+        return;
+      }
+
+      // 当前作品已完成/失败，计入统计（是否对外提示取决于是否进队列）
+      if (outcome == _RunOutcome.completed) {
+        _queueSuccessCnt++;
+      } else {
+        _queueFailedCnt++;
+      }
+
+      // 尝试从队列取下一个作品（下载期间用户可能已入队）
+      final prepared = await _prepareNextQueuedWork(runSeq);
+      if (runSeq != _runSeq) return;
+      if (!prepared) {
+        // 队列空：若已进入队列模式则提示统计，否则静默结束（纯单次下载）
+        _finalizeQueueIfLoop(runSeq, canceled: false);
+        return;
+      }
+      _inQueueLoop = true;
+    }
+  }
+
+  /// 单次下载执行（一个作品）。返回结果分类。
+  /// [runSeq] 为本轮 run() 的序号，用于抢占判断。
+  Future<_RunOutcome> _runOnce(int runSeq) async {
     _activeCancelTokens.clear();
     _failedCnt = 0;
 
@@ -102,7 +186,7 @@ class DownloadManager {
     if (sourceId == null) {
       Log.fatal('download failed\n' 'error: sourceId is null');
       ref.read(uiServiceProvider).showSnack('下载失败：请先搜索作品');
-      return;
+      return _RunOutcome.aborted;
     }
 
     // 标题/目录名为空（title 降级链尚未给出保底值）时拒绝下载
@@ -112,8 +196,13 @@ class DownloadManager {
       Log.error('download failed: $sourceId\n'
           'error: voiceWorkPath is invalid, which means you have to start downloading after work info is loaded');
       ref.read(uiServiceProvider).showSnack('下载失败：请等待作品信息加载完成后再下载');
-      return;
+      return _RunOutcome.aborted;
     }
+
+    // 下载开始即快照作品上下文：下载中允许搜索新作品，
+    // 收尾写注册表时全部用快照值，避免被搜索切走的新作品数据污染。
+    final ctx = _snapshotRunContext(sourceId, voiceWorkPath);
+    ref.read(currentDownloadingSourceIdProvider.notifier).state = sourceId;
 
     // start downloading
 
@@ -125,11 +214,16 @@ class DownloadManager {
       Log.fatal(
           'download tracks failed: $sourceId\n' 'error: rootFolder is null');
       ref.read(uiServiceProvider).showSnack('下载失败：音轨列表为空，请重新搜索');
+      ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
+      return _RunOutcome.aborted;
     }
 
     // 拍平所有下载任务：封面优先，随后按音轨树先序收集选中文件
     final tasks = await _collectTasks(rootFolderSnapshot, voiceWorkPath);
-    if (_cancelRequested || runSeq != _runSeq) return;
+    if (_cancelRequested || runSeq != _runSeq) {
+      ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
+      return _RunOutcome.aborted;
+    }
 
     _tasks = tasks;
     _nextTaskIndex = 0;
@@ -155,31 +249,35 @@ class DownloadManager {
     if (runSeq != _runSeq ||
         ref.read(dlStatusProvider) == DownloadStatus.canceled) {
       Log.info('download aborted: $sourceId');
-      return;
+      ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
+      return _RunOutcome.aborted;
     }
 
     if (_failedCnt > 0) {
       Log.error('download failed: $sourceId\n'
           'failed task count: $_failedCnt');
       ref.read(dlStatusProvider.notifier).state = DownloadStatus.failed;
-      ref.read(uiServiceProvider).showSnack('下载失败：$_failedCnt 个文件下载失败，可点击「重试」');
-      return;
+      ref.read(uiServiceProvider)
+          .showSnack('下载失败：$_failedCnt 个文件下载失败，可点击「重试」');
+      ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
+      return _RunOutcome.failed;
     }
 
     ref.read(dlStatusProvider.notifier).state = DownloadStatus.completed;
 
     // 写入下载注册表（批量整理的数据源）；
-    // 自动整理成功后会由 organizeCurrentWork 补录 organizedAt
+    // 自动整理成功后会由 organizeCurrentWork 补录 organizedAt。
+    // 全部用快照值，不受下载中搜索切走的作品影响。
     await ref.read(worksIndexProvider).upsert(WorkEntry(
-          sourceId: sourceId,
-          dlPath: ref.read(downloadPathProvider),
-          dirName: p.basename(voiceWorkPath),
-          title: ref.read(titleProvider),
-          cvNames: ref.read(cvLsProvider).join('&'),
-          circleName: ref.read(circleNameProvider),
-          releaseDate: ref.read(releaseDateProvider),
-          tags: ref.read(tagLsProvider),
-          coverUrl: ref.read(coverUrlProvider),
+          sourceId: ctx.sourceId,
+          dlPath: ctx.downloadPath,
+          dirName: p.basename(ctx.voiceWorkPath),
+          title: ctx.title,
+          cvNames: ctx.cvNames.join('&'),
+          circleName: ctx.circleName,
+          releaseDate: ctx.releaseDate,
+          tags: ctx.tags,
+          coverUrl: ctx.coverUrl,
         ));
     // 新作品入库：刷新作品库列表与 badge
     ref.invalidate(worksLibraryProvider);
@@ -192,6 +290,8 @@ class DownloadManager {
       );
     }
 
+    ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
+
     // auto organize to navidrome
     if (ref.read(autoOrganizeProvider)) {
       await ref.read(uiServiceProvider).autoOrganize();
@@ -201,10 +301,109 @@ class DownloadManager {
     if (ref.read(autoTranscribeProvider)) {
       await ref.read(uiServiceProvider).autoTranscribe(sourceId);
     }
+
+    return _RunOutcome.completed;
+  }
+
+  /// 快照当前作品上下文（run 校验通过后立即调用）。
+  _RunContext _snapshotRunContext(String sourceId, String voiceWorkPath) {
+    return _RunContext(
+      sourceId: sourceId,
+      voiceWorkPath: voiceWorkPath,
+      downloadPath: ref.read(downloadPathProvider),
+      title: ref.read(titleProvider),
+      cvNames: ref.read(cvLsProvider),
+      circleName: ref.read(circleNameProvider),
+      releaseDate: ref.read(releaseDateProvider),
+      tags: ref.read(tagLsProvider),
+      coverUrl: ref.read(coverUrlProvider),
+    );
+  }
+
+  /// 从队列取下一个作品并准备好元数据。返回 true 表示已就绪可进入 _runOnce。
+  /// [runSeq] 用于抢占判断。
+  Future<bool> _prepareNextQueuedWork(int runSeq) async {
+    if (_cancelRequested || runSeq != _runSeq) return false;
+
+    final nextSourceId =
+        await ref.read(downloadQueueProvider.notifier).popFront();
+    if (runSeq != _runSeq) return false;
+    if (nextSourceId == null) return false;
+
+    // 搜索队首作品并等待元数据就绪（与 search_box._refresh 同写法，
+    // 各带 catchError 兜底），随后进入下一轮 _runOnce。
+    await ref.read(uiServiceProvider).search(nextSourceId, silent: true);
+    if (runSeq != _runSeq) return false;
+    await Future.wait([
+      ref.read(workInfoProvider.future),
+      ref.read(rawTracksProvider.future),
+    ].map((f) => f.catchError((_) => null)));
+    if (runSeq != _runSeq) return false;
+    return true;
+  }
+
+  /// 队列循环结束时统一提示（仅队列模式下有意义）。
+  /// 单次手动下载（未进队列）不提示。
+  void _finalizeQueueIfLoop(int runSeq, {required bool canceled}) {
+    if (runSeq != _runSeq) return;
+    if (!_inQueueLoop) return;
+    if (canceled) {
+      ref.read(uiServiceProvider).showSnack('已取消下载队列（已完成 $_queueSuccessCnt 个）');
+    } else {
+      ref.read(uiServiceProvider).showSnack(
+          '队列下载完成：$_queueSuccessCnt 成功，$_queueFailedCnt 失败');
+    }
+  }
+
+  /// 从队列启动下载（无当前搜索时，供队列面板「继续下载」按钮调用）。
+  /// 非下载中且队列非空时：pop 队首、搜索、等待元数据后进入 run 循环。
+  Future<void> startFromQueue() async {
+    if (ref.read(dlStatusProvider) == DownloadStatus.downloading) return;
+    final items = ref.read(downloadQueueProvider);
+    if (items.isEmpty) return;
+
+    _inQueueLoop = true;
+    _queueSuccessCnt = 0;
+    _queueFailedCnt = 0;
+    final runSeq = ++_runSeq;
+    _currentRunSeq = runSeq;
+    _cancelRequested = false;
+
+    final firstPrepared = await _prepareNextQueuedWork(runSeq);
+    if (runSeq != _runSeq) return;
+    if (!firstPrepared) {
+      _finalizeQueueIfLoop(runSeq, canceled: false);
+      return;
+    }
+
+    while (true) {
+      final outcome = await _runOnce(runSeq);
+      if (runSeq != _runSeq) return;
+      if (_cancelRequested) {
+        _finalizeQueueIfLoop(runSeq, canceled: true);
+        return;
+      }
+      if (outcome == _RunOutcome.aborted) {
+        // 校验失败等：结束（取消已在上面处理）
+        return;
+      }
+      if (outcome == _RunOutcome.completed) {
+        _queueSuccessCnt++;
+      } else {
+        _queueFailedCnt++;
+      }
+      final nextPrepared = await _prepareNextQueuedWork(runSeq);
+      if (runSeq != _runSeq) return;
+      if (!nextPrepared) {
+        _finalizeQueueIfLoop(runSeq, canceled: false);
+        return;
+      }
+    }
   }
 
   /// 取消全部下载任务：置 canceled 状态并 cancel 本轮所有在途 CancelToken。
   /// 已开始的请求立即中断，尚未开始的任务会通过 [_cancelRequested] 跳过。
+  /// 队列模式下同时阻断 while 循环（不再启动下一个队列作品）。
   void cancelAllDownload() {
     if (ref.read(dlStatusProvider) != DownloadStatus.downloading) return;
 

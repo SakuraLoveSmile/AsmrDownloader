@@ -92,11 +92,6 @@ class SearchBoxState extends ConsumerState<SearchBox> {
   }
 
   Future<void> _handleDrop(DropDoneDetails details) async {
-    if (ref.read(dlStatusProvider) == DownloadStatus.downloading) {
-      ref.read(uiServiceProvider).showSnack('下载中无法搜索，请先取消下载');
-      return;
-    }
-
     for (final item in details.files) {
       final name = item.name.trim();
       // 1. 拖入内容本身是作品页 URL / sourceId
@@ -141,7 +136,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
     final invalid = _inputText.isNotEmpty && !_isValidInput(_inputText);
     // 空输入时禁用提交，避免回车/点击触发「无效 sourceId」提示
-    final canSubmit = !downloading && _inputText.trim().isNotEmpty;
+    // 下载中允许搜索（加入队列场景），故不再因下载状态禁用提交
+    final canSubmit = _inputText.trim().isNotEmpty;
 
     // 非法输入时覆盖边框为错误色，其余情况沿用主题输入框样式
     final errorBorder = OutlineInputBorder(
@@ -150,7 +146,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
     );
 
     return DropTarget(
-      enable: !downloading,
+      enable: true,
       onDragEntered: (_) {
         if (mounted) setState(() => _dragOver = true);
       },

@@ -70,7 +70,11 @@ class UIService {
     // 空输入静默返回（未输入/剪贴板为空），不弹「无效 sourceId」也不重置进度
     if (input.trim().isEmpty) return null;
 
-    await resetProgress();
+    // 下载中搜索（加入队列场景）不清掉进度展示，
+    // 否则当前作品的下载进度会被新作品搜索清零。
+    if (ref.read(dlStatusProvider) != DownloadStatus.downloading) {
+      await resetProgress();
+    }
 
     // 支持直接粘贴 asmr.one 作品页 URL：
     // https://asmr-200.com/work/RJ01619789?path=["RJ01619789","舔耳ONLY音轨"]#work-tree

@@ -1,6 +1,7 @@
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_button.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_bytes.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_count.dart';
+import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_queue_panel.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_speed.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/progress_bar.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/progress_percentage.dart';
@@ -15,20 +16,27 @@ class DownloadProgress extends StatelessWidget {
     final spacing = MediaQuery.of(context).size.width * 0.01;
     return Padding(
       padding: EdgeInsets.only(left: tracksLPadding, bottom: 10.0),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          DownloadButton(),
-          SizedBox(width: spacing),
-          ProgressBar(),
-          SizedBox(width: spacing),
-          ProgressPercentage(),
-          SizedBox(width: spacing),
-          DownloadBytes(),
-          SizedBox(width: spacing),
-          DownloadSpeed(),
-          Spacer(),
-          DownloadCount(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              DownloadButton(),
+              SizedBox(width: spacing),
+              ProgressBar(),
+              SizedBox(width: spacing),
+              ProgressPercentage(),
+              SizedBox(width: spacing),
+              DownloadBytes(),
+              SizedBox(width: spacing),
+              DownloadSpeed(),
+              Spacer(),
+              DownloadCount(),
+            ],
+          ),
+          DownloadQueuePanel(tracksLPadding: 0),
         ],
       ),
     );
