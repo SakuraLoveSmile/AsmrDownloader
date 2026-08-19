@@ -501,6 +501,7 @@ class DownloadManager {
                   ? (task.receivedBytes / task.size).clamp(0.0, 1.0)
                   : task.progress,
           status: task.status,
+          speed: task.currentSpeed,
         ),
     ];
   }

@@ -123,6 +123,7 @@ class DownloadSegment {
     required this.size,
     required this.fraction,
     required this.status,
+    required this.speed,
   });
 
   final String title;
@@ -134,6 +135,9 @@ class DownloadSegment {
   final double fraction;
 
   final DownloadStatus status;
+
+  /// 该文件当前下载速度（bytes/s），仅下载中有意义
+  final double speed;
 }
 
 /// 本轮全部任务的分段进度，按任务队列顺序，由 DownloadManager 实时更新。
