@@ -46,15 +46,15 @@ class TracksState extends ConsumerState<Tracks> {
     List<Widget> trackWidgets = [];
     final scheme = Theme.of(context).colorScheme;
     final roundedShape =
-        RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
+        RoundedRectangleBorder(borderRadius: BorderRadius.circular(10));
     if (track is Folder) {
       trackWidgets.add(
         Padding(
-          padding: EdgeInsets.only(left: widget.tracksLPadding),
+          padding: EdgeInsets.only(left: widget.tracksLPadding, bottom: 2),
           child: ExpansionTile(
             shape: roundedShape,
             collapsedShape: roundedShape,
-            leading: Icon(Icons.folder, color: AppColors.folder),
+            leading: const Icon(Icons.folder_rounded, color: AppColors.folder, size: 20),
             trailing: Checkbox(
                 value: track.selected,
                 onChanged: (bool? newValue) {
@@ -65,7 +65,10 @@ class TracksState extends ConsumerState<Tracks> {
                   ref.read(rootFolderProvider.notifier).state =
                       widget.rootFolder;
                 }),
-            title: Text(track.title),
+            title: Text(
+              track.title,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
             children: track.children
                 .expand((child) => trackExpansion(child))
                 .toList(),
@@ -76,12 +79,13 @@ class TracksState extends ConsumerState<Tracks> {
       // FileAsset
       trackWidgets.add(
         Padding(
-          padding: EdgeInsets.only(left: widget.tracksLPadding),
+          padding: EdgeInsets.only(left: widget.tracksLPadding, bottom: 1),
           child: CheckboxListTile(
             value: track.selected,
             shape: roundedShape,
-            hoverColor: scheme.primary.withValues(alpha: 0.06),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            hoverColor: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            visualDensity: VisualDensity.compact,
             onChanged: (bool? newValue) {
               if (newValue == null) return;
               setState(() {
@@ -92,8 +96,14 @@ class TracksState extends ConsumerState<Tracks> {
             title: Row(
               children: [
                 getIconFromType(track.type),
-                SizedBox(width: 10.0),
-                ...ellipsisInMiddle(track.title),
+                const SizedBox(width: 8.0),
+                ...ellipsisInMiddle(
+                  track.title,
+                  textStyle: TextStyle(
+                    fontSize: 12.5,
+                    color: scheme.onSurface.withValues(alpha: 0.9),
+                  ),
+                ),
               ],
             ),
           ),
@@ -106,13 +116,13 @@ class TracksState extends ConsumerState<Tracks> {
   Icon getIconFromType(String type) {
     switch (type) {
       case 'audio':
-        return Icon(Icons.music_note, color: AppColors.audio);
+        return const Icon(Icons.music_note_rounded, color: AppColors.audio, size: 17);
       case 'image':
-        return Icon(Icons.image, color: AppColors.image);
+        return const Icon(Icons.image_outlined, color: AppColors.image, size: 17);
       case 'text':
-        return Icon(Icons.text_snippet, color: AppColors.textFile);
+        return const Icon(Icons.description_outlined, color: AppColors.textFile, size: 17);
       default:
-        return Icon(Icons.error, color: Theme.of(context).colorScheme.error);
+        return Icon(Icons.insert_drive_file_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 17);
     }
   }
 }

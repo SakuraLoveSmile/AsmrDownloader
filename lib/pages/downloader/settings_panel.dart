@@ -15,61 +15,87 @@ class DownloaderSettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
     return Dialog(
+      backgroundColor: scheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant, width: 0.8),
+      ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560, maxHeight: 440),
+        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 460),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 14, 12, 12),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '下载设置',
-                        style: Theme.of(context).textTheme.titleMedium,
+          padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '下载设置',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    tooltip: '关闭',
+                    visualDensity: VisualDensity.compact,
+                    style: IconButton.styleFrom(
+                      shape: const CircleBorder(),
+                      backgroundColor:
+                          scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      _SettingsSection(
+                        title: '下载与线程',
+                        icon: Icons.download_rounded,
+                        children: [
+                          DlCoverCheck(),
+                          DownloadThreadsSelector(),
+                          ParallelDownloadsSelector(),
+                        ],
                       ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, size: 18),
-                      tooltip: '关闭',
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ],
+                      SizedBox(height: 12),
+                      _SettingsSection(
+                        title: '网络与授权',
+                        icon: Icons.language_rounded,
+                        children: [
+                          AsmrProxy(),
+                          GithubTokenButton(),
+                        ],
+                      ),
+                      SizedBox(height: 12),
+                      _SettingsSection(
+                        title: '常规与调试',
+                        icon: Icons.tune_rounded,
+                        children: [
+                          LogViewerButton(),
+                          DebugModeCheck(),
+                          AutoUpdateCheck(),
+                          OnboardingButton(),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 4),
-                _SettingsSection(
-                  title: '下载',
-                  children: const [
-                    DlCoverCheck(),
-                    DownloadThreadsSelector(),
-                    ParallelDownloadsSelector(),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _SettingsSection(
-                  title: '网络',
-                  children: const [
-                    AsmrProxy(),
-                    GithubTokenButton(),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _SettingsSection(
-                  title: '其它',
-                  children: const [
-                    LogViewerButton(),
-                    DebugModeCheck(),
-                    AutoUpdateCheck(),
-                    OnboardingButton(),
-                  ],
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -78,28 +104,54 @@ class DownloaderSettingsPanel extends StatelessWidget {
 }
 
 class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({required this.title, required this.children});
+  const _SettingsSection({
+    required this.title,
+    required this.icon,
+    required this.children,
+  });
 
   final String title;
+  final IconData icon;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: Theme.of(context).textTheme.labelLarge,
-        ),
-        const SizedBox(height: 6),
-        Wrap(
-          spacing: 12,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: children,
-        ),
-      ],
+    final scheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant, width: 0.6),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 14, color: scheme.primary),
+              const SizedBox(width: 6),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: children,
+          ),
+        ],
+      ),
     );
   }
 }

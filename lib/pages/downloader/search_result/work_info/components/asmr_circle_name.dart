@@ -10,14 +10,33 @@ class AsmrCircleName extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final circleName = ref.watch(circleNameProvider).valueOrNull ?? '';
+    final scheme = Theme.of(context).colorScheme;
+
+    if (circleName.isEmpty) return const SizedBox.shrink();
+
     return Padding(
-      padding: EdgeInsets.only(top: verticalPadding),
-      child: CopyableTextBox(
-        text: circleName,
-        textStyle: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontSize: 13),
-        padding: EdgeInsets.zero,
+      padding: EdgeInsets.only(top: verticalPadding - 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.group_outlined,
+            size: 14,
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: CopyableTextBox(
+              text: circleName,
+              textStyle: TextStyle(
+                color: scheme.onSurfaceVariant,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            ),
+          ),
+        ],
       ),
     );
   }

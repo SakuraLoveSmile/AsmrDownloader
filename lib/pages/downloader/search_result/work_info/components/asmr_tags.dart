@@ -11,20 +11,26 @@ class AsmrTags extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final tagLs = ref.watch(tagLsProvider);
+    if (tagLs.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: EdgeInsets.only(top: verticalPadding),
       child: Wrap(
         alignment: WrapAlignment.start,
-        spacing: 10.0,
+        spacing: 6.0,
+        runSpacing: 6.0,
         children: [
-          ...tagLs.map((e) => Padding(
-                padding: const EdgeInsets.only(top: 3.0, bottom: 3.0),
-                child: CopyableTextBox(
-                  text: e,
-                  textStyle: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-                  backgroundColor: scheme.surfaceContainerHighest,
-                  borderRadius: 15.0,
+          ...tagLs.map((e) => CopyableTextBox(
+                text: e,
+                textStyle: TextStyle(
+                  color: scheme.onSurface.withValues(alpha: 0.85),
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
                 ),
+                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.6),
+                border: Border.all(color: scheme.outlineVariant, width: 0.8),
+                borderRadius: 100.0,
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
               ))
         ],
       ),

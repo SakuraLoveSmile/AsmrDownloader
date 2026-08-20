@@ -1,6 +1,4 @@
-import 'package:asmr_downloader/pages/library/tools/auto_organize_check.dart';
-import 'package:asmr_downloader/pages/library/tools/chicken_rice_config_controls.dart';
-import 'package:asmr_downloader/pages/library/tools/navidrome_path_picker.dart';
+import 'package:asmr_downloader/pages/library/tools/library_config_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
 import 'package:asmr_downloader/pages/library/tools/transcribe_status_indicator.dart';
 import 'package:asmr_downloader/pages/library/work_list.dart';
@@ -24,30 +22,37 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 注意：LibraryPage 是 IndexedStack 的子页，不能再包 Expanded，
-    // 由 Column 直接撑满 IndexedStack 的约束。
+    final scheme = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        // 工具栏第一行：整理路径 + 自动整理 + AI 字幕配置
+        const SizedBox(height: 10),
+        // 单行紧凑工具栏：核心操作 + 偏好配置
         AppToolbarRow(
+          key: const ValueKey('onboarding-library-toolbar'),
           children: [
-            NavidromePathPicker(),
-            AutoOrganizeCheck(),
-            ChickenRiceConfigControls(),
-          ],
-        ),
-        const SizedBox(height: 8),
-        // 工具栏第二行：批量整理 / 注册表 / 字幕
-        AppToolbarRow(
-          children: [
-            OrganizeAllButton(),
-            WorksIndexButton(),
+            const OrganizeAllButton(),
+            const WorksIndexButton(),
             TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
+            IconButton(
+              key: const ValueKey('onboarding-library-config'),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => const LibraryConfigDialog(),
+              ),
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              tooltip: '整理与 AI 字幕设置',
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor:
+                    scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         // 作品库内容：已下载作品列表
         Expanded(child: LibraryWorkList(key: _workListKey)),
       ],

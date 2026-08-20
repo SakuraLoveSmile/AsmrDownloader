@@ -68,26 +68,46 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     final batchBusy = activeSourceId != null;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       child: Row(
         children: [
-          Text('作品库（${works.length}）',
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: scheme.outlineVariant, width: 0.6),
+            ),
+            child: Text(
+              '已下载作品（${works.length}）',
+              style: TextStyle(
+                color: scheme.onSurface,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
           if (selectedCount > 0) ...[
-            const SizedBox(width: 12),
-            Text('已选 $selectedCount',
-                style: TextStyle(color: scheme.primary, fontSize: 12)),
+            const SizedBox(width: 10),
+            Text(
+              '已选 $selectedCount',
+              style: TextStyle(
+                color: scheme.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(width: 8),
             OutlinedButton(
               onPressed: batchBusy ? null : _organizeSelected,
               child: const Text('整理所选'),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             OutlinedButton(
               onPressed: batchBusy ? null : _transcribeSelected,
               child: const Text('字幕所选'),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: 6),
             OutlinedButton(
               onPressed: () => _toggleSelectAll(works),
               child: Text(_isAllSelected(works) ? '取消全选' : '全选'),
@@ -99,9 +119,13 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
               ref.invalidate(worksLibraryProvider);
               ref.invalidate(unorganizedCountProvider);
             },
-            icon: const Icon(Icons.refresh, size: 18),
+            icon: const Icon(Icons.refresh_rounded, size: 17),
             tooltip: '刷新作品库',
             visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              shape: const CircleBorder(),
+              backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+            ),
           ),
         ],
       ),
@@ -121,9 +145,9 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       itemCount: works.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 4),
+      separatorBuilder: (_, __) => const SizedBox(height: 6),
       itemBuilder: (context, i) => _WorkRow(
         item: works[i],
         selected: _selected.contains(works[i].sourceId),
@@ -239,10 +263,9 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
     final scheme = Theme.of(context).colorScheme;
     final ui = ref.read(uiServiceProvider);
 
-    // 状态标签：色底 + 深字的圆角 chip
+    // 状态标签：晶莹胶囊 Badge
     final (String statusLabel, Color statusFg, Color statusBg) = transcribing
-        ? ('字幕中', scheme.primary,
-            scheme.primaryContainer.withValues(alpha: 0.5))
+        ? ('字幕中', scheme.primary, scheme.primaryContainer)
         : item.organized
             ? ('已整理', AppColors.success, AppColors.successBg)
             : item.missingSubtitleCount > 0
@@ -253,145 +276,182 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
         decoration: BoxDecoration(
           color: selected
-              ? scheme.primary.withValues(alpha: 0.06)
+              ? scheme.primary.withValues(alpha: 0.1)
               : _hovered
-                  ? scheme.surfaceContainerHighest
-                  : scheme.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(8),
+                  ? scheme.surfaceContainerHigh
+                  : scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: selected
-                  ? scheme.primary.withValues(alpha: 0.45)
-                  : scheme.outlineVariant,
-              width: 1),
+            color: selected
+                ? scheme.primary.withValues(alpha: 0.5)
+                : scheme.outlineVariant,
+            width: 0.8,
+          ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
-        children: [
-          Checkbox(
-            value: selected,
-            onChanged: (_) => onToggleSelect(),
-            visualDensity: VisualDensity.compact,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(item.sourceId,
-                        style: TextStyle(
-                            color: scheme.onSurface,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13)),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(item.title,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: scheme.onSurfaceVariant, fontSize: 12)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (item.cvNames.isNotEmpty) ...[
-                      Text(item.cvNames,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                              color: scheme.onSurfaceVariant
-                                  .withValues(alpha: 0.7),
-                              fontSize: 11)),
-                      const SizedBox(width: 8),
-                    ],
-                    Text('音轨 ${item.trackCount}',
-                        style: TextStyle(
-                            color:
-                                scheme.onSurfaceVariant.withValues(alpha: 0.7),
-                            fontSize: 11)),
-                    if (item.missingSubtitleCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Text('缺字幕 ${item.missingSubtitleCount}',
-                          style: const TextStyle(
-                              color: AppColors.warning, fontSize: 11)),
-                    ],
-                    if (item.convertibleVttCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Text('vtt ${item.convertibleVttCount}',
-                          style: const TextStyle(
-                              color: AppColors.info, fontSize: 11)),
-                    ],
-                  ],
-                ),
-              ],
+          children: [
+            Checkbox(
+              value: selected,
+              onChanged: (_) => onToggleSelect(),
+              visualDensity: VisualDensity.compact,
             ),
-          ),
-          // 状态标签
-          if (transcribing)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: scheme.primary),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        item.sourceId,
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          item.title,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      if (item.cvNames.isNotEmpty) ...[
+                        Text(
+                          'CV: ${item.cvNames}',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        '音轨 ${item.trackCount}',
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+                          fontSize: 11,
+                        ),
+                      ),
+                      if (item.missingSubtitleCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          '缺字幕 ${item.missingSubtitleCount}',
+                          style: const TextStyle(
+                            color: AppColors.warning,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                      if (item.convertibleVttCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          'vtt ${item.convertibleVttCount}',
+                          style: const TextStyle(
+                            color: AppColors.info,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
               ),
             ),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: statusBg,
-              borderRadius: BorderRadius.circular(10),
+            // 状态标签
+            if (transcribing)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: scheme.primary,
+                  ),
+                ),
+              ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: statusBg,
+                borderRadius: BorderRadius.circular(100),
+                border: Border.all(
+                  color: statusFg.withValues(alpha: 0.3),
+                  width: 0.6,
+                ),
+              ),
+              child: Text(
+                statusLabel,
+                style: TextStyle(
+                  color: statusFg,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
-            child: Text(
-              statusLabel,
-              style: TextStyle(color: statusFg, fontSize: 11),
+            const SizedBox(width: 8),
+            // 行内操作
+            _RowIconBtn(
+              icon: Icons.folder_open_rounded,
+              tooltip: '打开目录',
+              onTap: () => ui.openFolderForDir(item.sourceDir),
             ),
-          ),
-          const SizedBox(width: 8),
-          // 行内操作
-          _RowIconBtn(
-            icon: Icons.folder_open,
-            tooltip: '打开目录',
-            onTap: () => ui.openFolderForDir(item.sourceDir),
-          ),
-          _RowIconBtn(
-            icon: Icons.library_music_outlined,
-            tooltip: '整理到 Navidrome',
-            onTap: () async {
-              final outcome =
-                  await ui.organizeWorkFor(item, pickPathIfEmpty: true);
-              final result = outcome?.result;
-              if (result != null) {
-                final note = outcome?.metadataNote;
-                var suffix = note == null ? '' : '；$note';
-                if (result.tagWriteFailures > 0) {
-                  suffix += '；${result.tagWriteFailures} 个文件标签写入失败';
+            _RowIconBtn(
+              icon: Icons.library_music_rounded,
+              tooltip: '整理到 Navidrome',
+              onTap: () async {
+                final outcome =
+                    await ui.organizeWorkFor(item, pickPathIfEmpty: true);
+                final result = outcome?.result;
+                if (result != null) {
+                  final note = outcome?.metadataNote;
+                  var suffix = note == null ? '' : '；$note';
+                  if (result.tagWriteFailures > 0) {
+                    suffix += '；${result.tagWriteFailures} 个文件标签写入失败';
+                  }
+                  ui.showSnack(
+                      '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个$suffix');
+                } else {
+                  ui.showSnack('整理未执行（未设置整理路径或目录缺失）');
                 }
-                ui.showSnack(
-                    '整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个$suffix');
-              } else {
-                ui.showSnack('整理未执行（未设置整理路径或目录缺失）');
-              }
-            },
-          ),
-          _RowIconBtn(
-            icon: Icons.subtitles_outlined,
-            tooltip: 'AI 生成字幕（ChickenRice）',
-            enabled: !transcribing,
-            onTap: () => ui.transcribeWork(item.sourceId, item.sourceDir,
-                pickScriptIfEmpty: true),
-          ),
-          _RowIconBtn(
-            icon: Icons.lyrics_outlined,
-            tooltip: 'vtt 转 lrc 歌词',
-            enabled: item.convertibleVttCount > 0 && !transcribing,
-            onTap: () => ui.convertVttToLrcForWork(item.sourceDir),
-          ),
+              },
+            ),
+            _RowIconBtn(
+              icon: Icons.subtitles_rounded,
+              tooltip: 'AI 生成字幕（ChickenRice）',
+              enabled: !transcribing,
+              onTap: () => ui.transcribeWork(
+                item.sourceId,
+                item.sourceDir,
+                pickScriptIfEmpty: true,
+              ),
+            ),
+            _RowIconBtn(
+              icon: Icons.lyrics_rounded,
+              tooltip: 'vtt 转 lrc 歌词',
+              enabled: item.convertibleVttCount > 0 && !transcribing,
+              onTap: () => ui.convertVttToLrcForWork(item.sourceDir),
+            ),
           ],
         ),
       ),
@@ -414,16 +474,22 @@ class _RowIconBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.only(left: 2),
+      padding: const EdgeInsets.only(left: 3),
       child: IconButton(
         onPressed: enabled ? onTap : null,
-        icon: Icon(icon, size: 17),
+        icon: Icon(icon, size: 16),
         tooltip: tooltip,
         visualDensity: VisualDensity.compact,
+        splashRadius: 14,
+        style: IconButton.styleFrom(
+          shape: const CircleBorder(),
+          backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.3),
+        ),
         color: enabled
-            ? Theme.of(context).colorScheme.onSurfaceVariant
-            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
+            ? scheme.onSurfaceVariant
+            : scheme.onSurface.withValues(alpha: 0.2),
       ),
     );
   }

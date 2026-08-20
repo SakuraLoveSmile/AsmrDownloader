@@ -8,10 +8,14 @@ class CachedWorkCard extends ConsumerStatefulWidget {
   const CachedWorkCard({
     super.key,
     required this.entry,
+    this.isSelected = false,
+    this.onTap,
     this.onRemoved,
   });
 
   final CachedLibraryEntry entry;
+  final bool isSelected;
+  final VoidCallback? onTap;
   final VoidCallback? onRemoved;
 
   @override
@@ -27,82 +31,113 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isSelected = widget.isSelected;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: Card(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _hovered ? -3 : 0, 0),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? scheme.primary.withValues(alpha: 0.12)
+              : scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected
+                ? scheme.primary
+                : _hovered
+                    ? scheme.primary.withValues(alpha: 0.4)
+                    : scheme.outlineVariant,
+            width: isSelected ? 1.4 : 0.8,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected
+                  ? scheme.primary.withValues(alpha: 0.25)
+                  : Colors.black.withValues(alpha: _hovered ? 0.35 : 0.12),
+              blurRadius: _hovered || isSelected ? 16 : 6,
+              offset: Offset(0, _hovered ? 6 : 2),
+            ),
+          ],
+        ),
         clipBehavior: Clip.antiAlias,
-        margin: EdgeInsets.zero,
-        elevation: _hovered ? 4 : 1,
-        child: InkWell(
-          onTap: _showDetails,
-          child: Stack(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(7, 7, 7, 6),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildCover(scheme),
-                    const SizedBox(height: 7),
-                    SizedBox(
-                      height: 36,
-                      child: Text(
-                        entry.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          height: 1.35,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap ?? _showDetails,
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildCover(scheme),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 36,
+                        child: Text(
+                          entry.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            height: 1.35,
+                            letterSpacing: -0.1,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      entry.sourceId,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 10,
+                      const SizedBox(height: 3),
+                      Text(
+                        entry.sourceId,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.primary,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _secondaryLine,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 10,
+                      const SizedBox(height: 2),
+                      Text(
+                        _secondaryLine,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 10,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      entry.releaseDate.isEmpty ? '发售日期：-' : entry.releaseDate,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 10,
+                      const SizedBox(height: 2),
+                      Text(
+                        entry.releaseDate.isEmpty ? '发售日期：-' : entry.releaseDate,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
+                          fontSize: 10,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Positioned(
-                top: 12,
-                left: 12,
-                child: _buildCacheBadges(),
-              ),
-              if (_hovered || _removing)
                 Positioned(
-                  top: 7,
-                  right: 7,
-                  child: _buildActions(scheme),
+                  top: 14,
+                  left: 14,
+                  child: _buildCacheBadges(scheme),
                 ),
-            ],
+                if (_hovered || _removing)
+                  Positioned(
+                    top: 14,
+                    right: 14,
+                    child: _buildActions(scheme),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -122,20 +157,24 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
     final cover = ref.watch(cachedCoverProvider(entry.sourceId));
     return AspectRatio(
       aspectRatio: 3 / 4,
-      child: DecoratedBox(
+      child: Container(
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(7),
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: scheme.outlineVariant, width: 0.6),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(9.4),
           child: cover.when(
             loading: () => _placeholder(
               scheme,
-              const SizedBox(
+              SizedBox(
                 width: 18,
                 height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: scheme.primary,
+                ),
               ),
             ),
             error: (_, __) => _placeholder(
@@ -163,55 +202,78 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
 
   Widget _placeholder(ColorScheme scheme, Widget child) {
     return Container(
-      color: scheme.surfaceContainerHighest,
+      color: scheme.surfaceContainerLow,
       alignment: Alignment.center,
       child: child,
     );
   }
 
-  Widget _buildCacheBadges() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _CacheBadge(
-          icon: Icons.headphones_outlined,
-          present: entry.hasTracks,
-          tooltip: entry.hasTracks ? '已缓存 tracks' : '缺少 tracks',
-        ),
-        const SizedBox(width: 3),
-        _CacheBadge(
-          icon: Icons.image_outlined,
-          present: entry.hasCover,
-          tooltip: entry.hasCover ? '已缓存封面' : '缺少封面',
-        ),
-      ],
+  Widget _buildCacheBadges(ColorScheme scheme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xE01C1C1E),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: scheme.outlineVariant, width: 0.6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CacheBadge(
+            icon: Icons.headphones_rounded,
+            present: entry.hasTracks,
+            tooltip: entry.hasTracks ? '已缓存 tracks' : '缺少 tracks',
+          ),
+          const SizedBox(width: 4),
+          _CacheBadge(
+            icon: Icons.image_rounded,
+            present: entry.hasCover,
+            tooltip: entry.hasCover ? '已缓存封面' : '缺少封面',
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildActions(ColorScheme scheme) {
-    return Material(
-      color: scheme.surface.withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(7),
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xE01C1C1E),
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: scheme.outlineVariant, width: 0.6),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
             onPressed: _removing ? null : _showDetails,
-            icon: const Icon(Icons.info_outline, size: 17),
+            icon: const Icon(Icons.info_outline_rounded, size: 16),
             tooltip: '查看详情',
             visualDensity: VisualDensity.compact,
+            splashRadius: 14,
           ),
           IconButton(
             onPressed: _removing ? null : _remove,
             icon: _removing
-                ? const SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                ? SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: scheme.error,
+                    ),
                   )
-                : const Icon(Icons.delete_outline, size: 17),
+                : Icon(Icons.delete_outline_rounded, size: 16, color: scheme.error),
             tooltip: '删除该条缓存',
             visualDensity: VisualDensity.compact,
+            splashRadius: 14,
           ),
         ],
       ),

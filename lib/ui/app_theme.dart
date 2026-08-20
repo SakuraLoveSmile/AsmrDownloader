@@ -1,55 +1,87 @@
 import 'package:flutter/material.dart';
 
-/// 全局语义色：状态色与文件类型图标色，替代散落的 Colors.xxxAccent。
-/// 状态色按深色主题设计：浅字 + 深底，用于 chip / 状态标签。
+/// 全局语义色：贴合 Apple Human Interface Guidelines (HIG) 标准系统色。
+/// 深色模式下采用高对比度前景色与半透明高雅背景。
 abstract final class AppColors {
-  // 状态色（深底 + 亮字，用于 chip / 状态标签）
-  static const success = Color(0xFF7ED49A);
-  static const successBg = Color(0xFF1D3B2A);
-  static const warning = Color(0xFFE8A33D);
-  static const warningBg = Color(0xFF3A2C10);
-  static const info = Color(0xFF8AB4F8);
-  static const infoBg = Color(0xFF1D2E47);
-  static const danger = Color(0xFFF28B82);
-  static const dangerBg = Color(0xFF41221F);
+  // Apple System Colors (Dark Mode)
+  static const brandBlue = Color(0xFF0A84FF);
+  static const brandBlueHover = Color(0xFF0071E3);
 
-  /// 重试按钮等实心场景的警告色（配白字）
-  static const warningSolid = Color(0xFFED6C02);
+  // 状态色（Apple Dark Functional Colors）
+  static const success = Color(0xFF30D158);
+  static const successBg = Color(0x2630D158); // ~15% 透明绿
+  static const warning = Color(0xFFFF9F0A);
+  static const warningBg = Color(0x26FF9F0A); // ~15% 透明橙
+  static const info = Color(0xFF0A84FF);
+  static const infoBg = Color(0x260A84FF); // ~15% 透明蓝
+  static const danger = Color(0xFFFF453A);
+  static const dangerBg = Color(0x26FF453A); // ~15% 透明红
 
-  // 文件类型图标色
-  static const folder = Color(0xFFF9C100);
-  static const audio = Color(0xFF64B5F6);
-  static const image = Color(0xFF81C784);
-  static const textFile = Color(0xFF9E9E9E);
+  /// 实心按钮/显著告警场景
+  static const warningSolid = Color(0xFFFF9F0A);
+  static const dangerSolid = Color(0xFFFF453A);
 
-  // CV 标签配色（深底 + 亮青字）
-  static const cvBg = Color(0xFF123B36);
-  static const cvText = Color(0xFF6FD6C6);
+  // 文件类型图标色 (Apple System Colors)
+  static const folder = Color(0xFFFFD60A); // Apple Yellow
+  static const audio = Color(0xFF0A84FF);  // Apple Music Blue
+  static const image = Color(0xFF30D158);  // Apple Photos Green
+  static const textFile = Color(0xFF8E8E93); // Apple System Gray
+
+  // CV 标签配色（Apple Cyan 晶莹半透明）
+  static const cvBg = Color(0x2664D2FF);
+  static const cvText = Color(0xFF64D2FF);
+
+  // 细边框与分割线
+  static const hairline = Color(0x1FFFFFFF); // 12% 白
+  static const subtleHover = Color(0x14FFFFFF); // 8% 白
 }
 
-/// 应用深色主题：沉浸式深色风格。
-///
-/// 所有页面组件应通过 Theme / ColorScheme 取色，禁止再硬编码颜色。
+/// 应用深色主题：沉浸式 Apple 设计风格。
 abstract final class AppTheme {
-  static const _seed = Color(0xFF7C4DFF);
+  static const _primarySeed = Color(0xFF0A84FF);
 
   static ThemeData dark() {
     final scheme = ColorScheme.fromSeed(
-      seedColor: _seed,
+      seedColor: _primarySeed,
       brightness: Brightness.dark,
     ).copyWith(
-      surface: const Color(0xFF1E1E1E),
+      primary: AppColors.brandBlue,
+      onPrimary: Colors.white,
+      primaryContainer: const Color(0x260A84FF),
+      onPrimaryContainer: const Color(0xFF70B4FF),
+      surface: const Color(0xFF0F0F12), // Deep Space Black / Scaffold
+      surfaceContainerLowest: const Color(0xFF141417),
+      surfaceContainerLow: const Color(0xFF1C1C1E), // Apple Grouped Background
+      surfaceContainer: const Color(0xFF242428),
+      surfaceContainerHigh: const Color(0xFF2C2C2E), // Apple Card Background
+      surfaceContainerHighest: const Color(0xFF3A3A3E), // Hover & High Contrast
+      onSurface: const Color(0xFFF5F5F7), // Apple Primary Text
+      onSurfaceVariant: const Color(0xFF8E8E93), // Apple Secondary Text
+      outline: const Color(0x388E8E93),
+      outlineVariant: AppColors.hairline,
+      error: AppColors.danger,
+      onError: Colors.white,
     );
 
-    final outlineBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: scheme.outlineVariant),
+    final inputBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: scheme.outlineVariant, width: 0.8),
     );
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
+      fontFamilyFallback: const [
+        '-apple-system',
+        'BlinkMacSystemFont',
+        'SF Pro Text',
+        'SF Pro Display',
+        'PingFang SC',
+        'Hiragino Sans GB',
+        'Microsoft YaHei',
+        'sans-serif',
+      ],
 
       // ---------- 输入框 ----------
       inputDecorationTheme: InputDecorationThemeData(
@@ -57,57 +89,63 @@ abstract final class AppTheme {
         filled: true,
         fillColor: scheme.surfaceContainerLow,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        hintStyle:
-            TextStyle(color: scheme.onSurfaceVariant.withValues(alpha: 0.65)),
-        border: outlineBorder,
-        enabledBorder: outlineBorder,
-        disabledBorder: outlineBorder.copyWith(
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        hintStyle: TextStyle(
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
+          fontSize: 13,
+        ),
+        border: inputBorder,
+        enabledBorder: inputBorder,
+        disabledBorder: inputBorder.copyWith(
           borderSide: BorderSide(
-              color: scheme.outlineVariant.withValues(alpha: 0.6)),
+            color: scheme.outlineVariant.withValues(alpha: 0.4),
+            width: 0.8,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: scheme.primary, width: 1.4),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: scheme.primary, width: 1.2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide(color: scheme.error),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: scheme.error, width: 1.0),
         ),
         focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: scheme.error, width: 1.4),
         ),
       ),
 
-      // ---------- 按钮 ----------
+      // ---------- 按钮（全胶囊 Stadium 风格） ----------
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size(0, 30),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          textStyle: const TextStyle(fontSize: 12),
-          side: BorderSide(color: scheme.outlineVariant),
-          foregroundColor: scheme.onSurface.withValues(alpha: 0.85),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+          side: BorderSide(color: scheme.outlineVariant, width: 0.8),
+          foregroundColor: scheme.onSurface.withValues(alpha: 0.9),
           disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.3),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          backgroundColor: scheme.surfaceContainerLow.withValues(alpha: 0.5),
+          shape: const StadiumBorder(),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size(0, 32),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          textStyle: const TextStyle(fontSize: 13),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          backgroundColor: scheme.primary,
+          foregroundColor: scheme.onPrimary,
+          shape: const StadiumBorder(),
+          elevation: 0,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: scheme.primary,
-          textStyle: const TextStyle(fontSize: 13),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          shape: const StadiumBorder(),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         ),
       ),
 
@@ -118,22 +156,25 @@ abstract final class AppTheme {
           filled: true,
           fillColor: scheme.surfaceContainerLow,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          border: outlineBorder,
-          enabledBorder: outlineBorder,
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          border: inputBorder,
+          enabledBorder: inputBorder,
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: scheme.primary, width: 1.4),
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: scheme.primary, width: 1.2),
           ),
         ),
         textStyle: TextStyle(fontSize: 13, color: scheme.onSurface),
         menuStyle: MenuStyle(
           backgroundColor:
-              WidgetStatePropertyAll(scheme.surfaceContainer),
+              WidgetStatePropertyAll(scheme.surfaceContainerHigh),
           shape: WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: scheme.outlineVariant, width: 0.8),
+            ),
           ),
-          elevation: const WidgetStatePropertyAll(4),
+          elevation: const WidgetStatePropertyAll(6),
         ),
       ),
 
@@ -144,8 +185,11 @@ abstract final class AppTheme {
                 ? scheme.primary
                 : Colors.transparent),
         checkColor: WidgetStatePropertyAll(scheme.onPrimary),
-        side: BorderSide(color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+        side: BorderSide(
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.65),
+          width: 1.2,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
       ),
 
       // ---------- 列表 / 折叠 ----------
@@ -160,7 +204,8 @@ abstract final class AppTheme {
       ),
       dividerTheme: DividerThemeData(
         color: scheme.outlineVariant,
-        thickness: 1,
+        thickness: 0.8,
+        space: 1,
       ),
 
       // ---------- 进度 / 提示 ----------
@@ -171,22 +216,28 @@ abstract final class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: scheme.inverseSurface,
-        contentTextStyle: TextStyle(color: scheme.onInverseSurface),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        backgroundColor: scheme.surfaceContainerHighest,
+        contentTextStyle: TextStyle(color: scheme.onSurface),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: BorderSide(color: scheme.outlineVariant, width: 0.8),
+        ),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: scheme.outlineVariant, width: 0.8),
+        ),
       ),
       cardTheme: CardThemeData(
-        color: scheme.surfaceContainerLow,
+        color: scheme.surfaceContainerHigh,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: scheme.outlineVariant),
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(color: scheme.outlineVariant, width: 0.8),
         ),
       ),
     );

@@ -8,16 +8,39 @@ class AsmrMiscInfo extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final style = TextStyle(
-        fontSize: 12,
-        color: Theme.of(context).colorScheme.onSurfaceVariant);
+    final scheme = Theme.of(context).colorScheme;
+    final releaseDate = ref.watch(releaseDateProvider);
+    final dlCount = ref.watch(dlCountProvider);
+
+    final metaStyle = TextStyle(
+      fontSize: 12,
+      color: scheme.onSurfaceVariant.withValues(alpha: 0.85),
+      fontWeight: FontWeight.w400,
+    );
+
     return Padding(
-      padding: EdgeInsets.only(top: verticalPadding),
+      padding: EdgeInsets.only(top: verticalPadding - 2),
       child: Row(
         children: [
-          Text(ref.watch(releaseDateProvider), style: style),
-          const SizedBox(width: 20.0),
-          Text('销量: ${ref.watch(dlCountProvider)}', style: style),
+          if (releaseDate.isNotEmpty) ...[
+            Icon(
+              Icons.calendar_today_outlined,
+              size: 13,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+            const SizedBox(width: 4),
+            Text(releaseDate, style: metaStyle),
+            const SizedBox(width: 14),
+          ],
+          if (dlCount > 0) ...[
+            Icon(
+              Icons.shopping_bag_outlined,
+              size: 13,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
+            const SizedBox(width: 4),
+            Text('销量 $dlCount', style: metaStyle),
+          ],
         ],
       ),
     );

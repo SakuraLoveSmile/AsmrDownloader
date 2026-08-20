@@ -10,15 +10,20 @@ class AsmrTitle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final title = ref.watch(titleProvider);
+    final scheme = Theme.of(context).colorScheme;
+
     return Padding(
-      padding: EdgeInsets.only(top: verticalPadding),
+      padding: EdgeInsets.only(top: verticalPadding + 2),
       child: CopyableTextBox(
         text: title,
-        textStyle: Theme.of(context)
-            .textTheme
-            .titleLarge
-            ?.copyWith(fontWeight: FontWeight.w600, height: 1.35),
-        padding: EdgeInsets.zero,
+        textStyle: TextStyle(
+          fontSize: 16.5,
+          fontWeight: FontWeight.w700,
+          color: scheme.onSurface,
+          height: 1.35,
+          letterSpacing: -0.2,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
       ),
     );
   }

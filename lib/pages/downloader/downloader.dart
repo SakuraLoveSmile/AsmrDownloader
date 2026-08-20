@@ -13,32 +13,37 @@ class Downloader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 注意：Downloader 是 IndexedStack 的子页，不能再包 Expanded，
-    // 由 Column 直接撑满 IndexedStack 的约束。
+    final scheme = Theme.of(context).colorScheme;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         // 搜索 + 下载路径 + API channel + 设置
         AppToolbarRow(
           children: [
-            SearchBox(),
-            DownloadPathPicker(),
-            AsmrApiChannel(),
+            const SearchBox(),
+            const DownloadPathPicker(),
+            const AsmrApiChannel(),
             IconButton(
               key: const ValueKey('onboarding-settings'),
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (_) => const DownloaderSettingsPanel(),
               ),
-              icon: const Icon(Icons.settings_outlined),
+              icon: const Icon(Icons.tune_rounded, size: 18),
               tooltip: '下载设置',
               visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor:
+                    scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        SearchResult(),
+        const SizedBox(height: 10),
+        const SearchResult(),
       ],
     );
   }
