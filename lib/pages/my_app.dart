@@ -46,12 +46,7 @@ class MyApp extends StatelessWidget {
                       ],
                     ),
                   )
-                : const Column(
-                    children: [
-                      AppNavTabs(standalone: true),
-                      Expanded(child: AppShell()),
-                    ],
-                  ),
+                : const AppShell(),
           ),
         ),
       ),

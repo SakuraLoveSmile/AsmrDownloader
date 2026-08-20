@@ -13,30 +13,31 @@ class AsmrCover extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final coverLoadingState = ref.watch(coverLoadingStateProvider);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 320),
+      constraints: const BoxConstraints(maxHeight: 330),
       child: Center(
         child: AspectRatio(
           aspectRatio: 3 / 4,
-          child: DecoratedBox(
+          child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: scheme.outlineVariant, width: 0.8),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.12),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+                  color: Colors.black.withValues(alpha: 0.28),
+                  blurRadius: 18,
+                  offset: const Offset(0, 6),
                 ),
               ],
             ),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(13.2),
               child: coverLoadingState.when(
                 data: (bytes) {
                   if (bytes == null) {
                     return _placeholder(
                       scheme,
-                      child: Icon(Icons.image_not_supported,
-                          size: 40, color: scheme.onSurfaceVariant),
+                      child: Icon(Icons.image_not_supported_outlined,
+                          size: 42, color: scheme.onSurfaceVariant),
                     );
                   }
                   return FadeInImage(
@@ -49,10 +50,13 @@ class AsmrCover extends ConsumerWidget {
                 },
                 loading: () => _placeholder(
                   scheme,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2.0),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.0,
+                      color: scheme.primary,
+                    ),
                   ),
                 ),
                 error: (error, stack) {
@@ -61,7 +65,8 @@ class AsmrCover extends ConsumerWidget {
                       'error: $error');
                   return _placeholder(
                     scheme,
-                    child: Icon(Icons.error, size: 40, color: scheme.error),
+                    child: Icon(Icons.broken_image_outlined,
+                        size: 42, color: scheme.error),
                   );
                 },
               ),
@@ -75,7 +80,7 @@ class AsmrCover extends ConsumerWidget {
   /// 加载/失败时的灰底占位（保持封面区域的宽高比）
   Widget _placeholder(ColorScheme scheme, {required Widget child}) {
     return Container(
-      color: scheme.surfaceContainerHighest,
+      color: scheme.surfaceContainerLow,
       alignment: Alignment.center,
       child: child,
     );

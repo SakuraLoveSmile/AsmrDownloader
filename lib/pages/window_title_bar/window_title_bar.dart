@@ -16,26 +16,30 @@ class WindowTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(color: Colors.transparent),
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(
+          bottom: BorderSide(color: scheme.outlineVariant, width: 0.8),
+        ),
+      ),
       child: MoveWindow(
         child: SizedBox(
           width: double.infinity,
           height: TITLEBAR_HEIGHT,
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 导航标签（下载 / 作品库）
+              // 导航标签（下载 / 作品库 / 媒体库）
               const Padding(
-                padding: EdgeInsets.only(left: 8, top: 4),
+                padding: EdgeInsets.only(left: 12),
                 child: AppNavTabs(),
               ),
               Expanded(child: Container()),
               // 版本号 + 检查更新入口
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: UpdateEntry(),
-              ),
+              const UpdateEntry(),
+              const SizedBox(width: 4),
               CaptionButtons(),
             ],
           ),

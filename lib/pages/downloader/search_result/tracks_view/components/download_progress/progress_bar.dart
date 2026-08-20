@@ -10,7 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 class ProgressBar extends ConsumerWidget {
   const ProgressBar({super.key});
 
-  static const double _barHeight = 26;
+  static const double _barHeight = 22;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,20 +21,38 @@ class ProgressBar extends ConsumerWidget {
 
     final scheme = Theme.of(context).colorScheme;
     final bar = segments.isEmpty
-        ? LinearProgressIndicator(
-            minHeight: _barHeight,
-            borderRadius: BorderRadius.circular(8),
-            value: process,
+        ? Container(
+            height: _barHeight,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: scheme.outlineVariant, width: 0.8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(100),
+              child: LinearProgressIndicator(
+                minHeight: _barHeight,
+                value: process,
+                backgroundColor: scheme.surfaceContainerLow,
+                valueColor: AlwaysStoppedAnimation(scheme.primary),
+              ),
+            ),
           )
-        : SizedBox(
+        : Container(
             height: _barHeight,
             width: double.infinity,
-            child: CustomPaint(
-              painter: _SegmentedBarPainter(
-                segments: segments,
-                trackColor: scheme.surfaceContainerHighest,
-                fillColor: scheme.primary,
-                failedColor: scheme.error,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(100),
+              border: Border.all(color: scheme.outlineVariant, width: 0.8),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(100),
+              child: CustomPaint(
+                painter: _SegmentedBarPainter(
+                  segments: segments,
+                  trackColor: scheme.surfaceContainerLow,
+                  fillColor: scheme.primary,
+                  failedColor: scheme.error,
+                ),
               ),
             ),
           );
@@ -45,7 +63,7 @@ class ProgressBar extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           bar,
-          const SizedBox(height: 4),
+          const SizedBox(height: 5),
           _ProgressCaption(status: status, activeFileNames: activeFileNames),
         ],
       ),
@@ -63,7 +81,7 @@ class _ProgressCaption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
-    const textStyleBase = TextStyle(height: 1.0, fontSize: 12);
+    const textStyleBase = TextStyle(height: 1.0, fontSize: 11.5);
 
     if (activeFileNames.isNotEmpty) {
       final displayText = switch (activeFileNames.length) {
@@ -101,8 +119,8 @@ class _SegmentedBarPainter extends CustomPainter {
     required this.failedColor,
   });
 
-  static const double _gap = 2;
-  static final BorderRadius _borderRadius = BorderRadius.circular(8);
+  static const double _gap = 1.5;
+  static final BorderRadius _borderRadius = BorderRadius.circular(100);
 
   final List<DownloadSegment> segments;
   final Color trackColor;

@@ -1,17 +1,11 @@
-import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_proxy.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/auto_update_check.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/debug_mode_check.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/github_token_button.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/onboarding_button.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
+import 'package:asmr_downloader/pages/library/tools/auto_organize_check.dart';
+import 'package:asmr_downloader/pages/library/tools/chicken_rice_config_controls.dart';
+import 'package:asmr_downloader/pages/library/tools/navidrome_path_picker.dart';
 import 'package:flutter/material.dart';
 
-/// Compact settings panel for the downloader page.
-class DownloaderSettingsPanel extends StatelessWidget {
-  const DownloaderSettingsPanel({super.key});
+/// 作品库路径与 AI 字幕引擎设置弹窗。
+class LibraryConfigDialog extends StatelessWidget {
+  const LibraryConfigDialog({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +18,7 @@ class DownloaderSettingsPanel extends StatelessWidget {
         side: BorderSide(color: scheme.outlineVariant, width: 0.8),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 460),
+        constraints: const BoxConstraints(maxWidth: 620, maxHeight: 420),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
           child: Column(
@@ -34,7 +28,7 @@ class DownloaderSettingsPanel extends StatelessWidget {
               Row(
                 children: [
                   Text(
-                    '下载设置',
+                    '作品库与整理设置',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
@@ -56,40 +50,28 @@ class DownloaderSettingsPanel extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      _SettingsSection(
-                        title: '下载与线程',
-                        icon: Icons.download_rounded,
-                        children: [
-                          DlCoverCheck(),
-                          DownloadThreadsSelector(),
-                          ParallelDownloadsSelector(),
-                        ],
+                    children: [
+                      _SectionCard(
+                        title: 'Navidrome 整理路径',
+                        icon: Icons.folder_special_rounded,
+                        child: Row(
+                          children: [
+                            const NavidromePathPicker(),
+                            const SizedBox(width: 12),
+                            const AutoOrganizeCheck(),
+                          ],
+                        ),
                       ),
-                      SizedBox(height: 12),
-                      _SettingsSection(
-                        title: '网络与授权',
-                        icon: Icons.language_rounded,
-                        children: [
-                          AsmrProxy(),
-                          GithubTokenButton(),
-                        ],
-                      ),
-                      SizedBox(height: 12),
-                      _SettingsSection(
-                        title: '常规与调试',
-                        icon: Icons.tune_rounded,
-                        children: [
-                          LogViewerButton(),
-                          DebugModeCheck(),
-                          AutoUpdateCheck(),
-                          OnboardingButton(),
-                        ],
+                      const SizedBox(height: 12),
+                      _SectionCard(
+                        title: 'ChickenRice (AI 字幕翻译引擎)',
+                        icon: Icons.subtitles_rounded,
+                        child: const ChickenRiceConfigControls(),
                       ),
                     ],
                   ),
@@ -103,16 +85,16 @@ class DownloaderSettingsPanel extends StatelessWidget {
   }
 }
 
-class _SettingsSection extends StatelessWidget {
-  const _SettingsSection({
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({
     required this.title,
     required this.icon,
-    required this.children,
+    required this.child,
   });
 
   final String title;
   final IconData icon;
-  final List<Widget> children;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -120,7 +102,7 @@ class _SettingsSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(12),
@@ -143,13 +125,8 @@ class _SettingsSection extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: children,
-          ),
+          const SizedBox(height: 10),
+          child,
         ],
       ),
     );

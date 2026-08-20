@@ -117,7 +117,7 @@ class _CancelButton extends ConsumerWidget {
   }
 }
 
-/// 统一的胶囊按钮外观，与原有下载按钮保持一致。
+/// 统一的 Apple 胶囊按钮外观。
 class _PillButton extends StatelessWidget {
   const _PillButton({
     required this.backgroundColor,
@@ -135,27 +135,41 @@ class _PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final disabled = onTap == null;
     final button = AnimatedContainer(
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOut,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOutCubic,
       decoration: ShapeDecoration(
-        color: onTap == null
-            ? backgroundColor.withValues(alpha: 0.4)
-            : backgroundColor,
+        color: disabled ? backgroundColor.withValues(alpha: 0.35) : backgroundColor,
         shape: const StadiumBorder(),
+        shadows: disabled
+            ? null
+            : [
+                BoxShadow(
+                  color: backgroundColor.withValues(alpha: 0.3),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                )
+              ],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onTap,
-          splashColor: onColor.withValues(alpha: 0.3),
+          splashColor: onColor.withValues(alpha: 0.2),
+          highlightColor: onColor.withValues(alpha: 0.1),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
             alignment: Alignment.center,
             child: Text(
               label,
-              style: TextStyle(color: onColor, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                color: disabled ? onColor.withValues(alpha: 0.5) : onColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+                letterSpacing: -0.1,
+              ),
             ),
           ),
         ),

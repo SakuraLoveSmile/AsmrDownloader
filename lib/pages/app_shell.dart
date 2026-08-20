@@ -1,3 +1,4 @@
+import 'package:asmr_downloader/pages/components/app_sidebar.dart';
 import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
 import 'package:asmr_downloader/pages/media_library/media_library.dart';
@@ -10,27 +11,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 当前显示的页面：0 = 下载，1 = 作品库，2 = 媒体库
 final currentPageProvider = StateProvider<int>((ref) => 0);
 
-/// 应用外壳：下载 / 作品库 / 媒体库三页面。
+/// 兼容旧代码别名
+final currentNavTabProvider = currentPageProvider;
+
+/// 应用外壳：采用现代 macOS 侧边栏 + 主工作区分栏架构。
 ///
 /// 用 IndexedStack 保活三个页面——切页不销毁状态，
 /// 下载进度、整理/字幕运行中的任务切到另一页也不被打断。
-/// 顶部常驻 [UpdateBanner]，发现新版本时跨页提醒。
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(currentPageProvider);
-    return Column(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const UpdateBanner(),
+        // 经典左侧边栏
+        const AppSidebar(),
+        // 主工作区
         Expanded(
-          child: IndexedStack(
-            index: index,
-            children: const [
-              Downloader(),
-              LibraryPage(),
-              MediaLibraryPage(),
+          child: Column(
+            children: [
+              const UpdateBanner(),
+              Expanded(
+                child: IndexedStack(
+                  index: index,
+                  children: const [
+                    Downloader(),
+                    LibraryPage(),
+                    MediaLibraryPage(),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
@@ -47,7 +60,7 @@ class AppNavTabs extends ConsumerWidget {
   final bool standalone;
 
   static const _tabs = <(String, IconData)>[
-    ('下载', Icons.download_outlined),
+    ('下载', Icons.arrow_downward_rounded),
     ('作品库', Icons.folder_outlined),
     ('媒体库', Icons.photo_library_outlined),
   ];
@@ -56,35 +69,51 @@ class AppNavTabs extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(currentPageProvider);
     final unorganized = ref.watch(unorganizedCountProvider).value ?? 0;
-    final tabs = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < _tabs.length; i++)
-          _NavTab(
-            key: ValueKey('onboarding-nav-tab-$i'),
-            label: _tabs[i].$1,
-            icon: _tabs[i].$2,
-            selected: i == index,
-            badgeCount: i == 1 ? unorganized : 0,
-            onTap: () => ref.read(currentPageProvider.notifier).state = i,
-          ),
-      ],
+    final scheme = Theme.of(context).colorScheme;
+
+    // Segmented Pill 胶囊底座
+    final tabs = Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(100),
+        border: Border.all(color: scheme.outlineVariant, width: 0.8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < _tabs.length; i++)
+            _NavTab(
+              key: ValueKey('onboarding-nav-tab-$i'),
+              label: _tabs[i].$1,
+              icon: _tabs[i].$2,
+              selected: i == index,
+              badgeCount: i == 1 ? unorganized : 0,
+              onTap: () => ref.read(currentPageProvider.notifier).state = i,
+            ),
+        ],
+      ),
     );
+
     if (!standalone) return tabs;
     return Container(
       width: double.infinity,
-      height: 40,
-      color: Theme.of(context).colorScheme.surface,
+      height: 46,
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(
+          bottom: BorderSide(color: scheme.outlineVariant, width: 0.8),
+        ),
+      ),
       alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.only(left: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         child: Row(
           children: [
             tabs,
             const Spacer(),
             // 版本号 + 检查更新入口
             const UpdateEntry(),
-            const SizedBox(width: 8),
           ],
         ),
       ),
@@ -92,7 +121,7 @@ class AppNavTabs extends ConsumerWidget {
   }
 }
 
-class _NavTab extends StatelessWidget {
+class _NavTab extends StatefulWidget {
   const _NavTab({
     super.key,
     required this.label,
@@ -106,57 +135,86 @@ class _NavTab extends StatelessWidget {
   final IconData icon;
   final bool selected;
   final VoidCallback onTap;
-
-  /// 右上角徽标数字（0 不显示）
   final int badgeCount;
+
+  @override
+  State<_NavTab> createState() => _NavTabState();
+}
+
+class _NavTabState extends State<_NavTab> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Material(
-        color: selected
-            ? scheme.primary.withValues(alpha: 0.1)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 15, color: color),
-                const SizedBox(width: 5),
-                Text(
-                  label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 13,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+    final selected = widget.selected;
+    final color = selected ? scheme.onSurface : scheme.onSurfaceVariant;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected
+                ? scheme.surfaceContainerHighest
+                : _hovered
+                    ? scheme.surfaceContainerHigh.withValues(alpha: 0.5)
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(100),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 1),
+                    )
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                widget.icon,
+                size: 14,
+                color: selected ? scheme.primary : color,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  color: color,
+                  fontSize: 12.5,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  letterSpacing: -0.1,
+                ),
+              ),
+              if (widget.badgeCount > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: scheme.primary,
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    '${widget.badgeCount}',
+                    style: TextStyle(
+                      color: scheme.onPrimary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-                if (badgeCount > 0) ...[
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: scheme.primary,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      '$badgeCount',
-                      style: TextStyle(
-                          color: scheme.onPrimary, fontSize: 10),
-                    ),
-                  ),
-                ],
               ],
-            ),
+            ],
           ),
         ),
       ),

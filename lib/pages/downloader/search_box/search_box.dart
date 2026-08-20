@@ -135,14 +135,11 @@ class SearchBoxState extends ConsumerState<SearchBox> {
     final downloading =
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
     final invalid = _inputText.isNotEmpty && !_isValidInput(_inputText);
-    // 空输入时禁用提交，避免回车/点击触发「无效 sourceId」提示
-    // 下载中允许搜索（加入队列场景），故不再因下载状态禁用提交
     final canSubmit = _inputText.trim().isNotEmpty;
 
-    // 非法输入时覆盖边框为错误色，其余情况沿用主题输入框样式
     final errorBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(8),
-      borderSide: BorderSide(color: scheme.error),
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: scheme.error, width: 1.2),
     );
 
     return DropTarget(
@@ -155,54 +152,75 @@ class SearchBoxState extends ConsumerState<SearchBox> {
       },
       onDragDone: _handleDrop,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         decoration: BoxDecoration(
-          color: _dragOver
-              ? scheme.primary.withValues(alpha: 0.06)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: _dragOver
+              ? [
+                  BoxShadow(
+                    color: scheme.primary.withValues(alpha: 0.35),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  )
+                ]
+              : null,
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             ConstrainedBox(
               key: const ValueKey('onboarding-search-box'),
               constraints: BoxConstraints(
-                minWidth: 160,
-                maxWidth: (MediaQuery.sizeOf(context).width * 0.29)
-                    .clamp(220.0, 300.0)
+                minWidth: 200,
+                maxWidth: (MediaQuery.sizeOf(context).width * 0.36)
+                    .clamp(260.0, 380.0)
                     .toDouble(),
               ),
               child: TextField(
                 controller: _controller,
+                style: const TextStyle(fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: '输入sourceId或作品页URL',
+                  hintText: '输入 sourceId 或作品 URL',
+                  prefixIcon: IconButton(
+                    icon: Icon(
+                      Icons.search_rounded,
+                      size: 17,
+                      color: invalid
+                          ? scheme.error
+                          : canSubmit
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                    onPressed: canSubmit ? () => _searchInput(_inputText) : null,
+                    tooltip: '搜索',
+                    splashRadius: 14,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  suffixIcon: _inputText.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(
+                            Icons.cancel_rounded,
+                            size: 16,
+                            color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                          ),
+                          onPressed: () {
+                            _controller.clear();
+                            setState(() => _inputText = '');
+                          },
+                          tooltip: '清除',
+                          splashRadius: 14,
+                          visualDensity: VisualDensity.compact,
+                        )
+                      : null,
                   border: invalid ? errorBorder : null,
                   enabledBorder: invalid ? errorBorder : null,
-                  focusedBorder: invalid
-                      ? errorBorder.copyWith(
-                          borderSide:
-                              BorderSide(color: scheme.error, width: 1.4))
-                      : null,
+                  focusedBorder: invalid ? errorBorder : null,
                 ),
                 onChanged: (value) => setState(() => _inputText = value),
                 onSubmitted: (_) => canSubmit ? _searchInput(_inputText) : null,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(left: 5.0),
-              child: IconButton(
-                onPressed: canSubmit ? () => _searchInput(_inputText) : null,
-                icon: Icon(Icons.search, color: invalid ? scheme.error : null),
-                tooltip: '搜索',
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-            IconButton(
-              onPressed: downloading ? null : _refresh,
-              icon: const Icon(Icons.refresh),
-              tooltip: '强制刷新（重新请求元数据并更新缓存）',
-              visualDensity: VisualDensity.compact,
-            ),
+            const SizedBox(width: 4),
             IconButton(
               key: const ValueKey('onboarding-paste-search'),
               onPressed: downloading
@@ -217,9 +235,24 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                         });
                       }
                     },
-              icon: const Icon(Icons.content_paste_go),
+              icon: const Icon(Icons.content_paste_rounded, size: 17),
               tooltip: '粘贴并搜索',
               visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+              ),
+            ),
+            const SizedBox(width: 2),
+            IconButton(
+              onPressed: downloading ? null : _refresh,
+              icon: const Icon(Icons.refresh_rounded, size: 17),
+              tooltip: '强制刷新元数据',
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+              ),
             ),
           ],
         ),

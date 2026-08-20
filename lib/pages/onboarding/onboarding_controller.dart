@@ -27,75 +27,57 @@ class OnboardingController {
   static const _steps = <_OnboardingStep>[
     _OnboardingStep(
       pageIndex: 0,
+      targetKey: 'onboarding-sidebar-nav',
+      title: '全新经典侧边栏',
+      body: '左侧边栏整合了「下载中心」、「作品库」与「媒体库」三大主模块。\n'
+          '边栏会实时显示活动下载任务数、未整理作品数等动态徽标，助你随时掌握后台状态。',
+    ),
+    _OnboardingStep(
+      pageIndex: 0,
       targetKey: 'onboarding-search-box',
-      title: '搜索作品',
-      body: '输入 sourceId（RJ / VJ / BJ 开头加数字，如 RJ01234567）\n'
-          '也可以直接粘贴 asmr.one 作品页 URL，自动提取 sourceId 与音轨目录。',
+      title: '智能搜索与解析',
+      body: '输入 sourceId（RJ / VJ / BJ 加数字，如 RJ01234567）\n'
+          '也可以直接粘贴 asmr.one 作品页 URL，或拖入链接与文件，自动提取作品信息与完整音轨目录。',
     ),
     _OnboardingStep(
       pageIndex: 0,
       targetKey: 'onboarding-paste-search',
-      title: '快速搜索',
-      body: '点这里读取剪贴板内容并自动搜索，无需手动粘贴。\n'
-          '也支持直接把作品页链接拖拽到搜索框。',
+      title: '一键剪贴板搜索',
+      body: '点击快速读取系统剪贴板并立即发起搜索与解析。\n'
+          '旁边的刷新按钮支持在网络或元数据更新时一键强制刷新缓存。',
     ),
     _OnboardingStep(
       pageIndex: 0,
       targetKey: 'onboarding-settings',
-      title: '下载配置',
-      body: '点这里打开下载设置：选择下载路径、下载线程数、代理、API 频道等。\n'
-          '引导完成后可随时在这里重新查看本引导。',
-    ),
-    _OnboardingStep(
-      pageIndex: 0,
-      targetKey: 'onboarding-nav-tab-1',
-      title: '切换页面',
-      body: '点「作品库」标签切到文件管理页——整理作品、生成 AI 字幕、管理注册表。',
+      title: '下载与网络偏好',
+      body: '点击打开下载设置弹窗：配置下载目录、多线程并行数、API 镜像通道、网络代理与 GitHub Token。',
     ),
     _OnboardingStep(
       pageIndex: 1,
-      targetKey: 'onboarding-navidrome-path',
-      title: '整理到 Navidrome',
-      body: '点文件夹图标选择 Navidrome 媒体库根目录。\n'
-          '下载的作品会整理成媒体库结构（社团名 / RJ号 - CV - 标题 / 音轨），\n'
-          '自动写入音频标签、获取封面、识别汉化版原版社团名。',
+      targetKey: 'onboarding-sidebar-library',
+      title: '已下载作品库',
+      body: '点击侧边栏「作品库」进入已下载作品管理中心，支持多选、分类筛选与元数据整理。',
     ),
     _OnboardingStep(
       pageIndex: 1,
-      targetKey: 'onboarding-install-engine',
-      title: 'AI 字幕',
-      body: '点「安装引擎」一键下载 ChickenRice 运行时与 Whisper 模型，\n'
-          '装完自动配置，为没有字幕的音轨生成 AI 中文字幕。\n'
-          '注意：AI 字幕仅支持 Windows；macOS 下相关控件会自动禁用。',
-    ),
-    _OnboardingStep(
-      pageIndex: 1,
-      targetKey: 'onboarding-organize-all',
-      title: '批量操作',
-      body: '点「整理全部」一次整理注册表内所有作品（或仅未整理的）。\n'
-          '下方列表支持勾选多个作品后批量整理 / 生成字幕，\n'
-          '也可逐行点行内图标整理或生成字幕。',
-    ),
-    _OnboardingStep(
-      pageIndex: 1,
-      targetKey: 'onboarding-nav-tab-2',
-      title: '媒体库',
-      body: '点「媒体库」标签切到第三页——缓存作品封面与信息、离线浏览。\n'
-          '支持单作品缓存、批量缓存、补全缺失封面。',
+      targetKey: 'onboarding-library-toolbar',
+      title: '智能整理与 AI 字幕',
+      body: '支持一键整理到 Navidrome 媒体库（自动写入音频 ID3 标签、封面、汉化版社团解析）。\n'
+          '支持调用 ChickenRice (Faster-Whisper) 自动生成 AI 中文字幕。\n'
+          '点击工具栏右侧的设置按钮可配置目标媒体库路径与 AI 引擎。',
     ),
     _OnboardingStep(
       pageIndex: 2,
-      targetKey: 'onboarding-cache-management',
-      title: '缓存管理',
-      body: '点「缓存管理」管理已缓存作品：清空 / 导入 / 导出缓存数据库。\n'
-          '旁边的「主动缓存」可按标签 / 社团 / CV 批量缓存作品元数据。',
+      targetKey: 'onboarding-sidebar-media',
+      title: '离线媒体库',
+      body: '点击侧边栏「媒体库」进入封面海报瀑布流，支持离线高速浏览全部已缓存作品。',
     ),
     _OnboardingStep(
       pageIndex: 2,
-      targetKey: 'onboarding-complete-missing',
-      title: '补全缺失',
-      body: '点「补全缺失」一键补全已缓存作品中缺失的封面与元数据信息。\n'
-          '媒体库支持搜索、排序，离线浏览已缓存的作品卡片。',
+      targetKey: 'onboarding-media-toolbar',
+      title: '海报浏览与详情检查器',
+      body: '顶部工具栏支持关键词搜索、排序与一键批量缓存。\n'
+          '💡 技巧：点击任意作品海报，右侧将滑出非模态详情检查器（Inspector），点击声优或标签即可即时联动过滤！',
     ),
   ];
 

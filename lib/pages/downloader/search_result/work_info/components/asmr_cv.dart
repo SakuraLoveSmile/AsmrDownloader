@@ -12,20 +12,30 @@ class AsmrCv extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cvLs = ref.watch(cvLsProvider);
+    if (cvLs.isEmpty) return const SizedBox.shrink();
+
     return Padding(
       padding: EdgeInsets.only(top: verticalPadding, bottom: verticalPadding),
       child: Wrap(
         alignment: WrapAlignment.start,
-        spacing: 10.0,
+        spacing: 6.0,
+        runSpacing: 6.0,
         children: [
-          ...cvLs.map((e) => Padding(
-                padding: const EdgeInsets.only(top: 3.0, bottom: 3.0),
-                child: CopyableTextBox(
-                  text: e,
-                  textStyle: const TextStyle(color: AppColors.cvText, fontSize: 12),
-                  backgroundColor: AppColors.cvBg,
-                  borderRadius: 15.0,
+          ...cvLs.map((e) => CopyableTextBox(
+                text: 'CV: $e',
+                textStyle: const TextStyle(
+                  color: AppColors.cvText,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.1,
                 ),
+                backgroundColor: AppColors.cvBg,
+                border: Border.all(
+                  color: AppColors.cvText.withValues(alpha: 0.25),
+                  width: 0.8,
+                ),
+                borderRadius: 100.0,
+                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
               ))
         ],
       ),

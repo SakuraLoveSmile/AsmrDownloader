@@ -102,57 +102,94 @@ class OnboardingOverlay extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: scheme.surfaceContainerHigh,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: scheme.outlineVariant, width: 0.8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+            padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 步骤序号
+                // 步骤胶囊徽标
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(100),
+                  ),
+                  child: Text(
+                    '${step + 1} / $stepCount 步骤',
+                    style: TextStyle(
+                      color: scheme.primary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Text(
-                  '${step + 1} / $stepCount',
-                  style: TextStyle(
-                    color: scheme.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 8),
                 Flexible(
                   child: SingleChildScrollView(
                     child: Text(
                       body,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            height: 1.5,
-                          ),
+                      style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 12.5,
+                        height: 1.45,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                // 底部按钮
+                // 底部胶囊按钮
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    TextButton(onPressed: onSkip, child: const Text('跳过引导')),
+                    TextButton(
+                      onPressed: onSkip,
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        foregroundColor: scheme.onSurfaceVariant,
+                      ),
+                      child: const Text('跳过引导', style: TextStyle(fontSize: 12)),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (step > 0)
-                          TextButton(onPressed: onPrev, child: const Text('上一步')),
+                          TextButton(
+                            onPressed: onPrev,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            child: const Text('上一步', style: TextStyle(fontSize: 12)),
+                          ),
                         if (step > 0) const SizedBox(width: 4),
                         FilledButton(
                           onPressed: onNext,
-                          child: Text(_isLast ? '开始使用' : '下一步'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          child: Text(
+                            _isLast ? '开始使用' : '下一步',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
                         ),
                       ],
                     ),
@@ -167,7 +204,7 @@ class OnboardingOverlay extends StatelessWidget {
   }
 }
 
-/// 画半透明遮罩 + 在目标区域挖洞 + 圆角描边。
+/// 画半透明遮罩 + 在目标区域挖洞 + 圆角发光描边。
 class _HighlightPainter extends CustomPainter {
   const _HighlightPainter({
     required this.screen,
@@ -182,7 +219,7 @@ class _HighlightPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // 全屏遮罩
-    final paint = Paint()..color = Colors.black.withValues(alpha: 0.7);
+    final paint = Paint()..color = Colors.black.withValues(alpha: 0.65);
 
     // 用 Path 差集：全屏 Rect 减去 hole 区域
     final full = Path()..addRect(screen);
@@ -191,11 +228,11 @@ class _HighlightPainter extends CustomPainter {
     final combined = Path.combine(PathOperation.difference, full, holePath);
     canvas.drawPath(combined, paint);
 
-    // hole 描边
+    // hole 发光外圈与亮色细描边
     final border = Paint()
-      ..color = Colors.white.withValues(alpha: 0.6)
+      ..color = const Color(0xFF0A84FF).withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
+      ..strokeWidth = 2.0;
     canvas.drawRRect(
       RRect.fromRectAndRadius(hole, Radius.circular(holeRadius)),
       border,
