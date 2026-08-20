@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/common/const.dart';
+import 'package:asmr_downloader/pages/onboarding/onboarding_controller.dart';
 import 'package:asmr_downloader/pages/update/update_dialog.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
@@ -130,14 +131,32 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['autoCheckUpdate'] as bool? ?? true;
   ref.read(githubTokenProvider.notifier).state =
       config['githubToken'] as String? ?? '';
+  ref.read(dismissedUpdateVersionProvider.notifier).state =
+      config['dismissedUpdateVersion'] as String?;
 
   // 内置引擎自动检测：脚本路径配置缺失/失效但安装目录内引擎完整时，
   // 自动重新关联，避免用户已安装过引擎还要重新手动选择
   await ref.read(uiServiceProvider).autoLinkInstalledEngine();
 
+  // 新手引导：首次启动（未完成）时延迟弹窗，早于更新检查，避免两弹窗冲突；
+  // 完成或跳过后写 onboardingCompleted，之后启动不再自动弹出
+  final onboardingDone = config['onboardingCompleted'] as bool? ?? false;
+  ref.read(onboardingCompletedProvider.notifier).state = onboardingDone;
+  if (!onboardingDone) {
+    unawaited(Future.delayed(const Duration(milliseconds: 600), () async {
+      final nav = navigatorKey.currentState;
+      if (nav != null && nav.mounted) {
+        startOnboarding(ProviderScope.containerOf(nav.context));
+      }
+    }));
+  }
+
   // 自动检查更新：延迟几秒后台执行，不阻塞启动流程；
   // 发现新版本时弹更新对话框（同引擎引导弹窗模式）
   if (ref.read(autoCheckUpdateProvider)) {
+    // 启动长时运行中的周期复查定时器（每 6 小时一次），
+    // 与下面的启动检查配合：启动查一次 + 运行中定时复查
+    ref.read(latestUpdateProvider.notifier).startPeriodicCheck();
     unawaited(Future.delayed(const Duration(seconds: 3), () async {
       try {
         final hasNew =

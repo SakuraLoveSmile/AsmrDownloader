@@ -4,6 +4,8 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
+import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,16 +85,21 @@ String? findWorkTitleInTracks(List<dynamic>? tracks) {
   return null;
 }
 
-final circleNameProvider = Provider<String>((ref) {
-  final workInfo = ref.watch(workInfoProvider);
-  return workInfo.maybeWhen(
-    data: (data) {
-      if (data == null) {
-        return '';
-      }
-      return data['circle']['name'].toString();
-    },
-    orElse: () => '',
+/// 社团名（已解析为原始社团名）。
+///
+/// 简体中文版等汉化作品的 `circle.name` 是汉化组名而非真实社团，
+/// 这里复用 [NavidromeOrganizer.resolveCircleName] 跟踪到原版取真实社团名
+/// （缓存优先，与整理阶段同源），使下载页展示/注册表/作品库全程一致。
+/// 原版作品或解析失败时 fallback 到当前 circle 名。
+final circleNameProvider = FutureProvider<String>((ref) async {
+  // workInfo 加载失败（网络错误等）时降级为空，与原同步版 maybeWhen 行为一致
+  final workInfo = await ref.watch(workInfoProvider.future).catchError((_) => null);
+  final rawCircle = (workInfo?['circle']?['name']?.toString()) ?? '';
+  if (rawCircle.isEmpty) return '';
+  return NavidromeOrganizer.resolveCircleName(
+    workInfo: workInfo,
+    fallbackCircle: rawCircle,
+    fetchWorkInfo: ref.read(organizeServiceProvider).fetchWorkInfoCached,
   );
 });
 

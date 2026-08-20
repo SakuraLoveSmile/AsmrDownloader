@@ -26,6 +26,7 @@ class Downloader extends StatelessWidget {
             DownloadPathPicker(),
             AsmrApiChannel(),
             IconButton(
+              key: const ValueKey('onboarding-settings'),
               onPressed: () => showDialog<void>(
                 context: context,
                 builder: (_) => const DownloaderSettingsPanel(),

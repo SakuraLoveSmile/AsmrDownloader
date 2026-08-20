@@ -246,15 +246,23 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _removing = true);
-    await ref.read(cacheServiceProvider).removeEntry(entry.sourceId);
-    ref.invalidate(cachedLibraryProvider);
-    ref.invalidate(cachedCoverProvider(entry.sourceId));
-    widget.onRemoved?.call();
-    if (!mounted) return;
-    setState(() => _removing = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已删除缓存：${entry.sourceId}')),
-    );
+    try {
+      await ref.read(cacheServiceProvider).removeEntry(entry.sourceId);
+      ref.invalidate(cachedLibraryProvider);
+      ref.invalidate(cachedCoverProvider(entry.sourceId));
+      widget.onRemoved?.call();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已删除缓存：${entry.sourceId}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('删除缓存失败：$e')),
+      );
+    } finally {
+      if (mounted) setState(() => _removing = false);
+    }
   }
 }
 

@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:asmr_downloader/common/config_providers.dart';
+import 'package:asmr_downloader/pages/update/update_dialog.dart';
 import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:asmr_downloader/services/update/update_service.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart' show SnackBarAction;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -25,6 +27,19 @@ final appVersionProvider = FutureProvider<String>((ref) async {
 /// 启动时自动检查更新
 final autoCheckUpdateProvider = StateProvider<bool>((ref) => true);
 
+/// 用户点击横幅「稍后」时记录的版本号：该版本不再显示提醒横幅，
+/// 直到出现更高的版本 tag（见 [shouldShowUpdateBannerProvider]）。
+final dismissedUpdateVersionProvider = StateProvider<String?>((ref) => null);
+
+/// 是否应显示更新提醒横幅：检测到新版本且未被用户「稍后」关闭。
+final shouldShowUpdateBannerProvider = Provider<bool>((ref) {
+  final info = ref.watch(latestUpdateProvider).valueOrNull;
+  if (info == null) return false;
+  final dismissed = ref.watch(dismissedUpdateVersionProvider);
+  if (dismissed == info.tagName) return false;
+  return true;
+});
+
 /// 更新包下载进度；null = 未在下载
 final updateDownloadProgressProvider =
     StateProvider<UpdateDownloadProgress?>((ref) => null);
@@ -43,15 +58,29 @@ final latestUpdateProvider =
 /// 最新版本检测与下载安装编排。
 class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
   @override
-  Future<UpdateInfo?> build() async => null;
+  Future<UpdateInfo?> build() async {
+    // Notifier 销毁时取消周期复查定时器，避免悬空回调。
+    ref.onDispose(() {
+      _periodicTimer?.cancel();
+      _periodicTimer = null;
+    });
+    return null;
+  }
 
   CancelToken? _downloadToken;
   bool _installing = false;
   String? _downloadedZipPath;
 
+  /// 长时运行中的周期复查定时器；随自动检查开关启停。
+  Timer? _periodicTimer;
+
   /// 启动自动检查的最小间隔：GitHub 匿名限额 60 次/小时/IP，
   /// 共享代理出口时极易触发 403 限流，频繁检查得不偿失。
   static const _autoCheckInterval = Duration(hours: 6);
+
+  /// 周期复查间隔：与 [_autoCheckInterval] 一致，使每次触发都做
+  /// 真实网络复查而非命中缓存。
+  static const _periodicCheckInterval = _autoCheckInterval;
 
   /// 检查更新；返回 true = 发现新版本。
   /// [silent]=true 为启动自动检查：不进入 loading 态（不影响入口 UI），
@@ -98,14 +127,77 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
     if (hasNew) return true;
     final ui = UIService(ref);
     if (state is AsyncError) {
-      final error = (state as AsyncError).error;
-      ui.showSnack(error is UpdateCheckException
-          ? '检查更新失败：${error.message}'
-          : '检查更新失败，请检查网络/代理后重试');
+      ui.showSnack(_describeCheckError((state as AsyncError).error));
     } else {
       ui.showSnack('当前已是最新版本');
     }
     return false;
+  }
+
+  /// 把检查异常归因为面向用户的文案（与手动检查提示一致）。
+  static String _describeCheckError(Object? error) {
+    if (error is UpdateCheckException) return '检查更新失败：${error.message}';
+    return '检查更新失败，请检查网络/代理后重试';
+  }
+
+  /// 启动长时运行中的周期复查。由自动检查开关为真时调用，
+  /// 每 [_periodicCheckInterval] 复查一次，发现新版弹更新对话框。
+  void startPeriodicCheck() {
+    if (_periodicTimer != null) return; // 已在运行，避免重复
+    _periodicTimer = Timer.periodic(_periodicCheckInterval, (_) => _onPeriodicCheck());
+  }
+
+  /// 停止周期复查。由自动检查开关为假时调用。
+  void stopPeriodicCheck() {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  Future<void> _onPeriodicCheck() async {
+    final hasNew = await check(silent: true);
+    if (hasNew) {
+      final nav = navigatorKey.currentState;
+      if (nav != null && nav.mounted) {
+        await showUpdateDialog(nav.context);
+      }
+      return;
+    }
+    // check(silent) 失败时吞异常但会把 state 置为 AsyncError：
+    // 据此按节流弹一次失败提示，避免每轮都打扰。
+    if (state is AsyncError) {
+      await _maybeNotifyCheckError();
+    }
+  }
+
+  /// 周期复查失败时按节流弹一次提示，避免每轮都打扰。
+  /// 复用 updateCheckCache 的 lastErrorShownAt，超过
+  /// [_autoCheckInterval] 才再次提示。
+  Future<void> _maybeNotifyCheckError() async {
+    try {
+      final cache = await _readCheckCache();
+      final lastShownAt = cache['lastErrorShownAt'] as int? ?? 0;
+      final elapsed =
+          DateTime.now().millisecondsSinceEpoch - lastShownAt;
+      if (elapsed < _autoCheckInterval.inMilliseconds) return;
+      final ui = UIService(ref);
+      ui.showSnack(
+        _describeCheckError((state is AsyncError)
+            ? (state as AsyncError).error
+            : null),
+        action: SnackBarAction(
+          label: '手动检查',
+          onPressed: () => ui.manualCheckFromSnack(),
+        ),
+      );
+      await ref.read(configFileProvider).addOrUpdate({
+        'updateCheckCache': {
+          ...cache,
+          'lastErrorShownAt': DateTime.now().millisecondsSinceEpoch,
+        },
+      });
+    } catch (_) {
+      // 提示失败不影响主流程
+    }
   }
 
   Future<Map<String, dynamic>> _readCheckCache() async {
@@ -119,9 +211,12 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
     }
   }
 
-  Future<void> _writeCheckCache(UpdateCheckResult result) {
+  Future<void> _writeCheckCache(UpdateCheckResult result) async {
+    // 保留 lastErrorShownAt，只刷新检查结论相关字段。
+    final prev = await _readCheckCache();
     return ref.read(configFileProvider).addOrUpdate({
       'updateCheckCache': {
+        ...prev,
         'lastCheckAt': DateTime.now().millisecondsSinceEpoch,
         'etag': result.etag,
         'releaseBody': result.releaseBody,

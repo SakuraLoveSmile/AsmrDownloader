@@ -102,6 +102,7 @@ class ChickenRiceConfigControls extends ConsumerWidget {
               message: '一键安装 AI 翻译引擎（自动下载运行时与模型，'
                   '装完自动配置，无需手动选择脚本）',
               child: OutlinedButton.icon(
+                key: const ValueKey('onboarding-install-engine'),
                 onPressed:
                     supported ? () => showEngineSetupDialog(context) : null,
                 icon: const Icon(Icons.download, size: 14),

@@ -201,7 +201,8 @@ class DownloadManager {
 
     // 下载开始即快照作品上下文：下载中允许搜索新作品，
     // 收尾写注册表时全部用快照值，避免被搜索切走的新作品数据污染。
-    final ctx = _snapshotRunContext(sourceId, voiceWorkPath);
+    final ctx = await _snapshotRunContext(sourceId, voiceWorkPath);
+    if (runSeq != _runSeq) return _RunOutcome.aborted;
     ref.read(currentDownloadingSourceIdProvider.notifier).state = sourceId;
 
     // start downloading
@@ -268,17 +269,23 @@ class DownloadManager {
     // 写入下载注册表（批量整理的数据源）；
     // 自动整理成功后会由 organizeCurrentWork 补录 organizedAt。
     // 全部用快照值，不受下载中搜索切走的作品影响。
-    await ref.read(worksIndexProvider).upsert(WorkEntry(
-          sourceId: ctx.sourceId,
-          dlPath: ctx.downloadPath,
-          dirName: p.basename(ctx.voiceWorkPath),
-          title: ctx.title,
-          cvNames: ctx.cvNames.join('&'),
-          circleName: ctx.circleName,
-          releaseDate: ctx.releaseDate,
-          tags: ctx.tags,
-          coverUrl: ctx.coverUrl,
-        ));
+    try {
+      await ref.read(worksIndexProvider).upsert(WorkEntry(
+            sourceId: ctx.sourceId,
+            dlPath: ctx.downloadPath,
+            dirName: p.basename(ctx.voiceWorkPath),
+            title: ctx.title,
+            cvNames: ctx.cvNames.join('&'),
+            circleName: ctx.circleName,
+            releaseDate: ctx.releaseDate,
+            tags: ctx.tags,
+            coverUrl: ctx.coverUrl,
+          ));
+    } catch (e) {
+      ref
+          .read(uiServiceProvider)
+          .showSnack('作品已下载，但注册表写入失败（$e），可手动整理');
+    }
     // 新作品入库：刷新作品库列表与 badge
     ref.invalidate(worksLibraryProvider);
     ref.invalidate(unorganizedCountProvider);
@@ -306,14 +313,17 @@ class DownloadManager {
   }
 
   /// 快照当前作品上下文（run 校验通过后立即调用）。
-  _RunContext _snapshotRunContext(String sourceId, String voiceWorkPath) {
+  /// 社团名经 resolveCircleName 解析为原始社团名（汉化版跟踪原版），
+  /// 需异步获取，故本方法为 async。
+  Future<_RunContext> _snapshotRunContext(
+      String sourceId, String voiceWorkPath) async {
     return _RunContext(
       sourceId: sourceId,
       voiceWorkPath: voiceWorkPath,
       downloadPath: ref.read(downloadPathProvider),
       title: ref.read(titleProvider),
       cvNames: ref.read(cvLsProvider),
-      circleName: ref.read(circleNameProvider),
+      circleName: await ref.read(circleNameProvider.future),
       releaseDate: ref.read(releaseDateProvider),
       tags: ref.read(tagLsProvider),
       coverUrl: ref.read(coverUrlProvider),

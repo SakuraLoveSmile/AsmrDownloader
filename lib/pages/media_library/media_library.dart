@@ -115,6 +115,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             visualDensity: VisualDensity.compact,
           ),
           OutlinedButton.icon(
+            key: const ValueKey('onboarding-cache-management'),
             onPressed: _openCacheManagement,
             icon: const Icon(Icons.settings_outlined, size: 17),
             label: const Text('缓存管理'),
@@ -123,6 +124,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             onClosed: () => ref.invalidate(cachedLibraryProvider),
           ),
           OutlinedButton.icon(
+            key: const ValueKey('onboarding-complete-missing'),
             onPressed: _openCompleteMissing,
             icon: const Icon(Icons.auto_fix_high_outlined, size: 17),
             label: const Text('补全缺失'),

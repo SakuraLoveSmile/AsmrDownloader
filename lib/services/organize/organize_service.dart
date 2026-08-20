@@ -152,7 +152,7 @@ class OrganizeService {
     final circleName = await NavidromeOrganizer.resolveCircleName(
       workInfo: workInfo,
       fallbackCircle: resolveCircle(workInfo, fallbackCircle),
-      fetchWorkInfo: _fetchWorkInfoCached,
+      fetchWorkInfo: fetchWorkInfoCached,
     );
     // circle 目录名（汉化跟踪后的社团名）保底：社团 → CV → sourceId
     final circleDirName =
@@ -186,7 +186,7 @@ class OrganizeService {
     if (fetchWorkInfo || entry.circleName.trim().isEmpty) {
       try {
         // 缓存优先：命中时保持离线快速路径，未命中才请求 API。
-        workInfo = await _fetchWorkInfoCached(entry.sourceId);
+        workInfo = await fetchWorkInfoCached(entry.sourceId);
         if (workInfo == null) {
           metadataNote = '元数据未找到，已按本地信息整理';
         } else if (entry.circleName.trim().isEmpty &&
@@ -207,6 +207,7 @@ class OrganizeService {
         entry.cvNames.isNotEmpty ? entry.cvNames : parsed.cvNames;
 
     Uint8List? coverBytes;
+    var coverNote = '';
     final localCover =
         File(p.join(entry.sourceDir, '${entry.sourceId}_cover.jpg'));
     if (await localCover.exists()) {
@@ -225,8 +226,14 @@ class OrganizeService {
           coverBytes = await ref.read(asmrApiProvider).getCoverBytes(coverUrl);
         } catch (e) {
           Log.warning('fetch cover failed: ${entry.sourceId}\n' 'error: $e');
+          coverNote = '封面获取失败，已跳过';
         }
       }
+    }
+    if (coverNote.isNotEmpty) {
+      metadataNote = (metadataNote == null || metadataNote.isEmpty)
+          ? coverNote
+          : '$metadataNote；$coverNote';
     }
 
     final result = await organizeWork(
@@ -274,7 +281,7 @@ class OrganizeService {
   /// - 完整 sourceId 直接查缓存；
   /// - 纯数字 id 先按数字段扫描已有缓存条目；
   /// - 未命中时请求 API（数字 id），成功后按响应自带的 source_id 入库。
-  Future<Map<String, dynamic>?> _fetchWorkInfoCached(String id) async {
+  Future<Map<String, dynamic>?> fetchWorkInfoCached(String id) async {
     final cache = ref.read(cacheServiceProvider);
     final digits = id.replaceAll(RegExp(r'[^0-9]'), '');
 
@@ -450,7 +457,10 @@ class OrganizeService {
               sourceId: entry.sourceId,
               success: true,
               message: _appendMetadataNote(
-                  '已是最新（复制 0 跳过 ${result.skipped}）', outcome.metadataNote)));
+                  _appendTagNote(
+                      '已是最新（复制 0 跳过 ${result.skipped}）',
+                      result.tagWriteFailures),
+                  outcome.metadataNote)));
           await index.upsert(outcome.resolvedEntry
               .copyWith(organizedAt: DateTime.now().toIso8601String()));
         } else {
@@ -459,7 +469,9 @@ class OrganizeService {
               sourceId: entry.sourceId,
               success: true,
               message: _appendMetadataNote(
-                  '复制 ${result.copied} 跳过 ${result.skipped}',
+                  _appendTagNote(
+                      '复制 ${result.copied} 跳过 ${result.skipped}',
+                      result.tagWriteFailures),
                   outcome.metadataNote)));
           await index.upsert(outcome.resolvedEntry
               .copyWith(organizedAt: DateTime.now().toIso8601String()));
@@ -492,5 +504,10 @@ class OrganizeService {
   static String _appendMetadataNote(String message, String? metadataNote) {
     if (metadataNote == null || metadataNote.isEmpty) return message;
     return '$message；$metadataNote';
+  }
+
+  static String _appendTagNote(String message, int tagWriteFailures) {
+    if (tagWriteFailures <= 0) return message;
+    return '$message；$tagWriteFailures 个文件标签写入失败';
   }
 }

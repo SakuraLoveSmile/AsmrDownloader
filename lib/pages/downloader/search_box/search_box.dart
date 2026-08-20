@@ -165,6 +165,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
         child: Row(
           children: [
             ConstrainedBox(
+              key: const ValueKey('onboarding-search-box'),
               constraints: BoxConstraints(
                 minWidth: 160,
                 maxWidth: (MediaQuery.sizeOf(context).width * 0.29)
@@ -203,6 +204,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
               visualDensity: VisualDensity.compact,
             ),
             IconButton(
+              key: const ValueKey('onboarding-paste-search'),
               onPressed: downloading
                   ? null
                   : () async {
