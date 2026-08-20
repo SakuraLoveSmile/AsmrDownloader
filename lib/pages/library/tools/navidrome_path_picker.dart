@@ -24,6 +24,7 @@ class NavidromePathPicker extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.only(left: 5.0),
           child: IconButton(
+            key: const ValueKey('onboarding-navidrome-path'),
             onPressed: ref.read(uiServiceProvider).pickNavidromePath,
             icon: const Icon(Icons.folder),
             tooltip: '选择整理路径',

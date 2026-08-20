@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/pages/library/tools/engine_setup_dialog.dart';
+import 'package:asmr_downloader/pages/update/update_dialog.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
@@ -145,10 +146,13 @@ class UIService {
     final t = token.trim();
     if (t == ref.read(githubTokenProvider)) return;
 
+    ref.read(githubTokenProvider.notifier).state = t;
     ref
-      ..read(githubTokenProvider.notifier).state = t
-      ..read(configFileProvider).addOrUpdate({'githubToken': t});
+        .read(configFileProvider)
+        .addOrUpdate({'githubToken': t})
+        .catchError((e) => showSnack('配置保存失败，重启后可能丢失：$e'));
     Log.info('github token ${t.isEmpty ? 'cleared' : 'updated'}');
+    showSnack(t.isEmpty ? 'GitHub Token 已清除' : 'GitHub Token 已保存');
   }
 
   void onDlCoverChanged(bool? value) {
@@ -185,6 +189,13 @@ class UIService {
     ref
       ..read(autoCheckUpdateProvider.notifier).state = value
       ..read(configFileProvider).addOrUpdate({'autoCheckUpdate': value});
+    // 联动周期复查定时器：开启即复查、关闭即停止，设置变更即时生效。
+    final notifier = ref.read(latestUpdateProvider.notifier);
+    if (value) {
+      notifier.startPeriodicCheck();
+    } else {
+      notifier.stopPeriodicCheck();
+    }
     Log.info('autoCheckUpdate: $value');
   }
 
@@ -221,10 +232,13 @@ class UIService {
 
   /// 设置 ChickenRice 脚本路径（.bat/.cmd/infer.exe；手动输入/选择）
   void setChickenRiceScriptPath(String path) {
+    ref.read(chickenRiceScriptPathProvider.notifier).state = path;
     ref
-      ..read(chickenRiceScriptPathProvider.notifier).state = path
-      ..read(configFileProvider).addOrUpdate({'chickenRiceExePath': path});
+        .read(configFileProvider)
+        .addOrUpdate({'chickenRiceExePath': path})
+        .catchError((e) => showSnack('配置保存失败，重启后可能丢失：$e'));
     Log.info('chickenRiceScriptPath: $path');
+    showSnack('已选择脚本：$path');
   }
 
   /// 通过文件选择器选取 ChickenRice 脚本（.bat/.cmd）或 infer.exe
@@ -263,10 +277,11 @@ class UIService {
 
   /// 设置引擎安装目录（持久化）
   void setChickenRiceEngineInstallDir(String dir) {
+    ref.read(chickenRiceEngineInstallDirProvider.notifier).state = dir;
     ref
-      ..read(chickenRiceEngineInstallDirProvider.notifier).state = dir
-      ..read(configFileProvider)
-          .addOrUpdate({'chickenRiceEngineInstallDir': dir});
+        .read(configFileProvider)
+        .addOrUpdate({'chickenRiceEngineInstallDir': dir})
+        .catchError((e) => showSnack('配置保存失败，重启后可能丢失：$e'));
   }
 
   /// 执行引擎安装（安装向导调用）；成功返回 infer.exe 路径并自动配置。
@@ -295,6 +310,7 @@ class UIService {
             .addOrUpdate({'chickenRiceEngineVariant': variant});
       setChickenRiceScriptPath(exePath);
       setChickenRiceDevice('cuda');
+      showSnack('AI 翻译引擎安装完成');
     }
     return exePath;
   }
@@ -548,6 +564,7 @@ class UIService {
       ..read(downloadPathProvider.notifier).state = dlPath
       ..read(configFileProvider).addOrUpdate({'dlPath': dlPath});
     Log.info('dlPath: $dlPath');
+    showSnack('下载路径已设置为 $dlPath');
   }
 
   Future<void> pickNavidromePath() async {
@@ -558,6 +575,7 @@ class UIService {
       ..read(navidromePathProvider.notifier).state = navidromePath
       ..read(configFileProvider).addOrUpdate({'navidromePath': navidromePath});
     Log.info('navidromePath: $navidromePath');
+    showSnack('整理路径已设置为 $navidromePath');
   }
 
   /// 执行整理（不依赖 UI），返回整理结果；未执行成功返回 null
@@ -596,6 +614,8 @@ class UIService {
     // 走统一整理编排层（手动/自动/批量共用），含汉化 circle 跟踪与 artist 保底
     final workInfo = ref.read(workInfoProvider).value;
     final cvNames = ref.read(cvLsProvider).join('&');
+    // 社团名已解析为原始社团名（汉化版跟踪原版），整理与注册表共用同一值
+    final circleName = await ref.read(circleNameProvider.future);
     final result = await ref.read(organizeServiceProvider).organizeWork(
           sourceId: sourceId,
           sourceDir: sourceDir,
@@ -603,7 +623,7 @@ class UIService {
           workInfo: workInfo,
           fallbackTitle: ref.read(titleProvider),
           fallbackCvNames: cvNames,
-          fallbackCircle: ref.read(circleNameProvider),
+          fallbackCircle: circleName,
           coverBytes: coverBytes,
         );
 
@@ -615,7 +635,7 @@ class UIService {
             dirName: p.basename(ref.read(voiceWorkPathProvider)),
             title: ref.read(titleProvider),
             cvNames: cvNames,
-            circleName: ref.read(circleNameProvider),
+            circleName: circleName,
             releaseDate: ref.read(releaseDateProvider),
             tags: ref.read(tagLsProvider),
             coverUrl: ref.read(coverUrlProvider),
@@ -682,12 +702,16 @@ class UIService {
       showSnack('自动整理未执行：未设置整理路径或作品未下载');
       return;
     }
-    showSnack('自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个');
+    var msg = '自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个';
+    if (result.tagWriteFailures > 0) {
+      msg += '，${result.tagWriteFailures} 个文件标签写入失败';
+    }
+    showSnack(msg);
   }
 
   /// 弹出用户可见的提示（无 BuildContext 时走全局 scaffoldMessengerKey）。
   /// 纯逻辑调用（下载流程/单元测试）可能没有可用的 messenger，静默跳过。
-  void showSnack(String message, {BuildContext? context}) {
+  void showSnack(String message, {BuildContext? context, SnackBarAction? action}) {
     ScaffoldMessengerState? messenger;
     if (context != null) {
       messenger = ScaffoldMessenger.of(context);
@@ -701,7 +725,17 @@ class UIService {
     }
     messenger
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(content: Text(message), action: action));
+  }
+
+  /// SnackBar「手动检查」按钮回调：触发手动检查，发现新版则弹更新对话框。
+  Future<void> manualCheckFromSnack() async {
+    final hasNew = await ref.read(latestUpdateProvider.notifier).manualCheck();
+    if (!hasNew) return;
+    final nav = navigatorKey.currentState;
+    if (nav != null && nav.mounted) {
+      await showUpdateDialog(nav.context);
+    }
   }
 
   void openFolder() {

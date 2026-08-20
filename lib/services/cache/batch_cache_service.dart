@@ -29,6 +29,7 @@ class BatchCacheResult {
   final int failed;
   final bool cancelled;
   final int? total; // 预计总数（可能为近似值）
+  final List<String> failedSourceIds; // 失败作品的 sourceId 列表
 
   const BatchCacheResult({
     required this.cached,
@@ -36,6 +37,7 @@ class BatchCacheResult {
     required this.failed,
     required this.cancelled,
     this.total,
+    this.failedSourceIds = const [],
   });
 }
 
@@ -74,6 +76,7 @@ class BatchCacheService {
     int page = 1;
     const pageSize = 30;
     int cached = 0, skipped = 0, failed = 0;
+    final failedSourceIds = <String>[];
     bool cancelled = false;
     int? total; // 首个搜索页的 pagination.totalCount
     bool totalApprox = false; // circle/va 降级搜索时 total 可能偏大（含无关题）
@@ -135,9 +138,11 @@ class BatchCacheService {
               cached++;
             } else {
               failed++;
+              failedSourceIds.add(sourceId);
             }
           } catch (e) {
             failed++;
+            failedSourceIds.add(sourceId);
           }
 
           onProgress(BatchCacheProgress(
@@ -164,6 +169,7 @@ class BatchCacheService {
       failed: failed,
       cancelled: cancelled,
       total: total,
+      failedSourceIds: failedSourceIds,
     );
   }
 

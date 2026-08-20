@@ -129,6 +129,7 @@ class WorksIndex {
       await file.writeAsString(json.encode(data));
     } catch (e) {
       Log.error('write works index failed: $filePath\n' 'error: $e');
+      rethrow;
     }
   }
 

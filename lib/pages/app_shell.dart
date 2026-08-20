@@ -1,6 +1,7 @@
 import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
 import 'package:asmr_downloader/pages/media_library/media_library.dart';
+import 'package:asmr_downloader/pages/update/update_banner.dart';
 import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:flutter/material.dart';
@@ -13,18 +14,26 @@ final currentPageProvider = StateProvider<int>((ref) => 0);
 ///
 /// 用 IndexedStack 保活三个页面——切页不销毁状态，
 /// 下载进度、整理/字幕运行中的任务切到另一页也不被打断。
+/// 顶部常驻 [UpdateBanner]，发现新版本时跨页提醒。
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(currentPageProvider);
-    return IndexedStack(
-      index: index,
-      children: const [
-        Downloader(),
-        LibraryPage(),
-        MediaLibraryPage(),
+    return Column(
+      children: [
+        const UpdateBanner(),
+        Expanded(
+          child: IndexedStack(
+            index: index,
+            children: const [
+              Downloader(),
+              LibraryPage(),
+              MediaLibraryPage(),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -52,6 +61,7 @@ class AppNavTabs extends ConsumerWidget {
       children: [
         for (var i = 0; i < _tabs.length; i++)
           _NavTab(
+            key: ValueKey('onboarding-nav-tab-$i'),
             label: _tabs[i].$1,
             icon: _tabs[i].$2,
             selected: i == index,
@@ -84,6 +94,7 @@ class AppNavTabs extends ConsumerWidget {
 
 class _NavTab extends StatelessWidget {
   const _NavTab({
+    super.key,
     required this.label,
     required this.icon,
     required this.selected,

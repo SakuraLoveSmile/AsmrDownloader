@@ -208,6 +208,16 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
           '仅缓存 workInfo 元数据，后续搜索时 tracks / 封面仍按需获取。',
           style: theme.textTheme.bodySmall,
         ),
+        if (r.failedSourceIds.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            '失败作品：${r.failedSourceIds.take(10).join('、')}'
+            '${r.failedSourceIds.length > 10 ? ' 等 ${r.failedSourceIds.length} 个' : ''}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
       ],
     );
   }

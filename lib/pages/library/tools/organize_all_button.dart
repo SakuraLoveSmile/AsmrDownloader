@@ -15,6 +15,7 @@ class OrganizeAllButton extends ConsumerWidget {
         ref.watch(dlStatusProvider) == DownloadStatus.downloading;
 
     return OutlinedButton(
+      key: const ValueKey('onboarding-organize-all'),
       onPressed: downloading
           ? null
           : () => showDialog(

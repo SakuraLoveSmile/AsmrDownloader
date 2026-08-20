@@ -52,6 +52,14 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
     );
   }
 
+  void _clearLogs() {
+    Log.buffer.clear();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已清空日志')),
+    );
+  }
+
   Color _levelColor(String level) {
     switch (level) {
       case 'ERROR':
@@ -102,8 +110,7 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
                         visualDensity: VisualDensity.compact,
                       ),
                       IconButton(
-                        onPressed:
-                            entries.isEmpty ? null : () => Log.buffer.clear(),
+                        onPressed: entries.isEmpty ? null : _clearLogs,
                         icon: const Icon(Icons.delete_outline, size: 17),
                         tooltip: '清空日志',
                         visualDensity: VisualDensity.compact,

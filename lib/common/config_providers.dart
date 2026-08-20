@@ -85,3 +85,9 @@ final chickenRiceConfigProvider = Provider<ChickenRiceConfig>((ref) {
     task: ref.watch(chickenRiceTaskProvider),
   );
 });
+
+// ---------- 新手引导 ----------
+
+/// 新手引导是否已完成。首次启动时为 false，弹窗完成或跳过后写 true 并持久化，
+/// 之后启动不再自动弹出；用户仍可从「下载设置 → 新手引导」手动重新打开。
+final onboardingCompletedProvider = StateProvider<bool>((ref) => false);

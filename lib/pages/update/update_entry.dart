@@ -49,13 +49,21 @@ class UpdateEntry extends ConsumerWidget {
                 ),
               ],
               if (hasUpdate) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: 6),
                 Container(
-                  width: 6,
-                  height: 6,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: scheme.primary,
-                    shape: BoxShape.circle,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '新版本',
+                    style: TextStyle(
+                      color: scheme.onPrimary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],

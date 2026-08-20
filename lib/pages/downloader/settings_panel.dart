@@ -5,6 +5,7 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_c
 import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/github_token_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/onboarding_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
 import 'package:flutter/material.dart';
 
@@ -64,6 +65,7 @@ class DownloaderSettingsPanel extends StatelessWidget {
                     LogViewerButton(),
                     DebugModeCheck(),
                     AutoUpdateCheck(),
+                    OnboardingButton(),
                   ],
                 ),
               ],

@@ -91,6 +91,8 @@ class _EnqueueButton extends ConsumerWidget {
                 ref
                     .read(uiServiceProvider)
                     .showSnack('已加入下载队列（剩余 $remaining 个）');
+              } else {
+                ref.read(uiServiceProvider).showSnack('加入队列失败，请重试');
               }
             },
       tooltip: tooltip,

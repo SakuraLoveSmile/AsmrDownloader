@@ -218,6 +218,7 @@ class CacheService {
       });
     } catch (e) {
       Log.error('clear cache failed\n' 'error: $e');
+      rethrow;
     }
   }
 
@@ -237,6 +238,7 @@ class CacheService {
       });
     } catch (e) {
       Log.warning('remove cache entry failed: $sourceId\n' 'error: $e');
+      rethrow;
     }
   }
 

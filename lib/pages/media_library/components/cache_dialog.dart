@@ -71,11 +71,17 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
     if (confirmed != true || !mounted) return;
 
     setState(() => _busy = true);
-    await ref.read(cacheServiceProvider).clearCache();
-    if (!mounted) return;
-    setState(() => _busy = false);
-    ref.read(uiServiceProvider).showSnack(context: context, '缓存已清空');
-    await _reload();
+    try {
+      await ref.read(cacheServiceProvider).clearCache();
+      if (!mounted) return;
+      ref.read(uiServiceProvider).showSnack(context: context, '缓存已清空');
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ref.read(uiServiceProvider).showSnack(context: context, '清空缓存失败：$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _exportCache() async {

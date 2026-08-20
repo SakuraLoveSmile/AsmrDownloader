@@ -9,7 +9,7 @@ class AsmrCircleName extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final circleName = ref.watch(circleNameProvider);
+    final circleName = ref.watch(circleNameProvider).valueOrNull ?? '';
     return Padding(
       padding: EdgeInsets.only(top: verticalPadding),
       child: CopyableTextBox(

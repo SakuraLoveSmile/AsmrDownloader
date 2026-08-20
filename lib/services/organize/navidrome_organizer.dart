@@ -10,8 +10,13 @@ import 'package:path/path.dart' as p;
 class OrganizeResult {
   final int copied;
   final int skipped;
+  final int tagWriteFailures;
 
-  const OrganizeResult({required this.copied, required this.skipped});
+  const OrganizeResult({
+    required this.copied,
+    required this.skipped,
+    this.tagWriteFailures = 0,
+  });
 }
 
 /// 专辑目录名（`<sourceId> - <cvNames> - <title>`）最大码点数
@@ -118,6 +123,7 @@ class NavidromeOrganizer {
 
     int copied = 0;
     int skipped = 0;
+    int tagWriteFailures = 0;
 
     // 封面：复用已获取的封面字节，保存为 Navidrome 识别的 cover.jpg
     if (coverBytes != null) {
@@ -218,7 +224,7 @@ class NavidromeOrganizer {
         }
 
         final track = _parseTrackNumber(audioName);
-        await AudioTagWriter.writeTags(
+        final tagOk = await AudioTagWriter.writeTags(
           targetFile.path,
           title: base,
           artist: artist,
@@ -234,12 +240,18 @@ class NavidromeOrganizer {
           // 流派（前 3 个，防止字段过长）
           genre: genres.take(3).join('; '),
         );
+        if (!tagOk) tagWriteFailures++;
       }
     }
 
-    Log.info('organize completed: copied $copied, skipped $skipped\n'
+    Log.info('organize completed: copied $copied, skipped $skipped, '
+        'tagWriteFailures $tagWriteFailures\n'
         'targetDir: $targetDir');
-    return OrganizeResult(copied: copied, skipped: skipped);
+    return OrganizeResult(
+      copied: copied,
+      skipped: skipped,
+      tagWriteFailures: tagWriteFailures,
+    );
   }
 
   /// 从文件名解析 track number（如 "01 xxx.wav" → "1"），无法解析返回 null

@@ -38,18 +38,34 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
   }
 
   Future<void> _cleanMissing() async {
-    final cleaned = await ref.read(worksIndexProvider).cleanMissing();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已清理 $cleaned 条缺失条目')));
-    _invalidateLibrary();
-    await _reload();
+    try {
+      final cleaned = await ref.read(worksIndexProvider).cleanMissing();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('已清理 $cleaned 条缺失条目')));
+      _invalidateLibrary();
+      await _reload();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('清理失败：$e')));
+    }
   }
 
   Future<void> _remove(WorkEntry entry) async {
-    await ref.read(worksIndexProvider).remove(entry.sourceId);
-    _invalidateLibrary();
-    await _reload();
+    try {
+      await ref.read(worksIndexProvider).remove(entry.sourceId);
+      _invalidateLibrary();
+      await _reload();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已删除注册表条目：${entry.sourceId}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
+    }
   }
 
   /// 注册表变化后刷新作品库列表与 tab badge
