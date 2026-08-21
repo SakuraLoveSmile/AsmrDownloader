@@ -158,7 +158,7 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
   Widget _buildCover(ColorScheme scheme) {
     final cover = ref.watch(cachedCoverProvider(entry.sourceId));
     return AspectRatio(
-      aspectRatio: 3 / 4,
+      aspectRatio: 1,
       child: Container(
         decoration: BoxDecoration(
           color: scheme.surfaceContainerLow,

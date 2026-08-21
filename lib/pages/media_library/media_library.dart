@@ -258,7 +258,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                mainAxisExtent: 354,
+                mainAxisExtent: 300,
                 crossAxisSpacing: gap,
                 mainAxisSpacing: 14,
               ),
