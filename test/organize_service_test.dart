@@ -314,7 +314,8 @@ void main() {
       expect(result.cancelled, false);
       expect(result.results.length, 3);
       expect(progressEvents.length, greaterThanOrEqualTo(4)); // 每项 + 结尾
-      expect(progressEvents.first.statusMessage, '整理文件中…');
+      // 批量整理会先刷新元数据，以便把旧注册表里的汉化组名修正为原版社团。
+      expect(progressEvents.first.statusMessage, '获取元数据中…');
 
       // 成功项已记录 organizedAt
       expect((await index.get('RJ00001'))!.organizedAt, isNotNull);
@@ -800,6 +801,71 @@ void main() {
         'RJ999999',
       );
       expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
+    });
+
+    test('旧注册表已有汉化组名时仍刷新并回写原版社团', () async {
+      final container = makeContainer(works: {
+        // 当前接口真实字段形状：汉化作品同时带 top-level original_workno。
+        '01628652': {
+          'source_id': 'RJ01628652',
+          'title': '【简体中文版】测试',
+          'circle': {'name': '天の村雨'},
+          'original_workno': 'RJ01618607',
+          'translation_info': {
+            'is_original': false,
+            'original_workno': 'RJ01618607',
+          },
+          'vas': [
+            {'name': 'CV_A'},
+          ],
+        },
+        '01618607': {
+          'source_id': 'RJ01618607',
+          'title': '原版标题',
+          'circle': {'name': '空心菜館'},
+          'translation_info': {'is_original': true},
+          'vas': [
+            {'name': 'CV_A'},
+          ],
+        },
+      });
+      addTearDown(container.dispose);
+
+      final source = WorkEntry(
+        sourceId: 'RJ01628652',
+        dlPath: dlPath.path,
+        dirName: '天の村雨-中文标题',
+        title: '旧标题',
+        cvNames: '旧CV',
+        // 模拟旧版本注册表已经把汉化组名保存下来的情况。
+        circleName: '天の村雨',
+      );
+      final sourceDir = Directory(source.sourceDir)
+        ..createSync(recursive: true);
+      File(p.join(sourceDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+      await index.upsert(source);
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+
+      expect(result.success, 1);
+      final updated = await index.get('RJ01628652');
+      expect(updated!.circleName, '空心菜館');
+      expect(
+        File(p.join(
+          targetRoot.path,
+          '空心菜館',
+          'RJ01628652 - CV_A - 【简体中文版】测试',
+          'RJ01628652',
+          'e01_舔耳.wav',
+        )).existsSync(),
+        isTrue,
+      );
     });
   });
 }

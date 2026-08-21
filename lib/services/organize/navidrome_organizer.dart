@@ -39,7 +39,11 @@ class NavidromeOrganizer {
   /// 解析整理用的社团名。
   /// 汉化版作品的 circle 是汉化组名，需要跟踪到原版（original_workno）取真实社团名。
   /// [workInfo] 当前作品的 workInfo；[fallbackCircle] 当前作品返回的 circle 名
-  /// [fetchWorkInfo] 按数字 id 拉取作品信息（可注入 mock 便于测试）
+  /// [fetchWorkInfo] 拉取作品信息（可注入 mock 便于测试）。
+  ///
+  /// asmr.one 的响应同时存在两套原版关联字段：当前接口通常提供
+  /// `original_workno`，也会在 `other_language_editions_in_db` 中提供原版
+  /// 条目。两者都处理，避免因某个 API channel/旧缓存缺字段而退回汉化组名。
   static Future<String> resolveCircleName({
     required Map<String, dynamic>? workInfo,
     required String fallbackCircle,
@@ -48,33 +52,81 @@ class NavidromeOrganizer {
   }) async {
     if (workInfo == null) return fallbackCircle;
 
-    final translationInfo =
-        workInfo['translation_info'] as Map<String, dynamic>?;
+    final translationInfo = _asMap(workInfo['translation_info']);
     // 原版作品直接用当前 circle
-    if (translationInfo?['is_original'] == true) {
+    if (_isTrue(translationInfo?['is_original'])) {
       return fallbackCircle;
     }
 
-    // 汉化版：从其他语言版本中找原版，取原版 circle
-    try {
-      final editions =
-          workInfo['other_language_editions_in_db'] as List? ?? const [];
+    // 先用响应中明确标出的 original_workno，再兼容旧响应中只有原版条目的情况。
+    final candidates = <String>[];
+    void addCandidate(dynamic value) {
+      final candidate = value?.toString().trim() ?? '';
+      if (candidate.isEmpty || candidates.contains(candidate)) return;
+      candidates.add(candidate);
+    }
+
+    addCandidate(workInfo['original_workno']);
+    addCandidate(translationInfo?['original_workno']);
+
+    final editions = workInfo['other_language_editions_in_db'];
+    if (editions is List) {
       for (final edition in editions) {
-        final e = edition as Map<String, dynamic>;
-        if (e['is_original'] == true && e['id'] != null) {
-          final originalInfo = await fetchWorkInfo(e['id'].toString());
-          final originalCircle =
-              originalInfo?['circle']?['name']?.toString();
-          if (originalCircle != null && originalCircle.isNotEmpty) {
-            return originalCircle;
-          }
+        final e = _asMap(edition);
+        if (!_isTrue(e?['is_original'])) continue;
+        // source_id 比内部数字 id 更明确；两者都保留作为兼容降级。
+        addCandidate(e?['source_id']);
+        addCandidate(e?['id']);
+      }
+    }
+
+    // 极少数响应没有 original_workno，但仍有语言版本列表；最后尝试日文原版。
+    final languageEditions = workInfo['language_editions'];
+    if (languageEditions is List) {
+      for (final edition in languageEditions) {
+        final e = _asMap(edition);
+        final lang = e?['lang']?.toString().toUpperCase() ?? '';
+        final label = e?['label']?.toString() ?? '';
+        if (lang == 'JPN' || label.contains('日本語')) {
+          addCandidate(e?['workno']);
         }
       }
-    } catch (e) {
-      Log.error('resolve original circle failed\n' 'error: $e');
+    }
+
+    // 汉化版：依次拉取候选原版，取原版 circle；单个候选失败不能阻断后续候选。
+    for (final candidate in candidates) {
+      try {
+        final originalInfo = await fetchWorkInfo(candidate);
+        final originalCircle = _circleNameFromWorkInfo(originalInfo);
+        if (originalCircle.isNotEmpty) {
+          Log.info('resolved original circle: $candidate -> $originalCircle');
+          return originalCircle;
+        }
+      } catch (e) {
+        Log.warning('fetch original work failed: $candidate\n' 'error: $e');
+      }
     }
 
     return fallbackCircle;
+  }
+
+  static Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  static bool _isTrue(dynamic value) {
+    return value == true || value?.toString().toLowerCase() == 'true';
+  }
+
+  static String _circleNameFromWorkInfo(Map<String, dynamic>? workInfo) {
+    final circle = _asMap(workInfo?['circle']);
+    final circleName = circle?['name']?.toString().trim() ?? '';
+    if (circleName.isNotEmpty) return circleName;
+
+    // 部分简化/旧接口把社团名放在作品顶层 name。
+    return workInfo?['name']?.toString().trim() ?? '';
   }
 
   /// [sourceDir] 下载的作品目录（`<voiceWorkPath>/<sourceId>`）

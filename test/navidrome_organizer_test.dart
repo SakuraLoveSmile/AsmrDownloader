@@ -358,11 +358,33 @@ void main() {
     });
 
     test('汉化版跟踪到原版取真实社团名', () async {
+      final requestedIds = <String>[];
       final circle = await NavidromeOrganizer.resolveCircleName(
         workInfo: translatedWork(),
         fallbackCircle: '汉化组',
         fetchWorkInfo: (id) async {
-          expect(id, '1618607');
+          requestedIds.add(id);
+          if (id == 'RJ01618607' || id == '1618607') {
+            return originalWork();
+          }
+          return null;
+        },
+      );
+      expect(circle, '空心菜館');
+      expect(requestedIds, contains('RJ01618607'));
+    });
+
+    test('使用接口直接提供的 original_workno', () async {
+      final circle = await NavidromeOrganizer.resolveCircleName(
+        workInfo: {
+          'title': '【简体中文版】测试',
+          'circle': {'name': '汉化组'},
+          'original_workno': 'RJ01618607',
+          'translation_info': {'is_original': false},
+        },
+        fallbackCircle: '汉化组',
+        fetchWorkInfo: (id) async {
+          expect(id, 'RJ01618607');
           return originalWork();
         },
       );
