@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -119,8 +120,10 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
   @override
   List<BackgroundTask> build() => const [];
 
-  String startCompleteMissing() {
+  String startCompleteMissing({Duration? interval}) {
     final id = _newId('complete');
+    final Duration requestInterval =
+        interval ?? ref.read(mediaLibraryRequestIntervalProvider);
     _enqueue(
       BackgroundTask(
         id: id,
@@ -129,7 +132,7 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
         description: '补全已缓存作品缺少的 tracks 和封面',
         createdAt: DateTime.now(),
       ),
-      () => _runCompleteMissing(id),
+      () => _runCompleteMissing(id, interval: requestInterval),
     );
     return id;
   }
@@ -140,6 +143,8 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
     Duration? interval,
   }) {
     final id = _newId('batch');
+    final requestInterval =
+        interval ?? ref.read(mediaLibraryRequestIntervalProvider);
     final label = switch (dimension) {
       BatchCacheDimension.tag => '标签',
       BatchCacheDimension.circle => '社团',
@@ -157,7 +162,7 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
         id,
         dimension: dimension,
         name: name,
-        interval: interval,
+        interval: requestInterval,
       ),
     );
     return id;
@@ -251,9 +256,13 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
     }
   }
 
-  Future<void> _runCompleteMissing(String id) async {
+  Future<void> _runCompleteMissing(
+    String id, {
+    required Duration interval,
+  }) async {
     var lastCoverCount = 0;
     final result = await ref.read(cacheCompleteServiceProvider).completeMissing(
+          runInterval: interval,
           onProgress: (progress) {
             if (progress.coversFilled > lastCoverCount &&
                 progress.currentSourceId.isNotEmpty) {

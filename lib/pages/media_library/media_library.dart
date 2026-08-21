@@ -4,6 +4,7 @@ import 'package:asmr_downloader/pages/media_library/components/batch_cache_dialo
 import 'package:asmr_downloader/pages/media_library/components/cache_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/complete_missing_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/cached_work_card.dart';
+import 'package:asmr_downloader/pages/media_library/components/media_library_settings_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/work_inspector_drawer.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:flutter/material.dart';
@@ -109,13 +110,15 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                       : IconButton(
                           onPressed: () {
                             _searchController.clear();
-                            ref.read(cacheSearchQueryProvider.notifier).state = '';
+                            ref.read(cacheSearchQueryProvider.notifier).state =
+                                '';
                             setState(() {});
                           },
                           icon: Icon(
                             Icons.cancel_rounded,
                             size: 15,
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                            color:
+                                scheme.onSurfaceVariant.withValues(alpha: 0.6),
                           ),
                           tooltip: '清除搜索',
                           splashRadius: 14,
@@ -148,7 +151,8 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               visualDensity: VisualDensity.compact,
               style: IconButton.styleFrom(
                 shape: const CircleBorder(),
-                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+                backgroundColor:
+                    scheme.surfaceContainerHigh.withValues(alpha: 0.4),
               ),
             ),
             OutlinedButton.icon(
@@ -156,6 +160,12 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               onPressed: _openCacheManagement,
               icon: const Icon(Icons.tune_rounded, size: 15),
               label: const Text('缓存管理'),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('onboarding-media-library-settings'),
+              onPressed: _openSettings,
+              icon: const Icon(Icons.settings_outlined, size: 15),
+              label: const Text('媒体库设置'),
             ),
             BatchCacheButton(
               onClosed: () => ref.invalidate(cachedLibraryProvider),
@@ -229,10 +239,10 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 
     final selected = _selectedEntry;
     // 如果之前选中的 entry 已不在当前过滤列表中，自动置空
-    final currentSelectedEntry = selected != null &&
-            entries.any((e) => e.sourceId == selected.sourceId)
-        ? entries.firstWhere((e) => e.sourceId == selected.sourceId)
-        : null;
+    final currentSelectedEntry =
+        selected != null && entries.any((e) => e.sourceId == selected.sourceId)
+            ? entries.firstWhere((e) => e.sourceId == selected.sourceId)
+            : null;
 
     final grid = LayoutBuilder(
       builder: (context, constraints) {
@@ -265,7 +275,8 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               itemCount: entries.length,
               itemBuilder: (context, index) {
                 final entry = entries[index];
-                final isSelected = currentSelectedEntry?.sourceId == entry.sourceId;
+                final isSelected =
+                    currentSelectedEntry?.sourceId == entry.sourceId;
                 return CachedWorkCard(
                   entry: entry,
                   isSelected: isSelected,
@@ -356,5 +367,12 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       builder: (_) => const CompleteMissingDialog(),
     );
     if (mounted) ref.invalidate(cachedLibraryProvider);
+  }
+
+  Future<void> _openSettings() {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => const MediaLibrarySettingsDialog(),
+    );
   }
 }

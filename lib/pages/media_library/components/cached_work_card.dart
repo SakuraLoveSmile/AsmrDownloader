@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:transparent_image/transparent_image.dart';
@@ -317,14 +318,10 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
       ref.invalidate(cachedCoverProvider(entry.sourceId));
       widget.onRemoved?.call();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已删除缓存：${entry.sourceId}')),
-      );
+      showAppSnackBar(context, '已删除缓存：${entry.sourceId}');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('删除缓存失败：$e')),
-      );
+      showAppSnackBar(context, '删除缓存失败：$e');
     } finally {
       if (mounted) setState(() => _removing = false);
     }

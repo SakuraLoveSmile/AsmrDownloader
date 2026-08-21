@@ -1,6 +1,7 @@
 import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
 import 'package:asmr_downloader/services/cache/cache_complete_service.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,13 +11,16 @@ class _FakeCompleteService extends CacheCompleteService {
 
   final Duration delay;
   int calls = 0;
+  Duration? lastRunInterval;
 
   @override
   Future<CompleteResult> completeMissing({
+    Duration? runInterval,
     required void Function(CompleteProgress) onProgress,
     required bool Function() isCancelled,
   }) async {
     calls++;
+    lastRunInterval = runInterval;
     onProgress(const CompleteProgress(
       tracksFilled: 1,
       coversFilled: 0,
@@ -40,6 +44,7 @@ class _FakeBatchService extends BatchCacheService {
 
   final Duration delay;
   int calls = 0;
+  Duration? lastRunInterval;
 
   @override
   Future<BatchCacheResult> batchCache(
@@ -50,6 +55,7 @@ class _FakeBatchService extends BatchCacheService {
     required bool Function() isCancelled,
   }) async {
     calls++;
+    lastRunInterval = runInterval;
     onProgress(const BatchCacheProgress(
       cached: 1,
       skipped: 0,
@@ -87,6 +93,7 @@ void main() {
     Duration batchDelay = const Duration(milliseconds: 2),
     required void Function(_FakeCompleteService) onComplete,
     required void Function(_FakeBatchService) onBatch,
+    Duration mediaInterval = mediaLibraryRequestIntervalDefault,
   }) {
     final container = ProviderContainer(overrides: [
       cacheCompleteServiceProvider.overrideWith((ref) {
@@ -99,6 +106,7 @@ void main() {
         onBatch(service);
         return service;
       }),
+      mediaLibraryRequestIntervalProvider.overrideWith((ref) => mediaInterval),
     ]);
     addTearDown(container.dispose);
     return container;
@@ -114,6 +122,7 @@ void main() {
     _FakeCompleteService? complete;
     _FakeBatchService? batch;
     final container = makeContainer(
+      mediaInterval: const Duration(seconds: 5),
       onComplete: (service) => complete = service,
       onBatch: (service) => batch = service,
     );
@@ -137,6 +146,8 @@ void main() {
         taskById(container, completeId).status, BackgroundTaskStatus.completed);
     expect(taskById(container, batchId).status, BackgroundTaskStatus.completed);
     expect(taskById(container, batchId).success, 1);
+    expect(complete!.lastRunInterval, const Duration(seconds: 5));
+    expect(batch!.lastRunInterval, const Duration(seconds: 5));
   });
 
   test('可以取消排队任务，不会调用对应服务', () async {

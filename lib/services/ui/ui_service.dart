@@ -7,6 +7,7 @@ import 'package:asmr_downloader/pages/update/update_dialog.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
+import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/engine/chicken_rice_engine_service.dart';
 import 'package:asmr_downloader/services/engine/engine_providers.dart';
@@ -39,6 +40,50 @@ final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 /// 全局 Navigator 入口（供无 BuildContext 的服务层弹对话框，
 /// 如未配置脚本时引导打开 AI 翻译引擎安装向导）
 final navigatorKey = GlobalKey<NavigatorState>();
+
+const _defaultSnackBarDuration = Duration(seconds: 3);
+const _actionSnackBarDuration = Duration(seconds: 6);
+
+/// 显示一个不会在全局 SnackBar 队列中残留的短提示。
+///
+/// ScaffoldMessenger 会把连续调用的提示排队；媒体库批量操作和后台任务
+/// 容易在短时间内触发多个提示，因此每次显示前清掉旧的当前项和等待项。
+void showAppSnackBar(
+  BuildContext context,
+  String message, {
+  SnackBarAction? action,
+  Duration? duration,
+}) {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  if (messenger == null) return;
+  _showSnackBar(
+    messenger,
+    message,
+    action: action,
+    duration: duration,
+  );
+}
+
+void _showSnackBar(
+  ScaffoldMessengerState messenger,
+  String message, {
+  SnackBarAction? action,
+  Duration? duration,
+}) {
+  messenger
+    ..removeCurrentSnackBar()
+    ..clearSnackBars()
+    ..showSnackBar(
+      SnackBar(
+        content: Text(message),
+        action: action,
+        duration: duration ??
+            (action == null
+                ? _defaultSnackBarDuration
+                : _actionSnackBarDuration),
+      ),
+    );
+}
 
 class UIService {
   final Ref ref;
@@ -147,10 +192,8 @@ class UIService {
     if (t == ref.read(githubTokenProvider)) return;
 
     ref.read(githubTokenProvider.notifier).state = t;
-    ref
-        .read(configFileProvider)
-        .addOrUpdate({'githubToken': t})
-        .catchError((e) => showSnack('配置保存失败，重启后可能丢失：$e'));
+    ref.read(configFileProvider).addOrUpdate({'githubToken': t}).catchError(
+        (e) => showSnack('配置保存失败，重启后可能丢失：$e'));
     Log.info('github token ${t.isEmpty ? 'cleared' : 'updated'}');
     showSnack(t.isEmpty ? 'GitHub Token 已清除' : 'GitHub Token 已保存');
   }
@@ -210,6 +253,21 @@ class UIService {
     Log.info('parallelDownloadCount: $value');
   }
 
+  /// 保存媒体库后台网络任务的统一请求间隔。
+  void onMediaLibraryRequestIntervalChanged(Duration? value) {
+    if (value == null ||
+        !mediaLibraryRequestIntervalOptions.contains(value) ||
+        value == ref.read(mediaLibraryRequestIntervalProvider)) {
+      return;
+    }
+
+    ref.read(mediaLibraryRequestIntervalProvider.notifier).state = value;
+    ref.read(configFileProvider).addOrUpdate({
+      'mediaLibraryRequestIntervalMs': value.inMilliseconds
+    }).catchError((error) => showSnack('媒体库设置保存失败，重启后可能丢失：$error'));
+    Log.info('mediaLibraryRequestInterval: ${value.inMilliseconds}ms');
+  }
+
   void onAutoOrganizeChanged(bool? value) {
     if (value == null) return;
 
@@ -235,8 +293,8 @@ class UIService {
     ref.read(chickenRiceScriptPathProvider.notifier).state = path;
     ref
         .read(configFileProvider)
-        .addOrUpdate({'chickenRiceExePath': path})
-        .catchError((e) => showSnack('配置保存失败，重启后可能丢失：$e'));
+        .addOrUpdate({'chickenRiceExePath': path}).catchError(
+            (e) => showSnack('配置保存失败，重启后可能丢失：$e'));
     Log.info('chickenRiceScriptPath: $path');
     showSnack('已选择脚本：$path');
   }
@@ -280,8 +338,8 @@ class UIService {
     ref.read(chickenRiceEngineInstallDirProvider.notifier).state = dir;
     ref
         .read(configFileProvider)
-        .addOrUpdate({'chickenRiceEngineInstallDir': dir})
-        .catchError((e) => showSnack('配置保存失败，重启后可能丢失：$e'));
+        .addOrUpdate({'chickenRiceEngineInstallDir': dir}).catchError(
+            (e) => showSnack('配置保存失败，重启后可能丢失：$e'));
   }
 
   /// 执行引擎安装（安装向导调用）；成功返回 infer.exe 路径并自动配置。
@@ -712,10 +770,15 @@ class UIService {
 
   /// 弹出用户可见的提示（无 BuildContext 时走全局 scaffoldMessengerKey）。
   /// 纯逻辑调用（下载流程/单元测试）可能没有可用的 messenger，静默跳过。
-  void showSnack(String message, {BuildContext? context, SnackBarAction? action}) {
+  void showSnack(
+    String message, {
+    BuildContext? context,
+    SnackBarAction? action,
+    Duration? duration,
+  }) {
     ScaffoldMessengerState? messenger;
     if (context != null) {
-      messenger = ScaffoldMessenger.of(context);
+      messenger = ScaffoldMessenger.maybeOf(context);
     } else {
       try {
         messenger = scaffoldMessengerKey.currentState;
@@ -724,9 +787,8 @@ class UIService {
         return;
       }
     }
-    messenger
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message), action: action));
+    if (messenger == null) return;
+    _showSnackBar(messenger, message, action: action, duration: duration);
   }
 
   /// SnackBar「手动检查」按钮回调：触发手动检查，发现新版则弹更新对话框。
