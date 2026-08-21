@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,14 +42,12 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
     try {
       final cleaned = await ref.read(worksIndexProvider).cleanMissing();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已清理 $cleaned 条缺失条目')));
+      showAppSnackBar(context, '已清理 $cleaned 条缺失条目');
       _invalidateLibrary();
       await _reload();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('清理失败：$e')));
+      showAppSnackBar(context, '清理失败：$e');
     }
   }
 
@@ -58,13 +57,10 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
       _invalidateLibrary();
       await _reload();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已删除注册表条目：${entry.sourceId}')),
-      );
+      showAppSnackBar(context, '已删除注册表条目：${entry.sourceId}');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('删除失败：$e')));
+      showAppSnackBar(context, '删除失败：$e');
     }
   }
 
@@ -77,10 +73,8 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
   @override
   Widget build(BuildContext context) {
     final entries = _entries;
-    final missingCount = entries
-        ?.where((e) => !Directory(e.sourceDir).existsSync())
-        .length ??
-        0;
+    final missingCount =
+        entries?.where((e) => !Directory(e.sourceDir).existsSync()).length ?? 0;
 
     return AlertDialog(
       title: const Text('下载注册表'),
@@ -108,8 +102,8 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
                 isDense: true,
                 prefixIcon: const Icon(Icons.search, size: 18),
                 hintText: '过滤 sourceId / 标题',
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               ),
               onChanged: (value) => setState(() => _filterText = value),
             ),
@@ -136,7 +130,9 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
 
   Widget _buildList(BuildContext context, List<WorkEntry>? entries) {
     if (_error != null) return const SizedBox.shrink();
-    if (entries == null) return const Center(child: CircularProgressIndicator());
+    if (entries == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
     if (entries.isEmpty) return const Center(child: Text('暂无条目'));
 
     // 按 sourceId / 标题实时过滤

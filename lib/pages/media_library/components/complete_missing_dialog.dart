@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/pages/app_shell.dart';
+import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,11 @@ class CompleteMissingDialog extends ConsumerWidget {
             const Text('将扫描已缓存的 workInfo，只请求缺少的 tracks 和封面。'),
             const SizedBox(height: 8),
             Text(
+              '统一请求间隔：${formatMediaLibraryRequestInterval(ref.watch(mediaLibraryRequestIntervalProvider))}',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
               '任务会在后台逐条处理，关闭这个窗口或切换页面都不会中断。'
               '已有缓存不会重复请求。',
               style: theme.textTheme.bodySmall,
@@ -36,7 +42,9 @@ class CompleteMissingDialog extends ConsumerWidget {
         ),
         FilledButton.icon(
           onPressed: () {
-            ref.read(backgroundTaskProvider.notifier).startCompleteMissing();
+            ref.read(backgroundTaskProvider.notifier).startCompleteMissing(
+                  interval: ref.read(mediaLibraryRequestIntervalProvider),
+                );
             Navigator.of(context).pop();
             ref.read(uiServiceProvider).showSnack(
                   '补全缺失已加入后台任务',

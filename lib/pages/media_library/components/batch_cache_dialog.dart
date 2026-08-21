@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/app_shell.dart';
 import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
+import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
@@ -16,7 +17,6 @@ class BatchCacheDialog extends ConsumerStatefulWidget {
 class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
   BatchCacheDimension _dimension = BatchCacheDimension.tag;
   final _nameController = TextEditingController();
-  Duration? _interval;
 
   @override
   void dispose() {
@@ -31,7 +31,7 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
     ref.read(backgroundTaskProvider.notifier).startBatchCache(
           dimension: _dimension,
           name: name,
-          interval: _interval,
+          interval: ref.read(mediaLibraryRequestIntervalProvider),
         );
     Navigator.of(context).pop();
     ref.read(uiServiceProvider).showSnack(
@@ -102,25 +102,16 @@ class _BatchCacheDialogState extends ConsumerState<BatchCacheDialog> {
           onSubmitted: (_) => _start(),
         ),
         const SizedBox(height: 12),
-        DropdownButtonFormField<Duration?>(
-          initialValue: _interval,
-          decoration: const InputDecoration(labelText: '请求间隔（限速）'),
-          items: [
-            const DropdownMenuItem<Duration?>(
-              value: null,
-              child: Text('默认（每个作品约 2 秒）'),
+        InputDecorator(
+          decoration: const InputDecoration(
+            labelText: '统一请求间隔',
+            helperText: '可在媒体库工具栏的「媒体库设置」中修改',
+          ),
+          child: Text(
+            formatMediaLibraryRequestInterval(
+              ref.watch(mediaLibraryRequestIntervalProvider),
             ),
-            for (final milliseconds in const [500, 1000, 2000, 3000, 5000])
-              DropdownMenuItem<Duration?>(
-                value: Duration(milliseconds: milliseconds),
-                child: Text(
-                  milliseconds < 1000
-                      ? '${milliseconds / 1000} 秒 / 个'
-                      : '${milliseconds ~/ 1000} 秒 / 个',
-                ),
-              ),
-          ],
-          onChanged: (value) => setState(() => _interval = value),
+          ),
         ),
         const SizedBox(height: 12),
         Text(

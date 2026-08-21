@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -47,17 +48,13 @@ class _LogViewerDialogState extends State<LogViewerDialog> {
       ClipboardData(text: entries.map((e) => e.format()).join('\n')),
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已复制 ${entries.length} 条日志到剪贴板')),
-    );
+    showAppSnackBar(context, '已复制 ${entries.length} 条日志到剪贴板');
   }
 
   void _clearLogs() {
     Log.buffer.clear();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已清空日志')),
-    );
+    showAppSnackBar(context, '已清空日志');
   }
 
   Color _levelColor(String level) {

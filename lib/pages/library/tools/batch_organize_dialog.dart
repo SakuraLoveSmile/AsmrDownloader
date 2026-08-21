@@ -4,6 +4,7 @@ import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,17 +45,18 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
       }
     });
     // 预扫描下载目录：统计未注册但可自动识别的 RJ 号作品数
-    ref.read(organizeServiceProvider).discoverWorks(
-      dlRoot: ref.read(downloadPathProvider),
-      excludeRoot: ref.read(navidromePathProvider),
-    ).then((discovered) async {
-      final registered =
-          (await ref.read(worksIndexProvider).list())
-              .map((e) => e.sourceId)
-              .toSet();
-      final count = discovered
-          .where((e) => !registered.contains(e.sourceId))
-          .length;
+    ref
+        .read(organizeServiceProvider)
+        .discoverWorks(
+          dlRoot: ref.read(downloadPathProvider),
+          excludeRoot: ref.read(navidromePathProvider),
+        )
+        .then((discovered) async {
+      final registered = (await ref.read(worksIndexProvider).list())
+          .map((e) => e.sourceId)
+          .toSet();
+      final count =
+          discovered.where((e) => !registered.contains(e.sourceId)).length;
       if (mounted) setState(() => _discoveredCount = count);
     });
   }
@@ -85,13 +87,13 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
     });
 
     final result = await ref.read(organizeServiceProvider).organizeAll(
-      targetRoot: targetRoot,
-      onlyUnorganized: ref.read(onlyOrganizeUnorganizedProvider),
-      onProgress: (p) {
-        if (mounted) setState(() => _progress = p);
-      },
-      isCancelled: () => _cancelled,
-    );
+          targetRoot: targetRoot,
+          onlyUnorganized: ref.read(onlyOrganizeUnorganizedProvider),
+          onProgress: (p) {
+            if (mounted) setState(() => _progress = p);
+          },
+          isCancelled: () => _cancelled,
+        );
 
     // 整理结果变化：刷新作品库列表与 tab badge
     ref.invalidate(worksLibraryProvider);
@@ -129,16 +131,19 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         CheckboxListTile(
           value: ref.watch(onlyOrganizeUnorganizedProvider),
           onChanged: (v) {
-            ref.read(onlyOrganizeUnorganizedProvider.notifier).state = v ?? true;
-            ref.read(configFileProvider).addOrUpdate(
-                {'onlyOrganizeUnorganized': v ?? true});
+            ref.read(onlyOrganizeUnorganizedProvider.notifier).state =
+                v ?? true;
+            ref
+                .read(configFileProvider)
+                .addOrUpdate({'onlyOrganizeUnorganized': v ?? true});
           },
           title: const Text('仅整理未整理的'),
           subtitle: const Text('只处理注册表中尚未整理过的作品'),
           contentPadding: EdgeInsets.zero,
         ),
         const SizedBox(height: 8),
-        Text('注册表条目：$_totalEntries', style: Theme.of(context).textTheme.bodySmall),
+        Text('注册表条目：$_totalEntries',
+            style: Theme.of(context).textTheme.bodySmall),
         Text('下载目录缺失：$_missingEntries（可稍后清理）',
             style: Theme.of(context).textTheme.bodySmall),
         if (ref.read(downloadPathProvider).isNotEmpty)
@@ -169,8 +174,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
           Text('当前：${p!.currentSourceId}',
               style: Theme.of(context).textTheme.bodyMedium),
         if (p?.statusMessage.isNotEmpty == true)
-          Text(p!.statusMessage,
-              style: Theme.of(context).textTheme.bodySmall),
+          Text(p!.statusMessage, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
         Flexible(
           child: _buildResultList(p?.results ?? const []),
@@ -194,12 +198,10 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
           const SizedBox(height: 8),
           TextButton.icon(
             onPressed: () async {
-              final messenger = ScaffoldMessenger.of(context);
               final cleaned = await ref.read(worksIndexProvider).cleanMissing();
-              if (mounted) {
+              if (mounted && context.mounted) {
                 setState(() => _missingEntries = 0);
-                messenger.showSnackBar(
-                    SnackBar(content: Text('已清理 $cleaned 条缺失条目')));
+                showAppSnackBar(context, '已清理 $cleaned 条缺失条目');
               }
             },
             icon: const Icon(Icons.cleaning_services, size: 16),
@@ -224,7 +226,8 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         itemBuilder: (context, i) {
           final item = results[i];
           final icon = item.success
-              ? const Icon(Icons.check_circle, size: 16, color: AppColors.success)
+              ? const Icon(Icons.check_circle,
+                  size: 16, color: AppColors.success)
               : const Icon(Icons.error, size: 16, color: AppColors.danger);
           return ListTile(
             dense: true,
@@ -269,7 +272,8 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         child: const Text('关闭'),
       ),
       FilledButton(
-        onPressed: (_totalEntries == 0 && _discoveredCount == 0) ? null : _start,
+        onPressed:
+            (_totalEntries == 0 && _discoveredCount == 0) ? null : _start,
         child: const Text('开始整理'),
       ),
     ];

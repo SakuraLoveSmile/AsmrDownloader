@@ -6,6 +6,7 @@ import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/pages/onboarding/onboarding_controller.dart';
 import 'package:asmr_downloader/pages/update/update_dialog.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
+import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:asmr_downloader/services/update/update_providers.dart';
@@ -95,6 +96,18 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['navidromePath'] as String? ?? '';
   ref.read(dlCoverProvider.notifier).state =
       config['dlCover'] as bool? ?? false;
+
+  // 媒体库后台网络任务统一请求间隔：只接受设置页提供的选项，
+  // 非法或旧配置回退到默认 2 秒。
+  final savedMediaIntervalMs =
+      (config['mediaLibraryRequestIntervalMs'] as num?)?.toInt();
+  final savedMediaInterval = savedMediaIntervalMs == null
+      ? mediaLibraryRequestIntervalDefault
+      : Duration(milliseconds: savedMediaIntervalMs);
+  ref.read(mediaLibraryRequestIntervalProvider.notifier).state =
+      mediaLibraryRequestIntervalOptions.contains(savedMediaInterval)
+          ? savedMediaInterval
+          : mediaLibraryRequestIntervalDefault;
 
   // 下载线程数：只接受 UI 提供的可选值，非法配置回退默认 4
   final savedThreads = (config['downloadThreads'] as num?)?.toInt() ?? 4;

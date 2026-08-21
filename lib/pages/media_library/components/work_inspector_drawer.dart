@@ -2,6 +2,7 @@ import 'package:asmr_downloader/pages/app_shell.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -166,9 +167,7 @@ class WorkInspectorDrawer extends ConsumerWidget {
                         onPressed: () {
                           Clipboard.setData(ClipboardData(
                               text: '${entry.sourceId} ${entry.title}'));
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('已复制作品信息')),
-                          );
+                          showAppSnackBar(context, '已复制作品信息');
                         },
                         icon: const Icon(Icons.copy_rounded, size: 16),
                         tooltip: '复制标题与ID',
@@ -335,15 +334,11 @@ class WorkInspectorDrawer extends ConsumerWidget {
       onRemoved?.call();
       onClose();
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('已删除缓存：${entry.sourceId}')),
-        );
+        showAppSnackBar(context, '已删除缓存：${entry.sourceId}');
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('删除缓存失败：$e')),
-        );
+        showAppSnackBar(context, '删除缓存失败：$e');
       }
     }
   }

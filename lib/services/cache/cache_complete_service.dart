@@ -49,6 +49,7 @@ class CacheCompleteService {
   static const Duration completeRunInterval = Duration(seconds: 2);
 
   Future<CompleteResult> completeMissing({
+    Duration? runInterval,
     required void Function(CompleteProgress) onProgress,
     required bool Function() isCancelled,
   }) async {
@@ -56,7 +57,9 @@ class CacheCompleteService {
     final api = ref.read(asmrApiProvider);
     final limiter = ref.read(rateLimiterProvider);
     final originalInterval = limiter.minInterval;
-    if (originalInterval < completeRunInterval) {
+    if (runInterval != null) {
+      limiter.minInterval = runInterval;
+    } else if (originalInterval < completeRunInterval) {
       limiter.minInterval = completeRunInterval;
     }
 
