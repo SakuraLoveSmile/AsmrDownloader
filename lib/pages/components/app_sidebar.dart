@@ -7,6 +7,7 @@ import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:asmr_downloader/ui/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +28,7 @@ class AppSidebar extends ConsumerWidget {
 
     final unorganized = ref.watch(unorganizedCountProvider).value ?? 0;
     final cachedCount = ref.watch(cachedLibraryProvider).value?.entries.length ?? 0;
+    final activeTasks = ref.watch(backgroundTaskActiveCountProvider);
 
     return Container(
       width: 210,
@@ -121,6 +123,17 @@ class AppSidebar extends ConsumerWidget {
                   badgeColor: scheme.surfaceContainerHighest,
                   badgeTextColor: scheme.onSurfaceVariant,
                   onTap: () => ref.read(currentPageProvider.notifier).state = 2,
+                ),
+                const SizedBox(height: 4),
+                _SidebarItem(
+                  key: const ValueKey('onboarding-sidebar-tasks'),
+                  index: 3,
+                  currentIndex: currentIndex,
+                  icon: Icons.task_alt_rounded,
+                  label: '后台任务',
+                  badgeText: activeTasks > 0 ? '$activeTasks' : null,
+                  badgeColor: scheme.primary,
+                  onTap: () => ref.read(currentPageProvider.notifier).state = 3,
                 ),
               ],
             ),
