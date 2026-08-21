@@ -22,7 +22,7 @@ void main() {
     ]);
   }
 
-  testWidgets('媒体库卡片封面铺满显示', (tester) async {
+  testWidgets('媒体库卡片封面为方形并铺满显示', (tester) async {
     final container = makeContainer();
     addTearDown(container.dispose);
 
@@ -43,9 +43,11 @@ void main() {
 
     final image = tester.widget<FadeInImage>(find.byType(FadeInImage));
     expect(image.fit, BoxFit.cover);
+    final coverSize = tester.getSize(find.byType(AspectRatio));
+    expect(coverSize.width, coverSize.height);
   });
 
-  testWidgets('媒体库详情封面铺满显示', (tester) async {
+  testWidgets('媒体库详情封面为方形并铺满显示', (tester) async {
     final container = makeContainer();
     addTearDown(container.dispose);
 
@@ -70,5 +72,7 @@ void main() {
 
     final image = tester.widget<FadeInImage>(find.byType(FadeInImage));
     expect(image.fit, BoxFit.cover);
+    final coverSize = tester.getSize(find.byType(AspectRatio));
+    expect(coverSize.width, coverSize.height);
   });
 }

@@ -99,7 +99,7 @@ class WorkInspectorDrawer extends ConsumerWidget {
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(11.4),
                         child: AspectRatio(
-                          aspectRatio: 3 / 4,
+                          aspectRatio: 1,
                           child: cover.when(
                             loading: () => const Center(
                               child: SizedBox(
