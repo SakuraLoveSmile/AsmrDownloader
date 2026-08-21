@@ -47,8 +47,7 @@ class NavidromeOrganizer {
   static Future<String> resolveCircleName({
     required Map<String, dynamic>? workInfo,
     required String fallbackCircle,
-    required Future<Map<String, dynamic>?> Function(String id)
-        fetchWorkInfo,
+    required Future<Map<String, dynamic>?> Function(String id) fetchWorkInfo,
   }) async {
     if (workInfo == null) return fallbackCircle;
 
@@ -129,6 +128,77 @@ class NavidromeOrganizer {
     return workInfo?['name']?.toString().trim() ?? '';
   }
 
+  /// 生成整理目标作品目录：
+  /// `<targetRoot>/<circle>/<sourceId> - <cvNames> - <title>/<sourceId>`。
+  ///
+  /// 整理执行与整理状态检查都必须使用同一套命名规则，避免长目录名、
+  /// 非法字符或空字段导致状态检查指向错误的目录。
+  static String targetDirPath({
+    required String targetRoot,
+    required String circleName,
+    required String sourceId,
+    required String cvNames,
+    required String title,
+  }) {
+    var circleDirName = getLegalWindowsName(smartTruncate(
+        circleName.isEmpty ? cvNames : circleName,
+        maxChars: kMaxCircleDirChars,
+        maxUtf8Bytes: kMaxCircleDirUtf8Bytes));
+    if (circleDirName.isEmpty) circleDirName = sourceId;
+
+    var albumDirName = getLegalWindowsName(smartTruncate(
+        [sourceId, cvNames, title].where((s) => s.isNotEmpty).join(' - '),
+        maxChars: kMaxAlbumDirChars,
+        maxUtf8Bytes: kMaxAlbumDirUtf8Bytes));
+    if (albumDirName.isEmpty) albumDirName = sourceId;
+
+    return p.join(targetRoot, circleDirName, albumDirName, sourceId);
+  }
+
+  /// 检查整理器会复制的源文件是否仍全部存在于目标作品目录。
+  ///
+  /// 只检查文件存在性，不比较大小：整理过程中音频可能被写入标签，
+  /// 导致目标文件大小与源文件不同。下载器生成的本地封面不参与普通
+  /// 文件列表；若该封面存在，则目标端的 `cover.jpg` 是确定的必需产物。
+  static Future<bool> hasExpectedFiles({
+    required String sourceDir,
+    required String targetRoot,
+    required String circleName,
+    required String sourceId,
+    required String cvNames,
+    required String title,
+  }) async {
+    if (targetRoot.trim().isEmpty) return false;
+
+    final source = Directory(sourceDir);
+    if (!await source.exists()) return false;
+
+    final targetDir = targetDirPath(
+      targetRoot: targetRoot,
+      circleName: circleName,
+      sourceId: sourceId,
+      cvNames: cvNames,
+      title: title,
+    );
+    if (!await Directory(targetDir).exists()) return false;
+
+    final sourceFiles = <File>[];
+    await _collectFiles(source, sourceFiles);
+    if (sourceFiles.isEmpty) return false;
+
+    for (final sourceFile in sourceFiles) {
+      final targetFile = File(p.join(targetDir, p.basename(sourceFile.path)));
+      if (!await targetFile.exists()) return false;
+    }
+
+    final localCover = File(p.join(sourceDir, '${sourceId}_cover.jpg'));
+    if (await localCover.exists() &&
+        !await File(p.join(targetDir, 'cover.jpg')).exists()) {
+      return false;
+    }
+    return true;
+  }
+
   /// [sourceDir] 下载的作品目录（`<voiceWorkPath>/<sourceId>`）
   /// [targetRoot] Navidrome 媒体库根目录
   /// [coverBytes] 封面字节，非空时保存为 `cover.jpg`
@@ -157,21 +227,13 @@ class NavidromeOrganizer {
       throw StateError('源目录不存在: $sourceDir');
     }
 
-    // 目标目录：<targetRoot>/<circle>/<sourceId> - <cv> - <title>/<sourceId>
-    // 目录名过长时智能截断（保留 sourceId，按字符/字节双上限，尾部加 …）
-    var circleDirName = getLegalWindowsName(smartTruncate(
-        circleName.isEmpty ? cvNames : circleName,
-        maxChars: kMaxCircleDirChars,
-        maxUtf8Bytes: kMaxCircleDirUtf8Bytes));
-    if (circleDirName.isEmpty) circleDirName = sourceId;
-    // 空字段省略，降级模式下 cv/title 缺失时不会出现 "RJ -  - " 残留分隔符
-    var albumDirName = getLegalWindowsName(smartTruncate(
-        [sourceId, cvNames, title].where((s) => s.isNotEmpty).join(' - '),
-        maxChars: kMaxAlbumDirChars,
-        maxUtf8Bytes: kMaxAlbumDirUtf8Bytes));
-    // 极端情况兜底（截断后为空时）至少保留 sourceId
-    if (albumDirName.isEmpty) albumDirName = sourceId;
-    final targetDir = p.join(targetRoot, circleDirName, albumDirName, sourceId);
+    final targetDir = targetDirPath(
+      targetRoot: targetRoot,
+      circleName: circleName,
+      sourceId: sourceId,
+      cvNames: cvNames,
+      title: title,
+    );
 
     int copied = 0;
     int skipped = 0;
@@ -263,9 +325,8 @@ class NavidromeOrganizer {
             !hasRealLrc &&
             (vttMap.containsKey(audioName) || vttMap.containsKey(base))) {
           final lrcFile = File(p.join(targetDir, '$audioName.lrc'));
-          final existing = await lrcFile.exists()
-              ? await lrcFile.readAsString()
-              : null;
+          final existing =
+              await lrcFile.exists() ? await lrcFile.readAsString() : null;
           if (existing == lyrics) {
             skipped++;
           } else {

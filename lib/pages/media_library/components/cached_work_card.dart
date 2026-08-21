@@ -114,7 +114,9 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        entry.releaseDate.isEmpty ? '发售日期：-' : entry.releaseDate,
+                        entry.releaseDate.isEmpty
+                            ? '发售日期：-'
+                            : entry.releaseDate,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -190,7 +192,7 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
                 : FadeInImage(
                     width: double.infinity,
                     height: double.infinity,
-                    fit: BoxFit.contain,
+                    fit: BoxFit.cover,
                     placeholder: MemoryImage(kTransparentImage),
                     image: MemoryImage(bytes),
                   ),
@@ -270,7 +272,8 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
                       color: scheme.error,
                     ),
                   )
-                : Icon(Icons.delete_outline_rounded, size: 16, color: scheme.error),
+                : Icon(Icons.delete_outline_rounded,
+                    size: 16, color: scheme.error),
             tooltip: '删除该条缓存',
             visualDensity: VisualDensity.compact,
             splashRadius: 14,

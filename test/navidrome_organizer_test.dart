@@ -87,6 +87,86 @@ void main() {
     expect(File(p.join(workDir, 'RJ12345678_cover.jpg')).existsSync(), false);
   });
 
+  test('整理状态检查：删除目标文件或封面后判定为未整理', () async {
+    createMockDownload();
+
+    final targetDir = NavidromeOrganizer.targetDirPath(
+      targetRoot: targetRoot.path,
+      circleName: '测试社团',
+      sourceId: 'RJ12345678',
+      cvNames: 'CV1&CV2',
+      title: '测试标题',
+    );
+    expect(
+      await NavidromeOrganizer.hasExpectedFiles(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+      ),
+      false,
+    );
+
+    await NavidromeOrganizer.organize(
+      sourceDir: sourceDir.path,
+      targetRoot: targetRoot.path,
+      circleName: '测试社团',
+      sourceId: 'RJ12345678',
+      cvNames: 'CV1&CV2',
+      title: '测试标题',
+      coverBytes: Uint8List.fromList(List.filled(80, 9)),
+    );
+
+    expect(
+      await NavidromeOrganizer.hasExpectedFiles(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+      ),
+      true,
+    );
+
+    File(p.join(targetDir, 'ex01_留言.wav')).deleteSync();
+    expect(
+      await NavidromeOrganizer.hasExpectedFiles(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+      ),
+      false,
+    );
+
+    await NavidromeOrganizer.organize(
+      sourceDir: sourceDir.path,
+      targetRoot: targetRoot.path,
+      circleName: '测试社团',
+      sourceId: 'RJ12345678',
+      cvNames: 'CV1&CV2',
+      title: '测试标题',
+      coverBytes: Uint8List.fromList(List.filled(80, 9)),
+    );
+    File(p.join(targetDir, 'cover.jpg')).deleteSync();
+    expect(
+      await NavidromeOrganizer.hasExpectedFiles(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+      ),
+      false,
+    );
+  });
+
   test('幂等：重复整理全部跳过', () async {
     createMockDownload();
 
@@ -177,12 +257,12 @@ void main() {
       final audioDir = Directory(p.join(sourceDir.path, '音声'))..createSync();
       File(p.join(audioDir.path, 'e01_舔耳.wav'))
           .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
-      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt')).writeAsStringSync(
-          'WEBVTT\n\n'
-          '00:00:01.000 --> 00:00:02.000\n'
-          '舔耳开始\n\n'
-          '00:00:03.500 --> 00:00:05.000\n'
-          '继续侍奉\n');
+      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt'))
+          .writeAsStringSync('WEBVTT\n\n'
+              '00:00:01.000 --> 00:00:02.000\n'
+              '舔耳开始\n\n'
+              '00:00:03.500 --> 00:00:05.000\n'
+              '继续侍奉\n');
     }
 
     test('vtt 自动转换：生成 .lrc 侧车文件且保留原 vtt', () async {
@@ -204,8 +284,7 @@ void main() {
 
       final lrcFile = File(p.join(workDir.path, 'e01_舔耳.wav.lrc'));
       expect(lrcFile.existsSync(), true);
-      expect(lrcFile.readAsStringSync(),
-          '[00:01.00]舔耳开始\n[00:03.50]继续侍奉');
+      expect(lrcFile.readAsStringSync(), '[00:01.00]舔耳开始\n[00:03.50]继续侍奉');
       // 原字幕仍保留
       expect(File(p.join(workDir.path, 'e01_舔耳.wav.vtt')).existsSync(), true);
     });
@@ -215,13 +294,13 @@ void main() {
       File(p.join(audioDir.path, 'e01_舔耳.wav'))
           .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
       // 真实 LRC（人工字幕）
-      File(p.join(audioDir.path, 'e01_舔耳.wav.lrc')).writeAsStringSync(
-          '[00:09.00]人工字幕优先');
+      File(p.join(audioDir.path, 'e01_舔耳.wav.lrc'))
+          .writeAsStringSync('[00:09.00]人工字幕优先');
       // 同名的 VTT
-      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt')).writeAsStringSync(
-          'WEBVTT\n\n'
-          '00:00:01.000 --> 00:00:02.000\n'
-          'vtt 内容\n');
+      File(p.join(audioDir.path, 'e01_舔耳.wav.vtt'))
+          .writeAsStringSync('WEBVTT\n\n'
+              '00:00:01.000 --> 00:00:02.000\n'
+              'vtt 内容\n');
 
       final result = await NavidromeOrganizer.organize(
         sourceDir: sourceDir.path,
@@ -301,8 +380,8 @@ void main() {
       final audioDir = Directory(p.join(sourceDir.path, '音声'))..createSync();
       File(p.join(audioDir.path, 'e01_舔耳.wav'))
           .writeAsBytesSync(Uint8List.fromList(List.filled(1000, 2)));
-      File(p.join(audioDir.path, 'e01_舔耳.lrc')).writeAsStringSync(
-          '[00:01.00]AI中文字幕');
+      File(p.join(audioDir.path, 'e01_舔耳.lrc'))
+          .writeAsStringSync('[00:01.00]AI中文字幕');
 
       final result = await NavidromeOrganizer.organize(
         sourceDir: sourceDir.path,
@@ -322,8 +401,7 @@ void main() {
       expect(lrcFile.existsSync(), true);
       expect(lrcFile.readAsStringSync(), '[00:01.00]AI中文字幕');
       // 不生成重复的 e01_舔耳.wav.lrc（因同名 lrc 已存在）
-      expect(
-          File(p.join(workDir.path, 'e01_舔耳.wav.lrc')).existsSync(), false);
+      expect(File(p.join(workDir.path, 'e01_舔耳.wav.lrc')).existsSync(), false);
     });
   });
 

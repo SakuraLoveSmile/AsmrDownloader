@@ -33,7 +33,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
       width: 350,
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHigh,
-        border: Border(left: BorderSide(color: scheme.outlineVariant, width: 0.8)),
+        border:
+            Border(left: BorderSide(color: scheme.outlineVariant, width: 0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -42,7 +43,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 10, 10),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: scheme.outlineVariant, width: 0.6)),
+              border: Border(
+                  bottom: BorderSide(color: scheme.outlineVariant, width: 0.6)),
             ),
             child: Row(
               children: [
@@ -63,7 +65,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                   visualDensity: VisualDensity.compact,
                   style: IconButton.styleFrom(
                     shape: const CircleBorder(),
-                    backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    backgroundColor:
+                        scheme.surfaceContainerHighest.withValues(alpha: 0.5),
                   ),
                 ),
               ],
@@ -83,7 +86,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                       decoration: BoxDecoration(
                         color: scheme.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: scheme.outlineVariant, width: 0.8),
+                        border: Border.all(
+                            color: scheme.outlineVariant, width: 0.8),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.3),
@@ -101,7 +105,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                               child: SizedBox(
                                 width: 22,
                                 height: 22,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               ),
                             ),
                             error: (_, __) => Icon(
@@ -118,7 +123,7 @@ class WorkInspectorDrawer extends ConsumerWidget {
                                 : FadeInImage(
                                     width: double.infinity,
                                     height: double.infinity,
-                                    fit: BoxFit.contain,
+                                    fit: BoxFit.cover,
                                     placeholder: MemoryImage(kTransparentImage),
                                     image: MemoryImage(bytes),
                                   ),
@@ -145,18 +150,22 @@ class WorkInspectorDrawer extends ConsumerWidget {
                       Expanded(
                         child: FilledButton.icon(
                           onPressed: () async {
-                            await ref.read(uiServiceProvider).search(entry.sourceId);
+                            await ref
+                                .read(uiServiceProvider)
+                                .search(entry.sourceId);
                             // 切换到下载 Tab
                             ref.read(currentNavTabProvider.notifier).state = 0;
                           },
                           icon: const Icon(Icons.download_rounded, size: 15),
-                          label: const Text('前往下载', style: TextStyle(fontSize: 12)),
+                          label: const Text('前往下载',
+                              style: TextStyle(fontSize: 12)),
                         ),
                       ),
                       const SizedBox(width: 8),
                       IconButton(
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: '${entry.sourceId} ${entry.title}'));
+                          Clipboard.setData(ClipboardData(
+                              text: '${entry.sourceId} ${entry.title}'));
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('已复制作品信息')),
                           );
@@ -165,7 +174,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                         tooltip: '复制标题与ID',
                         style: IconButton.styleFrom(
                           shape: const CircleBorder(),
-                          backgroundColor: scheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                          backgroundColor: scheme.surfaceContainerHighest
+                              .withValues(alpha: 0.5),
                         ),
                       ),
                     ],
@@ -204,12 +214,15 @@ class WorkInspectorDrawer extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(100),
                                   onTap: () => onSelectCv?.call(cv),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: scheme.primary.withValues(alpha: 0.12),
+                                      color: scheme.primary
+                                          .withValues(alpha: 0.12),
                                       borderRadius: BorderRadius.circular(100),
                                       border: Border.all(
-                                        color: scheme.primary.withValues(alpha: 0.3),
+                                        color: scheme.primary
+                                            .withValues(alpha: 0.3),
                                         width: 0.6,
                                       ),
                                     ),
@@ -229,7 +242,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                   const SizedBox(height: 8),
                   _InfoItem(
                     label: '发售日期',
-                    content: Text(entry.releaseDate.isEmpty ? '-' : entry.releaseDate),
+                    content: Text(
+                        entry.releaseDate.isEmpty ? '-' : entry.releaseDate),
                   ),
                   const SizedBox(height: 8),
                   _InfoItem(
@@ -263,11 +277,13 @@ class WorkInspectorDrawer extends ConsumerWidget {
                       children: [
                         for (final tag in entry.tags)
                           ActionChip(
-                            label: Text(tag, style: const TextStyle(fontSize: 11.5)),
+                            label: Text(tag,
+                                style: const TextStyle(fontSize: 11.5)),
                             padding: EdgeInsets.zero,
                             shape: const StadiumBorder(),
                             backgroundColor: scheme.surfaceContainerLow,
-                            side: BorderSide(color: scheme.outlineVariant, width: 0.6),
+                            side: BorderSide(
+                                color: scheme.outlineVariant, width: 0.6),
                             onPressed: () => onSelectTag?.call(tag),
                           ),
                       ],
@@ -277,8 +293,10 @@ class WorkInspectorDrawer extends ConsumerWidget {
                   Center(
                     child: TextButton.icon(
                       onPressed: () => _confirmRemove(context, ref),
-                      icon: Icon(Icons.delete_outline_rounded, size: 16, color: scheme.error),
-                      label: Text('删除该条本地缓存', style: TextStyle(color: scheme.error, fontSize: 12)),
+                      icon: Icon(Icons.delete_outline_rounded,
+                          size: 16, color: scheme.error),
+                      label: Text('删除该条本地缓存',
+                          style: TextStyle(color: scheme.error, fontSize: 12)),
                     ),
                   ),
                 ],

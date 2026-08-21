@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,9 +19,12 @@ final worksLibraryProvider =
 /// 未整理作品数（作品库 tab badge 用；仅统计目录仍存在的条目）
 final unorganizedCountProvider = FutureProvider<int>((ref) async {
   final entries = await ref.read(worksIndexProvider).list();
+  final targetRoot = ref.read(navidromePathProvider);
+  final organizer = ref.read(organizeServiceProvider);
   var count = 0;
   for (final e in entries) {
-    if (e.organizedAt == null && Directory(e.sourceDir).existsSync()) {
+    if (Directory(e.sourceDir).existsSync() &&
+        !await organizer.isOrganized(e, targetRoot: targetRoot)) {
       count++;
     }
   }

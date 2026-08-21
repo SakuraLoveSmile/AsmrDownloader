@@ -127,6 +127,24 @@ class OrganizeService {
     );
   }
 
+  /// 判断注册表条目当前是否仍有完整的整理产物。
+  ///
+  /// `organizedAt` 作为历史整理记录保留，但不能单独代表目标文件仍存在。
+  Future<bool> isOrganized(
+    WorkEntry entry, {
+    required String targetRoot,
+  }) async {
+    if (entry.organizedAt == null) return false;
+    return NavidromeOrganizer.hasExpectedFiles(
+      sourceDir: entry.sourceDir,
+      targetRoot: targetRoot,
+      circleName: entry.circleName,
+      sourceId: entry.sourceId,
+      cvNames: entry.cvNames,
+      title: entry.title,
+    );
+  }
+
   // ---------- 核心编排 ----------
 
   /// 执行单个作品整理（含汉化 circle 跟踪与 artist 保底）。
@@ -383,9 +401,6 @@ class OrganizeService {
     // 全量注册表（用于自动识别去重与目录移动修正，不随 onlyUnorganized 过滤）
     final registeredAll = {for (final e in entries) e.sourceId: e};
     entries.sort((a, b) => a.sourceId.compareTo(b.sourceId));
-    if (onlyUnorganized) {
-      entries = entries.where((e) => e.organizedAt == null).toList();
-    }
 
     // 自动识别下载目录中带 RJ/VJ/BJ 号的目录：
     // - 未注册的加入待整理列表（在线拉取元数据，失败降级目录名）；
@@ -418,6 +433,16 @@ class OrganizeService {
         Log.info('batch organize: discovered ${discoveredIds.length} '
             'unregistered works: ${discoveredIds.join(', ')}');
       }
+    }
+
+    if (onlyUnorganized) {
+      final unorganized = <WorkEntry>[];
+      for (final entry in entries) {
+        if (!await isOrganized(entry, targetRoot: targetRoot)) {
+          unorganized.add(entry);
+        }
+      }
+      entries = unorganized;
     }
 
     final results = <BatchItemResult>[];
@@ -469,8 +494,7 @@ class OrganizeService {
               sourceId: entry.sourceId,
               success: true,
               message: _appendMetadataNote(
-                  _appendTagNote(
-                      '已是最新（复制 0 跳过 ${result.skipped}）',
+                  _appendTagNote('已是最新（复制 0 跳过 ${result.skipped}）',
                       result.tagWriteFailures),
                   outcome.metadataNote)));
           await index.upsert(outcome.resolvedEntry
@@ -481,8 +505,7 @@ class OrganizeService {
               sourceId: entry.sourceId,
               success: true,
               message: _appendMetadataNote(
-                  _appendTagNote(
-                      '复制 ${result.copied} 跳过 ${result.skipped}',
+                  _appendTagNote('复制 ${result.copied} 跳过 ${result.skipped}',
                       result.tagWriteFailures),
                   outcome.metadataNote)));
           await index.upsert(outcome.resolvedEntry
