@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -23,6 +24,7 @@ class _TestServer {
   final HttpServer server;
   // sourceId -> {path: bytes}
   final Map<String, Map<String, Uint8List>> workFiles;
+
   /// 这些作品的音轨指向服务器上不存在的路径（/bad/...），触发下载失败。
   final Set<String> badSourceIds;
   final Duration delay;
@@ -35,8 +37,7 @@ class _TestServer {
     Set<String> badSourceIds = const {},
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final testServer =
-        _TestServer._(server, workFiles, badSourceIds, delay);
+    final testServer = _TestServer._(server, workFiles, badSourceIds, delay);
     server.listen(testServer._handle);
     return testServer;
   }
@@ -82,8 +83,7 @@ class _TestServer {
       // 返回 416（Range Not Satisfiable）触发立即失败而非无限重试，
       // 与 MultiThreadDownloader 的 416 短路逻辑一致。
       if (path.startsWith('/bad/')) {
-        request.response.statusCode =
-            HttpStatus.requestedRangeNotSatisfiable;
+        request.response.statusCode = HttpStatus.requestedRangeNotSatisfiable;
         await request.response.close();
         return;
       }
@@ -166,8 +166,7 @@ ProviderContainer _createContainer(
     downloadPathProvider
         .overrideWith((ref) => p.join(tempDir.path, 'downloads')),
     // 队列文件指向临时目录，避免污染应用数据目录
-    downloadQueueFilePathProvider
-        .overrideWithValue(queueFilePath),
+    downloadQueueFilePathProvider.overrideWithValue(queueFilePath),
     // workInfo：返回各作品元数据（驱动 title/cv/circle 等降级链）。
     // vas 留空，使下载目录名为纯标题，便于断言路径。
     workInfoProvider.overrideWith((ref) async {
@@ -232,9 +231,31 @@ String _workFilePath(Directory tempDir, String sourceId, String basename) {
 }
 
 void main() {
-  test('队列去重与持久化：add 两次只保留一个，重新构造后条目仍在', () async {
+  test('Notifier 启动恢复与立即加入队列不会丢失磁盘条目', () async {
     final tempDir =
-        Directory.systemTemp.createTempSync('dl_queue_test_dedup');
+        Directory.systemTemp.createTempSync('dl_queue_notifier_ready');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final filePath = p.join(tempDir.path, 'download_queue.json');
+    File(filePath)
+      ..createSync(recursive: true)
+      ..writeAsStringSync(jsonEncode({
+        'items': ['RJ00001']
+      }));
+
+    final container = ProviderContainer(
+      overrides: [downloadQueueFilePathProvider.overrideWithValue(filePath)],
+    );
+    addTearDown(container.dispose);
+
+    final notifier = container.read(downloadQueueProvider.notifier);
+    expect(await notifier.add('RJ00002'), isTrue);
+    expect(container.read(downloadQueueProvider), ['RJ00001', 'RJ00002']);
+    expect(
+        await DownloadQueue(filePath: filePath).list(), ['RJ00001', 'RJ00002']);
+  });
+
+  test('队列去重与持久化：add 两次只保留一个，重新构造后条目仍在', () async {
+    final tempDir = Directory.systemTemp.createTempSync('dl_queue_test_dedup');
     addTearDown(() => tempDir.deleteSync(recursive: true));
     final filePath = p.join(tempDir.path, 'download_queue.json');
 
@@ -264,8 +285,7 @@ void main() {
     );
     addTearDown(server.close);
 
-    final tempDir =
-        Directory.systemTemp.createTempSync('dl_queue_test_order');
+    final tempDir = Directory.systemTemp.createTempSync('dl_queue_test_order');
     addTearDown(() => tempDir.deleteSync(recursive: true));
 
     final container = _createContainer(tempDir, server, sourceIds);
@@ -308,8 +328,7 @@ void main() {
     );
     addTearDown(server.close);
 
-    final tempDir =
-        Directory.systemTemp.createTempSync('dl_queue_test_fail');
+    final tempDir = Directory.systemTemp.createTempSync('dl_queue_test_fail');
     addTearDown(() => tempDir.deleteSync(recursive: true));
 
     final container = _createContainer(tempDir, server, sourceIds);
@@ -343,8 +362,7 @@ void main() {
     );
     addTearDown(server.close);
 
-    final tempDir =
-        Directory.systemTemp.createTempSync('dl_queue_test_cancel');
+    final tempDir = Directory.systemTemp.createTempSync('dl_queue_test_cancel');
     addTearDown(() => tempDir.deleteSync(recursive: true));
 
     final container = _createContainer(tempDir, server, sourceIds);
@@ -414,15 +432,13 @@ void main() {
     await runFuture;
 
     // 注册表写入的是快照（第一个）作品的数据，而非下载中被搜索切走的第二个
-    final entry =
-        await container.read(worksIndexProvider).get('RJ00001');
+    final entry = await container.read(worksIndexProvider).get('RJ00001');
     expect(entry, isNotNull);
     expect(entry!.title, '作品RJ00001');
     expect(entry.circleName, '社团RJ00001');
     expect(entry.cvNames, 'CVRJ00001');
     // 第二个作品不应被写入注册表（本次只下载了第一个）
-    final entry2 =
-        await container.read(worksIndexProvider).get('RJ00002');
+    final entry2 = await container.read(worksIndexProvider).get('RJ00002');
     expect(entry2, isNull);
   });
 }

@@ -8,9 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 下载列表面板：在进度行与音轨树之间逐文件列出下载详情。
 /// 无分段数据（未开始/新搜索清空）时整体不渲染。
 class DownloadListPanel extends ConsumerStatefulWidget {
-  const DownloadListPanel({super.key, required this.tracksLPadding});
+  const DownloadListPanel({
+    super.key,
+    required this.tracksLPadding,
+    this.initiallyExpanded = false,
+  });
 
   final double tracksLPadding;
+  final bool initiallyExpanded;
 
   @override
   ConsumerState<DownloadListPanel> createState() => _DownloadListPanelState();
@@ -18,6 +23,15 @@ class DownloadListPanel extends ConsumerStatefulWidget {
 
 class _DownloadListPanelState extends ConsumerState<DownloadListPanel> {
   bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 面板可能在下载状态已经切换后才首次出现在下载中心（例如用户
+    // 搜索结果正在加载时），此时没有状态边沿可供 ref.listen 捕获。
+    _expanded = widget.initiallyExpanded ||
+        ref.read(dlStatusProvider) == DownloadStatus.downloading;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -126,8 +140,7 @@ class _ListBody extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: segments.length,
         separatorBuilder: (_, __) => const SizedBox(height: 2),
-        itemBuilder: (_, index) =>
-            _DownloadListRow(segment: segments[index]),
+        itemBuilder: (_, index) => _DownloadListRow(segment: segments[index]),
       ),
     );
   }
@@ -200,8 +213,7 @@ class _DownloadListRow extends StatelessWidget {
     );
   }
 
-  (IconData, Color) _statusIcon(
-      DownloadStatus status, ColorScheme scheme) {
+  (IconData, Color) _statusIcon(DownloadStatus status, ColorScheme scheme) {
     switch (status) {
       case DownloadStatus.notStarted:
         return (Icons.schedule, scheme.onSurfaceVariant);
