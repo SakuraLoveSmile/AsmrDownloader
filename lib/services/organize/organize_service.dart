@@ -141,6 +141,7 @@ class OrganizeService {
     required String fallbackTitle,
     required String fallbackCvNames,
     String fallbackCircle = '',
+    String? resolvedCircleName,
     Uint8List? coverBytes,
   }) async {
     if (!Directory(sourceDir).existsSync()) return null;
@@ -149,11 +150,12 @@ class OrganizeService {
     final cvNames = resolveCvNames(workInfo, fallbackCvNames);
     // 汉化版作品的 circle 是汉化组名，跟踪到原版取真实社团名
     // （原版元数据缓存优先，避免重复请求 API）
-    final circleName = await NavidromeOrganizer.resolveCircleName(
-      workInfo: workInfo,
-      fallbackCircle: resolveCircle(workInfo, fallbackCircle),
-      fetchWorkInfo: fetchWorkInfoCached,
-    );
+    final circleName = resolvedCircleName ??
+        await NavidromeOrganizer.resolveCircleName(
+          workInfo: workInfo,
+          fallbackCircle: resolveCircle(workInfo, fallbackCircle),
+          fetchWorkInfo: fetchWorkInfoCached,
+        );
     // circle 目录名（汉化跟踪后的社团名）保底：社团 → CV → sourceId
     final circleDirName =
         [circleName, cvNames, sourceId].firstWhere((s) => s.isNotEmpty);
@@ -175,12 +177,13 @@ class OrganizeService {
     );
   }
 
-  /// 从注册表条目整理（注册表条目离线优先：直接使用注册表元数据；
-  /// 缺少社团名时也尝试一次缓存优先的 workInfo 补齐，避免旧条目顶层降级
-  /// 为 CV；[fetchWorkInfo] 为 true 时（批量整理自动识别出的作品）同样
-  /// 拉取元数据。失败则降级到目录名解析。
+  /// 从注册表条目整理。
+  ///
+  /// 注册表可能由旧版本写入过汉化组名，因此即使 [entry.circleName] 非空，
+  /// 也默认重新读取 workInfo（缓存优先），再解析原版社团名。这样单条整理、
+  /// 批量整理和重新整理都不会被旧的中文社团字段短路。失败则降级到注册表/目录名。
   Future<OrganizeEntryOutcome> organizeEntry(WorkEntry entry,
-      {required String targetRoot, bool fetchWorkInfo = false}) async {
+      {required String targetRoot, bool fetchWorkInfo = true}) async {
     Map<String, dynamic>? workInfo;
     String? metadataNote;
     if (fetchWorkInfo || entry.circleName.trim().isEmpty) {
@@ -189,8 +192,7 @@ class OrganizeService {
         workInfo = await fetchWorkInfoCached(entry.sourceId);
         if (workInfo == null) {
           metadataNote = '元数据未找到，已按本地信息整理';
-        } else if (entry.circleName.trim().isEmpty &&
-            resolveCircle(workInfo, '').isEmpty) {
+        } else if (resolveCircle(workInfo, '').isEmpty) {
           metadataNote = '元数据不完整（缺少社团名），已按本地信息整理';
         }
       } catch (e) {
@@ -205,6 +207,16 @@ class OrganizeService {
     final fallbackTitle = entry.title.isNotEmpty ? entry.title : parsed.title;
     final fallbackCvNames =
         entry.cvNames.isNotEmpty ? entry.cvNames : parsed.cvNames;
+
+    // 只解析一次并把同一个结果传给整理和注册表回写；否则目录虽然已经用
+    // 原版社团名创建，回写时又会把旧的汉化组名保存回去，下一次仍会复发。
+    final resolvedCircleName = workInfo == null
+        ? entry.circleName
+        : await NavidromeOrganizer.resolveCircleName(
+            workInfo: workInfo,
+            fallbackCircle: resolveCircle(workInfo, entry.circleName),
+            fetchWorkInfo: fetchWorkInfoCached,
+          );
 
     Uint8List? coverBytes;
     var coverNote = '';
@@ -244,6 +256,7 @@ class OrganizeService {
       fallbackTitle: fallbackTitle,
       fallbackCvNames: fallbackCvNames,
       fallbackCircle: entry.circleName,
+      resolvedCircleName: resolvedCircleName,
       coverBytes: coverBytes,
     );
 
@@ -258,9 +271,7 @@ class OrganizeService {
       cvNames: workInfo != null
           ? resolveCvNames(workInfo, fallbackCvNames)
           : fallbackCvNames,
-      circleName: workInfo != null
-          ? resolveCircle(workInfo, entry.circleName)
-          : entry.circleName,
+      circleName: resolvedCircleName,
       releaseDate:
           workInfo != null ? resolveRelease(workInfo) : entry.releaseDate,
       tags: workInfo != null ? resolveTags(workInfo) : entry.tags,
@@ -422,10 +433,9 @@ class OrganizeService {
         break;
       }
       final entry = entries[i];
-      final needsWorkInfo = discoveredIds.contains(entry.sourceId) ||
-          entry.circleName.trim().isEmpty;
-      final needsNetwork = needsWorkInfo &&
-          Directory(entry.sourceDir).existsSync() &&
+      // 即使注册表已有 circle，也要读取 workInfo：旧版本可能保存的是汉化组名，
+      // 只有这样才能可靠地解析并回写原版社团名。
+      final needsNetwork = Directory(entry.sourceDir).existsSync() &&
           !await _hasCachedWorkInfo(entry.sourceId);
       onProgress(BatchProgress(
         total: entries.length,
@@ -445,7 +455,9 @@ class OrganizeService {
       try {
         final outcome = await organizeEntry(entry,
             targetRoot: targetRoot,
-            fetchWorkInfo: discoveredIds.contains(entry.sourceId));
+            // 批量整理也必须刷新已有注册表条目的元数据；旧版本可能把
+            // 汉化组名写进 circleName，不能只对新扫描到的作品联网。
+            fetchWorkInfo: true);
         final result = outcome.result;
         if (result == null) {
           failed++;

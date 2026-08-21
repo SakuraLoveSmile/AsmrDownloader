@@ -677,12 +677,13 @@ class UIService {
       circleName: item.circleName,
     );
     final organizer = ref.read(organizeServiceProvider);
-    if (await organizer.needsWorkInfoNetwork(entry)) {
+    if (await organizer.needsWorkInfoNetwork(entry, fetchWorkInfo: true)) {
       showSnack('正在整理 ${item.sourceId}…需联网获取元数据，最长约 17 秒…');
     }
     final outcome = await organizer.organizeEntry(
       entry,
       targetRoot: navidromePath,
+      fetchWorkInfo: true,
     );
     if (outcome.result != null) {
       // 补录整理时间（含解析后的元数据回写）
