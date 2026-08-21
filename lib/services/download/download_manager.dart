@@ -128,11 +128,20 @@ class DownloadManager {
   int _queueSuccessCnt = 0;
   int _queueFailedCnt = 0;
 
+  /// 防止用户连续点击「下载」/「继续下载」启动两条相互抢占的循环。
+  bool _runInFlight = false;
+
   /// 下载入口：手动点击或队列循环调用。
   /// 外层 while 循环串行处理队列中的作品，作品内沿用文件级并行。
   /// 第一个作品（手动下载）完成后会继续处理下载期间入队的作品，
   /// 仅当确实处理了队列作品时才提示队列统计。
   Future<void> run() async {
+    if (_runInFlight ||
+        ref.read(dlStatusProvider) == DownloadStatus.downloading) {
+      return;
+    }
+
+    _runInFlight = true;
     final runSeq = ++_runSeq;
     _currentRunSeq = runSeq;
     _cancelRequested = false;
@@ -140,35 +149,39 @@ class DownloadManager {
     _queueSuccessCnt = 0;
     _queueFailedCnt = 0;
 
-    while (true) {
-      final outcome = await _runOnce(runSeq);
-      if (runSeq != _runSeq) return; // 被新一轮抢占
-      if (_cancelRequested) {
-        // 用户取消：终止整个队列循环，条目保留
-        _finalizeQueueIfLoop(runSeq, canceled: true);
-        return;
-      }
-      if (outcome == _RunOutcome.aborted) {
-        // 校验失败等：结束（取消已在上面处理）
-        return;
-      }
+    try {
+      while (true) {
+        final outcome = await _runOnce(runSeq);
+        if (runSeq != _runSeq) return; // 被新一轮抢占
+        if (_cancelRequested) {
+          // 用户取消：终止整个队列循环，条目保留
+          _finalizeQueueIfLoop(runSeq, canceled: true);
+          return;
+        }
+        if (outcome == _RunOutcome.aborted) {
+          // 校验失败等：结束（取消已在上面处理）
+          return;
+        }
 
-      // 当前作品已完成/失败，计入统计（是否对外提示取决于是否进队列）
-      if (outcome == _RunOutcome.completed) {
-        _queueSuccessCnt++;
-      } else {
-        _queueFailedCnt++;
-      }
+        // 当前作品已完成/失败，计入统计（是否对外提示取决于是否进队列）
+        if (outcome == _RunOutcome.completed) {
+          _queueSuccessCnt++;
+        } else {
+          _queueFailedCnt++;
+        }
 
-      // 尝试从队列取下一个作品（下载期间用户可能已入队）
-      final prepared = await _prepareNextQueuedWork(runSeq);
-      if (runSeq != _runSeq) return;
-      if (!prepared) {
-        // 队列空：若已进入队列模式则提示统计，否则静默结束（纯单次下载）
-        _finalizeQueueIfLoop(runSeq, canceled: false);
-        return;
+        // 尝试从队列取下一个作品（下载期间用户可能已入队）
+        final prepared = await _prepareNextQueuedWork(runSeq);
+        if (runSeq != _runSeq) return;
+        if (!prepared) {
+          // 队列空：若已进入队列模式则提示统计，否则静默结束（纯单次下载）
+          _finalizeQueueIfLoop(runSeq, canceled: false);
+          return;
+        }
+        _inQueueLoop = true;
       }
-      _inQueueLoop = true;
+    } finally {
+      if (runSeq == _runSeq) _runInFlight = false;
     }
   }
 
@@ -199,11 +212,16 @@ class DownloadManager {
       return _RunOutcome.aborted;
     }
 
+    ref.read(currentDownloadingSourceIdProvider.notifier).state = sourceId;
+    ref.read(lastDownloadSourceIdProvider.notifier).state = sourceId;
+
     // 下载开始即快照作品上下文：下载中允许搜索新作品，
     // 收尾写注册表时全部用快照值，避免被搜索切走的新作品数据污染。
     final ctx = await _snapshotRunContext(sourceId, voiceWorkPath);
-    if (runSeq != _runSeq) return _RunOutcome.aborted;
-    ref.read(currentDownloadingSourceIdProvider.notifier).state = sourceId;
+    if (runSeq != _runSeq) {
+      ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
+      return _RunOutcome.aborted;
+    }
 
     // start downloading
 
@@ -258,8 +276,7 @@ class DownloadManager {
       Log.error('download failed: $sourceId\n'
           'failed task count: $_failedCnt');
       ref.read(dlStatusProvider.notifier).state = DownloadStatus.failed;
-      ref.read(uiServiceProvider)
-          .showSnack('下载失败：$_failedCnt 个文件下载失败，可点击「重试」');
+      ref.read(uiServiceProvider).showSnack('下载失败：$_failedCnt 个文件下载失败，可点击「重试」');
       ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
       return _RunOutcome.failed;
     }
@@ -282,9 +299,7 @@ class DownloadManager {
             coverUrl: ctx.coverUrl,
           ));
     } catch (e) {
-      ref
-          .read(uiServiceProvider)
-          .showSnack('作品已下载，但注册表写入失败（$e），可手动整理');
+      ref.read(uiServiceProvider).showSnack('作品已下载，但注册表写入失败（$e），可手动整理');
     }
     // 新作品入库：刷新作品库列表与 badge
     ref.invalidate(worksLibraryProvider);
@@ -335,8 +350,8 @@ class DownloadManager {
   Future<bool> _prepareNextQueuedWork(int runSeq) async {
     if (_cancelRequested || runSeq != _runSeq) return false;
 
-    final nextSourceId =
-        await ref.read(downloadQueueProvider.notifier).popFront();
+    final queueNotifier = ref.read(downloadQueueProvider.notifier);
+    final nextSourceId = await queueNotifier.peek();
     if (runSeq != _runSeq) return false;
     if (nextSourceId == null) return false;
 
@@ -349,6 +364,29 @@ class DownloadManager {
       ref.read(rawTracksProvider.future),
     ].map((f) => f.catchError((_) => null)));
     if (runSeq != _runSeq) return false;
+
+    // 先确认搜索和音轨都成功，再从队列移除。这样 API/网络异常时，
+    // 条目会继续留在队列里，用户可以稍后重试，而不会无声丢失。
+    final tracks = ref.read(rawTracksProvider);
+    final prepared = ref.read(sourceIdProvider) == nextSourceId &&
+        tracks.hasValue &&
+        tracks.value != null &&
+        ref.read(rootFolderProvider) != null;
+    if (!prepared) {
+      ref
+          .read(uiServiceProvider)
+          .showSnack('队列作品 $nextSourceId 加载失败，条目已保留，可稍后重试');
+      return false;
+    }
+
+    // 仅当队首仍未被用户移除时才消费它，避免异步加载期间错删下一个条目。
+    final claimed = await queueNotifier.popFrontIf(nextSourceId);
+    if (!claimed) {
+      // 用户可能在元数据加载期间移除了原队首；继续尝试新的队首，
+      // 不让一个合法的移除操作意外中断整个下载循环。
+      if (_cancelRequested || runSeq != _runSeq) return false;
+      return _prepareNextQueuedWork(runSeq);
+    }
     return true;
   }
 
@@ -360,18 +398,29 @@ class DownloadManager {
     if (canceled) {
       ref.read(uiServiceProvider).showSnack('已取消下载队列（已完成 $_queueSuccessCnt 个）');
     } else {
-      ref.read(uiServiceProvider).showSnack(
-          '队列下载完成：$_queueSuccessCnt 成功，$_queueFailedCnt 失败');
+      ref
+          .read(uiServiceProvider)
+          .showSnack('队列下载完成：$_queueSuccessCnt 成功，$_queueFailedCnt 失败');
     }
   }
 
   /// 从队列启动下载（无当前搜索时，供队列面板「继续下载」按钮调用）。
-  /// 非下载中且队列非空时：pop 队首、搜索、等待元数据后进入 run 循环。
+  /// 非下载中且队列非空时：准备队首、搜索、确认元数据后进入 run 循环。
   Future<void> startFromQueue() async {
-    if (ref.read(dlStatusProvider) == DownloadStatus.downloading) return;
-    final items = ref.read(downloadQueueProvider);
-    if (items.isEmpty) return;
+    if (_runInFlight ||
+        ref.read(dlStatusProvider) == DownloadStatus.downloading) {
+      return;
+    }
 
+    final queueNotifier = ref.read(downloadQueueProvider.notifier);
+    await queueNotifier.waitUntilReady();
+    if (_runInFlight ||
+        ref.read(dlStatusProvider) == DownloadStatus.downloading) {
+      return;
+    }
+    if (await queueNotifier.peek() == null) return;
+
+    _runInFlight = true;
     _inQueueLoop = true;
     _queueSuccessCnt = 0;
     _queueFailedCnt = 0;
@@ -379,35 +428,39 @@ class DownloadManager {
     _currentRunSeq = runSeq;
     _cancelRequested = false;
 
-    final firstPrepared = await _prepareNextQueuedWork(runSeq);
-    if (runSeq != _runSeq) return;
-    if (!firstPrepared) {
-      _finalizeQueueIfLoop(runSeq, canceled: false);
-      return;
-    }
+    try {
+      final firstPrepared = await _prepareNextQueuedWork(runSeq);
+      if (runSeq != _runSeq) return;
+      if (!firstPrepared) {
+        // 加载失败时条目仍保留在队列中；不显示「队列完成」误导用户。
+        return;
+      }
 
-    while (true) {
-      final outcome = await _runOnce(runSeq);
-      if (runSeq != _runSeq) return;
-      if (_cancelRequested) {
-        _finalizeQueueIfLoop(runSeq, canceled: true);
-        return;
+      while (true) {
+        final outcome = await _runOnce(runSeq);
+        if (runSeq != _runSeq) return;
+        if (_cancelRequested) {
+          _finalizeQueueIfLoop(runSeq, canceled: true);
+          return;
+        }
+        if (outcome == _RunOutcome.aborted) {
+          // 校验失败等：结束（取消已在上面处理）
+          return;
+        }
+        if (outcome == _RunOutcome.completed) {
+          _queueSuccessCnt++;
+        } else {
+          _queueFailedCnt++;
+        }
+        final nextPrepared = await _prepareNextQueuedWork(runSeq);
+        if (runSeq != _runSeq) return;
+        if (!nextPrepared) {
+          _finalizeQueueIfLoop(runSeq, canceled: false);
+          return;
+        }
       }
-      if (outcome == _RunOutcome.aborted) {
-        // 校验失败等：结束（取消已在上面处理）
-        return;
-      }
-      if (outcome == _RunOutcome.completed) {
-        _queueSuccessCnt++;
-      } else {
-        _queueFailedCnt++;
-      }
-      final nextPrepared = await _prepareNextQueuedWork(runSeq);
-      if (runSeq != _runSeq) return;
-      if (!nextPrepared) {
-        _finalizeQueueIfLoop(runSeq, canceled: false);
-        return;
-      }
+    } finally {
+      if (runSeq == _runSeq) _runInFlight = false;
     }
   }
 

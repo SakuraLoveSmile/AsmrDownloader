@@ -106,6 +106,10 @@ final currentFileNameProvider = StateProvider<String>((ref) => '');
 /// 并行下载时当前正在下载的文件名列表，按任务队列顺序展示。
 final activeFileNamesProvider = StateProvider<List<String>>((ref) => const []);
 
+/// 当前/最近一次下载的作品 sourceId。下载页不依赖当前搜索结果，
+/// 因此搜索切换后仍能显示真正正在处理的作品。
+final lastDownloadSourceIdProvider = StateProvider<String?>((ref) => null);
+
 /// 已完成下载的文件数（并行下载后语义由「开始数」改为「完成数」）。
 final currentDlNoProvider = StateProvider<int>((ref) => 0);
 final totalTaskCntProvider = StateProvider<int>((ref) => 0);

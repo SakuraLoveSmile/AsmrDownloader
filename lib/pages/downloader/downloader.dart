@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/downloader/config_settings/components/asmr_api_channel.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_path_picker.dart';
+import 'package:asmr_downloader/pages/downloader/download_activity_panel.dart';
 import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/search_result.dart';
 import 'package:asmr_downloader/pages/downloader/settings_panel.dart';
@@ -43,6 +44,7 @@ class Downloader extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        const DownloadActivityPanel(),
         const SearchResult(),
       ],
     );

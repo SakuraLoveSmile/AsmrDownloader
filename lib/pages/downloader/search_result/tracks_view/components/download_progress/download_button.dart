@@ -28,6 +28,20 @@ class DownloadButton extends ConsumerWidget {
       );
     }
 
+    // 已在待下载队列中的作品不能再次直接下载，否则会在队列消费后
+    // 重复下载同一个作品。
+    final sourceId = ref.watch(sourceIdProvider);
+    final queue = ref.watch(downloadQueueProvider);
+    if (sourceId != null && queue.contains(sourceId)) {
+      return _PillButton(
+        backgroundColor: scheme.surfaceContainerHighest,
+        onColor: scheme.onSurfaceVariant,
+        label: '已排队',
+        onTap: null,
+        tooltip: '该作品已在下载队列中，请从队列继续下载',
+      );
+    }
+
     // 失败 → 橙色「重试」；其余 → 主色「下载」
     final Color backgroundColor;
     final String label;
@@ -53,19 +67,26 @@ class DownloadButton extends ConsumerWidget {
 
 /// 下载中的「加入队列」按钮：把当前搜索的作品 sourceId 加入下载队列。
 /// sourceId 为 null、等于当前正在下载的作品、或已在队列中时禁用并说明原因。
-class _EnqueueButton extends ConsumerWidget {
+class _EnqueueButton extends ConsumerStatefulWidget {
   const _EnqueueButton({required this.scheme});
 
   final ColorScheme scheme;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_EnqueueButton> createState() => _EnqueueButtonState();
+}
+
+class _EnqueueButtonState extends ConsumerState<_EnqueueButton> {
+  bool _adding = false;
+
+  @override
+  Widget build(BuildContext context) {
     final sourceId = ref.watch(sourceIdProvider);
     final currentDl = ref.watch(currentDownloadingSourceIdProvider);
     final queue = ref.watch(downloadQueueProvider);
 
     String? tooltip;
-    bool disabled = false;
+    var disabled = _adding;
     if (sourceId == null) {
       disabled = true;
       tooltip = '当前无有效作品可加入队列';
@@ -78,25 +99,33 @@ class _EnqueueButton extends ConsumerWidget {
     }
 
     return _PillButton(
-      backgroundColor: scheme.primary,
-      onColor: scheme.onPrimary,
+      backgroundColor: widget.scheme.primary,
+      onColor: widget.scheme.onPrimary,
       label: '加入队列',
-      onTap: disabled
-          ? null
-          : () async {
-              final added =
-                  await ref.read(downloadQueueProvider.notifier).add(sourceId!);
-              if (added) {
-                final remaining = ref.read(downloadQueueProvider).length;
-                ref
-                    .read(uiServiceProvider)
-                    .showSnack('已加入下载队列（剩余 $remaining 个）');
-              } else {
-                ref.read(uiServiceProvider).showSnack('加入队列失败，请重试');
-              }
-            },
+      onTap: disabled ? null : () => _enqueue(sourceId!),
       tooltip: tooltip,
     );
+  }
+
+  Future<void> _enqueue(String sourceId) async {
+    if (_adding) return;
+    setState(() => _adding = true);
+    try {
+      final added =
+          await ref.read(downloadQueueProvider.notifier).add(sourceId);
+      if (!mounted) return;
+
+      if (added) {
+        final remaining = ref.read(downloadQueueProvider).length;
+        ref.read(uiServiceProvider).showSnack('已加入下载队列（剩余 $remaining 个）');
+      } else if (ref.read(downloadQueueProvider).contains(sourceId)) {
+        ref.read(uiServiceProvider).showSnack('该作品已在下载队列中');
+      } else {
+        ref.read(uiServiceProvider).showSnack('加入队列失败，请重试');
+      }
+    } finally {
+      if (mounted) setState(() => _adding = false);
+    }
   }
 }
 
@@ -140,7 +169,9 @@ class _PillButton extends StatelessWidget {
       duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
       decoration: ShapeDecoration(
-        color: disabled ? backgroundColor.withValues(alpha: 0.35) : backgroundColor,
+        color: disabled
+            ? backgroundColor.withValues(alpha: 0.35)
+            : backgroundColor,
         shape: const StadiumBorder(),
         shadows: disabled
             ? null

@@ -25,7 +25,9 @@ class DownloadQueuePanel extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
               .withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
@@ -35,14 +37,23 @@ class DownloadQueuePanel extends ConsumerWidget {
           children: [
             _Header(count: queue.length),
             const SizedBox(height: 4),
-            for (final sourceId in queue)
-              _QueueRow(
-                sourceId: sourceId,
-                isDownloading: downloading,
-                onRemove: () => ref
-                    .read(downloadQueueProvider.notifier)
-                    .remove(sourceId),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: queue.length,
+                itemBuilder: (_, index) {
+                  final sourceId = queue[index];
+                  return _QueueRow(
+                    sourceId: sourceId,
+                    isDownloading: downloading,
+                    onRemove: () => ref
+                        .read(downloadQueueProvider.notifier)
+                        .remove(sourceId),
+                  );
+                },
               ),
+            ),
             const SizedBox(height: 4),
             _Footer(
               downloading: downloading,

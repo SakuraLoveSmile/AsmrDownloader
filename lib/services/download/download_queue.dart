@@ -56,7 +56,17 @@ class DownloadQueue {
     await _writeRaw({'items': items});
   }
 
-  Future<List<String>> list() => _readItems();
+  /// 读取当前队列。读取也要排在写操作之后，避免启动时的异步加载
+  /// 把刚刚写入的条目覆盖掉。
+  Future<List<String>> list() {
+    return _pendingWrite.then((_) => _readItems());
+  }
+
+  /// 查看队首但不移除。
+  Future<String?> peek() async {
+    final items = await list();
+    return items.isEmpty ? null : items.first;
+  }
 
   /// 追加入队（去重），返回是否新增（已存在返回 false）。
   Future<bool> add(String sourceId) async {
@@ -101,6 +111,21 @@ class DownloadQueue {
     _pendingWrite = task.catchError((_) => null);
     return task;
   }
+
+  /// 仅当队首仍是 [expected] 时取出它。
+  /// 队列页允许用户在元数据加载期间移除条目，因此下载器不能
+  /// 在条目已经被用户移除后误取出下一个作品。
+  Future<String?> popFrontIf(String expected) async {
+    final task = _pendingWrite.then((_) async {
+      final items = await _readItems();
+      if (items.isEmpty || items.first != expected) return null;
+      final popped = items.removeAt(0);
+      await _writeItems(items);
+      return popped;
+    });
+    _pendingWrite = task.catchError((_) => null);
+    return task;
+  }
 }
 
 /// 下载队列文件路径（可被测试 override 到临时目录）
@@ -111,41 +136,74 @@ final downloadQueueFilePathProvider = Provider<String>((ref) {
 /// 下载队列状态管理：每次变更后更新 state 并落盘。
 class DownloadQueueNotifier extends Notifier<List<String>> {
   late final DownloadQueue _queue;
+  late final Future<void> _ready;
+  var _mounted = true;
 
   @override
   List<String> build() {
     _queue = DownloadQueue(filePath: ref.read(downloadQueueFilePathProvider));
-    // 异步从磁盘加载初始内容并同步到 state（构造时先返回空列表）
-    _queue.list().then((items) {
-      if (items.isNotEmpty) state = items;
-    });
+    _mounted = true;
+    ref.onDispose(() => _mounted = false);
+
+    // Notifier 必须同步返回初始 state，但所有写操作都会等待这次加载。
+    // 否则「启动加载」与第一次点击加入队列会发生竞态，导致 UI 状态回退。
+    _ready = _loadFromDisk();
     return <String>[];
   }
 
+  Future<void> _loadFromDisk() async {
+    final items = await _queue.list();
+    if (_mounted) state = items;
+  }
+
+  /// 供下载管理器在应用启动早期安全地等待队列恢复。
+  Future<void> waitUntilReady() => _ready;
+
   /// 追加入队（去重），返回是否新增。
   Future<bool> add(String sourceId) async {
+    if (sourceId.trim().isEmpty) return false;
+    await _ready;
     final added = await _queue.add(sourceId);
-    if (added) state = [...state, sourceId];
+    if (added && _mounted) state = [...state, sourceId];
     return added;
   }
 
   Future<void> remove(String sourceId) async {
+    await _ready;
     await _queue.remove(sourceId);
-    state = state.where((e) => e != sourceId).toList();
+    if (_mounted) state = state.where((e) => e != sourceId).toList();
   }
 
   Future<void> clear() async {
+    await _ready;
     await _queue.clear();
-    state = <String>[];
+    if (_mounted) state = <String>[];
   }
 
   /// 取出并移除队首；队列空返回 null。
   Future<String?> popFront() async {
+    await _ready;
     final popped = await _queue.popFront();
-    if (popped != null) {
+    if (popped != null && _mounted) {
       state = state.where((e) => e != popped).toList();
     }
     return popped;
+  }
+
+  /// 查看队首但不移除。
+  Future<String?> peek() async {
+    await _ready;
+    return _queue.peek();
+  }
+
+  /// 仅当队首仍为 [expected] 时移除，并返回是否成功。
+  Future<bool> popFrontIf(String expected) async {
+    await _ready;
+    final popped = await _queue.popFrontIf(expected);
+    if (popped != null && _mounted) {
+      state = state.where((e) => e != popped).toList();
+    }
+    return popped != null;
   }
 }
 
@@ -156,4 +214,5 @@ final downloadQueueProvider =
 
 /// 当前正在下载的作品 sourceId（下载中写入、结束置 null），
 /// 供 UI 判断「加入队列」按钮是否需要禁用。
-final currentDownloadingSourceIdProvider = StateProvider<String?>((ref) => null);
+final currentDownloadingSourceIdProvider =
+    StateProvider<String?>((ref) => null);
