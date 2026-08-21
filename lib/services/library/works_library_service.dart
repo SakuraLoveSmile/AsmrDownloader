@@ -80,20 +80,24 @@ class WorksLibraryService {
     final items = <WorksListItem>[];
     final seen = <String>{};
     for (final d in discovered) {
-      items.add(await _build(d, byId[d.sourceId]));
+      items.add(await _build(d, byId[d.sourceId], targetRoot: navRoot));
       seen.add(d.sourceId);
     }
     for (final r in registry) {
       if (seen.contains(r.sourceId)) continue;
       if (!Directory(r.sourceDir).existsSync()) continue;
-      items.add(await _build(r, r));
+      items.add(await _build(r, r, targetRoot: navRoot));
       seen.add(r.sourceId);
     }
     items.sort((a, b) => b.sourceId.compareTo(a.sourceId));
     return items;
   }
 
-  Future<WorksListItem> _build(WorkEntry discovered, WorkEntry? registry) async {
+  Future<WorksListItem> _build(
+    WorkEntry discovered,
+    WorkEntry? registry, {
+    required String targetRoot,
+  }) async {
     final src = registry ?? discovered;
     final parsed = OrganizeService.parseDirName(src.dirName);
     final title = src.title.isNotEmpty
@@ -101,6 +105,10 @@ class WorksLibraryService {
         : (parsed.title.isNotEmpty ? parsed.title : src.sourceId);
     final cvNames = src.cvNames.isNotEmpty ? src.cvNames : parsed.cvNames;
     final sourceDir = src.sourceDir;
+    final organized = await ref.read(organizeServiceProvider).isOrganized(
+          src,
+          targetRoot: targetRoot,
+        );
 
     return WorksListItem(
       sourceId: src.sourceId,
@@ -110,7 +118,8 @@ class WorksLibraryService {
       dirName: src.dirName,
       dlPath: src.dlPath,
       sourceDir: sourceDir,
-      organizedAt: src.organizedAt,
+      // 仅把当前文件系统仍然完整的历史整理记录暴露给列表状态。
+      organizedAt: organized ? src.organizedAt : null,
       // 用异步扫描版本：列表构建在 UI isolate 上，同步遍历大量目录会卡顿
       trackCount: await SubtitleGapDetector.countAudioFilesAsync(sourceDir),
       missingSubtitleCount:

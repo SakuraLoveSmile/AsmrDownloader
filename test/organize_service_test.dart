@@ -8,6 +8,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/cache/cache_database.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_service.dart';
+import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/organize_service.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
@@ -41,8 +42,22 @@ class FakeAsmrApi extends AsmrApi {
 /// 构造最小合法 wav（RIFF + WAVE 头，AudioTagWriter 可识别并写标签）。
 Uint8List _buildMinimalWav() {
   final fmt = Uint8List.fromList([
-    0x01, 0x00, 0x01, 0x00, 0x40, 0x1F, 0x00, 0x00, 0x80, 0x3E, 0x00, 0x00,
-    0x02, 0x00, 0x10, 0x00,
+    0x01,
+    0x00,
+    0x01,
+    0x00,
+    0x40,
+    0x1F,
+    0x00,
+    0x00,
+    0x80,
+    0x3E,
+    0x00,
+    0x00,
+    0x02,
+    0x00,
+    0x10,
+    0x00,
   ]);
   final data = List<int>.filled(16, 0);
   final fmtChunk = <int>[
@@ -64,8 +79,8 @@ Uint8List _buildMinimalWav() {
   ]);
 }
 
-Uint8List _u32le(int v) =>
-    Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
+Uint8List _u32le(int v) => Uint8List.fromList(
+    [v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
 
 String _ascii(Uint8List bytes, int start, int len) =>
     String.fromCharCodes(bytes.sublist(start, start + len));
@@ -112,7 +127,8 @@ void main() {
   late Directory targetRoot;
   late WorksIndex index;
 
-  WorkEntry entry(String sourceId, {bool dirExists = true, String? organizedAt}) {
+  WorkEntry entry(String sourceId,
+      {bool dirExists = true, String? organizedAt}) {
     final dirName = '社团-标题$sourceId';
     if (dirExists) {
       final workDir = Directory(p.join(dlPath.path, dirName, sourceId))
@@ -154,11 +170,11 @@ void main() {
     addTearDown(cacheDb.close);
     return ProviderContainer(overrides: [
       worksIndexProvider.overrideWith((ref) => index),
-      asmrApiProvider.overrideWith(
-          (ref) => FakeAsmrApi(works: works, covers: covers, throws: apiThrows)),
+      asmrApiProvider.overrideWith((ref) =>
+          FakeAsmrApi(works: works, covers: covers, throws: apiThrows)),
       downloadPathProvider.overrideWith((ref) => dlPath.path),
-      cacheServiceProvider.overrideWith(
-          (ref) => cache ?? CacheService(cacheDb)),
+      cacheServiceProvider
+          .overrideWith((ref) => cache ?? CacheService(cacheDb)),
     ]);
   }
 
@@ -173,7 +189,11 @@ void main() {
         ],
         'release': '2026-06-09',
         'tags': [
-          {'i18n': {'zh-cn': {'name': '舔耳'}}},
+          {
+            'i18n': {
+              'zh-cn': {'name': '舔耳'}
+            }
+          },
         ],
       };
       expect(OrganizeService.resolveTitle(info, 'fallback'), '正式标题');
@@ -204,15 +224,13 @@ void main() {
     test('源目录不存在返回 null', () async {
       final container = makeContainer();
       addTearDown(container.dispose);
-      final result = await container
-          .read(organizeServiceProvider)
-          .organizeWork(
-        sourceId: 'RJ00001',
-        sourceDir: p.join(dlPath.path, '不存在', 'RJ00001'),
-        targetRoot: targetRoot.path,
-        fallbackTitle: '标题',
-        fallbackCvNames: 'CV1',
-      );
+      final result = await container.read(organizeServiceProvider).organizeWork(
+            sourceId: 'RJ00001',
+            sourceDir: p.join(dlPath.path, '不存在', 'RJ00001'),
+            targetRoot: targetRoot.path,
+            fallbackTitle: '标题',
+            fallbackCvNames: 'CV1',
+          );
       expect(result, isNull);
     });
 
@@ -221,17 +239,15 @@ void main() {
       addTearDown(container.dispose);
       final e = entry('RJ00001');
 
-      final result = await container
-          .read(organizeServiceProvider)
-          .organizeWork(
-        sourceId: e.sourceId,
-        sourceDir: e.sourceDir,
-        targetRoot: targetRoot.path,
-        workInfo: null,
-        fallbackTitle: e.title,
-        fallbackCvNames: e.cvNames,
-        fallbackCircle: e.circleName,
-      );
+      final result = await container.read(organizeServiceProvider).organizeWork(
+            sourceId: e.sourceId,
+            sourceDir: e.sourceDir,
+            targetRoot: targetRoot.path,
+            workInfo: null,
+            fallbackTitle: e.title,
+            fallbackCvNames: e.cvNames,
+            fallbackCircle: e.circleName,
+          );
 
       expect(result, isNotNull);
       expect(result!.copied, 1);
@@ -263,21 +279,20 @@ void main() {
           {'name': '声优B'},
         ],
       };
-      final result = await container
-          .read(organizeServiceProvider)
-          .organizeWork(
-        sourceId: 'RJ00009',
-        sourceDir: srcDir.path,
-        targetRoot: targetRoot.path,
-        workInfo: info,
-        fallbackTitle: '标题',
-        fallbackCvNames: 'CV_FALLBACK',
-        fallbackCircle: '社团名',
-      );
+      final result = await container.read(organizeServiceProvider).organizeWork(
+            sourceId: 'RJ00009',
+            sourceDir: srcDir.path,
+            targetRoot: targetRoot.path,
+            workInfo: info,
+            fallbackTitle: '标题',
+            fallbackCvNames: 'CV_FALLBACK',
+            fallbackCircle: '社团名',
+          );
       expect(result, isNotNull);
 
       // circle 目录仍用社团名，而非 CV
-      final outDir = p.join(targetRoot.path, '社团名', 'RJ00009 - 声优A&声优B - 标题', 'RJ00009');
+      final outDir =
+          p.join(targetRoot.path, '社团名', 'RJ00009 - 声优A&声优B - 标题', 'RJ00009');
       final outWav = File(p.join(outDir, 'e01_舔耳.wav'));
       expect(outWav.existsSync(), true);
 
@@ -296,15 +311,28 @@ void main() {
       await index.upsert(entry('RJ00001')); // 目录存在，未整理
       await index.upsert(entry('RJ00002')); // 目录存在，未整理
       await index.upsert(entry('RJ00003', dirExists: false)); // 缺失
-      await index.upsert(entry('RJ00004', organizedAt: '2026-08-01T00:00:00.000')); // 已整理
+      final alreadyOrganized =
+          entry('RJ00004', organizedAt: '2026-08-01T00:00:00.000');
+      final alreadyOrganizedDir = Directory(
+        NavidromeOrganizer.targetDirPath(
+          targetRoot: targetRoot.path,
+          circleName: alreadyOrganized.circleName,
+          sourceId: alreadyOrganized.sourceId,
+          cvNames: alreadyOrganized.cvNames,
+          title: alreadyOrganized.title,
+        ),
+      )..createSync(recursive: true);
+      File(p.join(alreadyOrganizedDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList([1]));
+      await index.upsert(alreadyOrganized); // 已整理且目标文件完整
 
       final progressEvents = <BatchProgress>[];
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: progressEvents.add,
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: progressEvents.add,
+            isCancelled: () => false,
+          );
 
       // RJ00003 缺失、RJ00004 被过滤
       expect(result.success, 2);
@@ -334,15 +362,15 @@ void main() {
 
       var cancelled = false;
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: false,
-        onProgress: (p) {
-          // 第一个作品处理中（done=0 的进度回调后）请求取消：
-          // 当前作品仍完成，下一个不再开始
-          if (p.done == 0) cancelled = true;
-        },
-        isCancelled: () => cancelled,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (p) {
+              // 第一个作品处理中（done=0 的进度回调后）请求取消：
+              // 当前作品仍完成，下一个不再开始
+              if (p.done == 0) cancelled = true;
+            },
+            isCancelled: () => cancelled,
+          );
 
       expect(result.cancelled, true);
       expect(result.success, 1);
@@ -355,21 +383,59 @@ void main() {
 
       await index.upsert(entry('RJ00001'));
       await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: false,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: false,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 0);
       expect(result.skipped, 1);
+    });
+
+    test('目标文件被删除后仅整理未整理会重新整理', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      await index.upsert(entry('RJ00005'));
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+
+      final organized = await index.get('RJ00005');
+      expect(organized?.organizedAt, isNotNull);
+      final targetFile = File(p.join(
+        NavidromeOrganizer.targetDirPath(
+          targetRoot: targetRoot.path,
+          circleName: organized!.circleName,
+          sourceId: organized.sourceId,
+          cvNames: organized.cvNames,
+          title: organized.title,
+        ),
+        'e01_舔耳.wav',
+      ));
+      expect(targetFile.existsSync(), true);
+      targetFile.deleteSync();
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+
+      expect(result.success, 1);
+      expect(targetFile.existsSync(), true);
     });
   });
 
@@ -388,11 +454,11 @@ void main() {
       createWork('RJ100001');
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       expect(result.failed, 0);
@@ -424,7 +490,11 @@ void main() {
           ],
           'release': '2026-06-09',
           'tags': [
-            {'i18n': {'zh-cn': {'name': '舔耳'}}},
+            {
+              'i18n': {
+                'zh-cn': {'name': '舔耳'}
+              }
+            },
           ],
           'mainCoverUrl': '',
         },
@@ -433,11 +503,11 @@ void main() {
       createWork('RJ100001');
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       final entry = await index.get('RJ100001');
@@ -462,11 +532,11 @@ void main() {
       createWork('RJ100001');
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       expect(result.failed, 0);
@@ -486,11 +556,11 @@ void main() {
 
       final progressEvents = <BatchProgress>[];
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: progressEvents.add,
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: progressEvents.add,
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       expect(progressEvents.first.statusMessage, '获取元数据中…');
@@ -522,11 +592,11 @@ void main() {
           .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       final entry = await index.get('RJ300001');
@@ -551,11 +621,11 @@ void main() {
       createWork('RJ400001', dirName: '新目录');
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       final entry = await index.get('RJ400001');
@@ -567,8 +637,7 @@ void main() {
     test('targetRoot 位于下载目录内时其子树不作为源扫描', () async {
       final container = makeContainer();
       addTearDown(container.dispose);
-      final navRoot = Directory(p.join(dlPath.path, 'navidrome'))
-        ..createSync();
+      final navRoot = Directory(p.join(dlPath.path, 'navidrome'))..createSync();
       // 整理产物结构（circle/album/RJ）不应被识别
       Directory(p.join(navRoot.path, '社团', 'RJ500001 - CV - 标题', 'RJ500001'))
           .createSync(recursive: true);
@@ -616,7 +685,11 @@ void main() {
         ],
         'release': '2026-01-01',
         'tags': [
-          {'i18n': {'zh-cn': {'name': '缓存标签'}}},
+          {
+            'i18n': {
+              'zh-cn': {'name': '缓存标签'}
+            }
+          },
         ],
         'mainCoverUrl': '',
       });
@@ -625,11 +698,11 @@ void main() {
       createWork('RJ100001');
 
       final result = await container.read(organizeServiceProvider).organizeAll(
-        targetRoot: targetRoot.path,
-        onlyUnorganized: true,
-        onProgress: (_) {},
-        isCancelled: () => false,
-      );
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
 
       expect(result.success, 1);
       // 注册表回写的是缓存元数据
@@ -669,10 +742,11 @@ void main() {
         cvNames: '旧CV',
       );
 
-      final outcome = await container.read(organizeServiceProvider).organizeEntry(
-            source,
-            targetRoot: targetRoot.path,
-          );
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                source,
+                targetRoot: targetRoot.path,
+              );
 
       expect(outcome.resolvedEntry.circleName, '缓存社团');
       expect(
@@ -707,10 +781,11 @@ void main() {
         cvNames: '旧CV',
       );
 
-      final outcome = await container.read(organizeServiceProvider).organizeEntry(
-            source,
-            targetRoot: targetRoot.path,
-          );
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                source,
+                targetRoot: targetRoot.path,
+              );
 
       expect(outcome.resolvedEntry.circleName, '在线社团');
       expect(
@@ -737,10 +812,11 @@ void main() {
         cvNames: '',
       );
 
-      final outcome = await container.read(organizeServiceProvider).organizeEntry(
-            source,
-            targetRoot: targetRoot.path,
-          );
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                source,
+                targetRoot: targetRoot.path,
+              );
 
       expect(outcome.resolvedEntry.circleName, isEmpty);
       expect(outcome.metadataNote, contains('元数据获取失败'));
@@ -782,14 +858,14 @@ void main() {
       };
 
       final result = await container.read(organizeServiceProvider).organizeWork(
-        sourceId: e.sourceId,
-        sourceDir: e.sourceDir,
-        targetRoot: targetRoot.path,
-        workInfo: translatedWorkInfo,
-        fallbackTitle: '测试标题',
-        fallbackCvNames: 'CV1&CV2',
-        fallbackCircle: '汉化组',
-      );
+            sourceId: e.sourceId,
+            sourceDir: e.sourceDir,
+            targetRoot: targetRoot.path,
+            workInfo: translatedWorkInfo,
+            fallbackTitle: '测试标题',
+            fallbackCvNames: 'CV1&CV2',
+            fallbackCircle: '汉化组',
+          );
 
       expect(result, isNotNull);
       // artist 使用缓存中的原版社团名（API 抛异常也不影响）；
