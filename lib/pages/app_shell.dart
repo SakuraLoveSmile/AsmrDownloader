@@ -1,3 +1,4 @@
+import 'package:asmr_downloader/pages/background_tasks/background_tasks.dart';
 import 'package:asmr_downloader/pages/components/app_sidebar.dart';
 import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
@@ -5,10 +6,11 @@ import 'package:asmr_downloader/pages/media_library/media_library.dart';
 import 'package:asmr_downloader/pages/update/update_banner.dart';
 import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 当前显示的页面：0 = 下载，1 = 作品库，2 = 媒体库
+/// 当前显示的页面：0 = 下载，1 = 作品库，2 = 媒体库，3 = 后台任务
 final currentPageProvider = StateProvider<int>((ref) => 0);
 
 /// 兼容旧代码别名
@@ -16,7 +18,7 @@ final currentNavTabProvider = currentPageProvider;
 
 /// 应用外壳：采用现代 macOS 侧边栏 + 主工作区分栏架构。
 ///
-/// 用 IndexedStack 保活三个页面——切页不销毁状态，
+/// 用 IndexedStack 保活四个页面——切页不销毁状态，
 /// 下载进度、整理/字幕运行中的任务切到另一页也不被打断。
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
@@ -41,6 +43,7 @@ class AppShell extends ConsumerWidget {
                     Downloader(),
                     LibraryPage(),
                     MediaLibraryPage(),
+                    BackgroundTasksPage(),
                   ],
                 ),
               ),
@@ -63,12 +66,14 @@ class AppNavTabs extends ConsumerWidget {
     ('下载', Icons.arrow_downward_rounded),
     ('作品库', Icons.folder_outlined),
     ('媒体库', Icons.photo_library_outlined),
+    ('后台任务', Icons.task_alt_rounded),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final index = ref.watch(currentPageProvider);
     final unorganized = ref.watch(unorganizedCountProvider).value ?? 0;
+    final activeTasks = ref.watch(backgroundTaskActiveCountProvider);
     final scheme = Theme.of(context).colorScheme;
 
     // Segmented Pill 胶囊底座
@@ -88,7 +93,11 @@ class AppNavTabs extends ConsumerWidget {
               label: _tabs[i].$1,
               icon: _tabs[i].$2,
               selected: i == index,
-              badgeCount: i == 1 ? unorganized : 0,
+              badgeCount: i == 1
+                  ? unorganized
+                  : i == 3
+                      ? activeTasks
+                      : 0,
               onTap: () => ref.read(currentPageProvider.notifier).state = i,
             ),
         ],
