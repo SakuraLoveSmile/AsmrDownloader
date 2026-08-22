@@ -452,6 +452,18 @@ void main() {
       expect(requestedIds, contains('RJ01618607'));
     });
 
+    test('汉化版返回原版社团为主分类，翻译组为附加信息', () async {
+      final resolved = await NavidromeOrganizer.resolveCircleNames(
+        workInfo: translatedWork(),
+        fallbackCircle: '汉化组',
+        fetchWorkInfo: (_) async => originalWork(),
+      );
+
+      expect(resolved.primary, '空心菜館');
+      expect(resolved.translation, '汉化组');
+      expect(resolved.originalResolved, isTrue);
+    });
+
     test('使用接口直接提供的 original_workno', () async {
       final circle = await NavidromeOrganizer.resolveCircleName(
         workInfo: {

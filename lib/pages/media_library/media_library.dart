@@ -182,7 +182,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               key: const ValueKey('onboarding-complete-missing'),
               onPressed: _openCompleteMissing,
               icon: const Icon(Icons.auto_fix_high_rounded, size: 15),
-              label: const Text('补全缺失'),
+              label: const Text('一键补全'),
             ),
           ],
         ),

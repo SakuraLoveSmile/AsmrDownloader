@@ -185,7 +185,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                   const SizedBox(height: 14),
                   // 元数据项目
                   _InfoItem(
-                    label: '社团',
+                    label:
+                        entry.translationCircleName.isNotEmpty ? '原版社团' : '社团',
                     content: entry.circleName.isEmpty
                         ? const Text('-')
                         : InkWell(
@@ -200,6 +201,13 @@ class WorkInspectorDrawer extends ConsumerWidget {
                             ),
                           ),
                   ),
+                  if (entry.translationCircleName.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    _InfoItem(
+                      label: '翻译社团',
+                      content: Text(entry.translationCircleName),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   _InfoItem(
                     label: 'CV / 声优',

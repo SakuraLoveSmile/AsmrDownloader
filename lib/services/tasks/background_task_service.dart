@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 enum BackgroundTaskKind {
   completeMissing,
+  completeMediaLibrary,
   batchCache,
 }
 
@@ -133,6 +134,23 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
         createdAt: DateTime.now(),
       ),
       () => _runCompleteMissing(id, interval: requestInterval),
+    );
+    return id;
+  }
+
+  String startCompleteMediaLibrary({Duration? interval}) {
+    final id = _newId('media-complete');
+    final Duration requestInterval =
+        interval ?? ref.read(mediaLibraryRequestIntervalProvider);
+    _enqueue(
+      BackgroundTask(
+        id: id,
+        kind: BackgroundTaskKind.completeMediaLibrary,
+        title: '一键补全媒体库',
+        description: '补全 NAS 作品元数据、原版社团、tracks 和封面',
+        createdAt: DateTime.now(),
+      ),
+      () => _runCompleteMediaLibrary(id, interval: requestInterval),
     );
     return id;
   }
@@ -297,6 +315,62 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
       failed: result.failed,
       detail:
           'tracks ${result.tracksFilled} · 封面 ${result.coversFilled} · 失败 ${result.failed}',
+      cancelRequested: canceled ? true : null,
+    );
+    _cancelRequests.remove(id);
+  }
+
+  Future<void> _runCompleteMediaLibrary(
+    String id, {
+    required Duration interval,
+  }) async {
+    var lastCoverCount = 0;
+    final result =
+        await ref.read(cacheCompleteServiceProvider).completeMediaLibrary(
+              runInterval: interval,
+              onProgress: (progress) {
+                if (progress.coversFilled > lastCoverCount &&
+                    progress.currentSourceId.isNotEmpty) {
+                  ref.invalidate(cachedCoverProvider(progress.currentSourceId));
+                }
+                lastCoverCount = progress.coversFilled;
+                final successfulWorks =
+                    progress.processed - progress.skipped - progress.failed;
+                _update(
+                  id,
+                  processed: progress.processed,
+                  total: progress.total,
+                  success: successfulWorks,
+                  skipped: progress.skipped,
+                  failed: progress.failed,
+                  currentSourceId: progress.currentSourceId,
+                  detail: '元数据 ${progress.metadataFilled} · '
+                      '原版社团 ${progress.originalCirclesFilled} · '
+                      'tracks ${progress.tracksFilled} · '
+                      '封面 ${progress.coversFilled} · ${progress.phase}',
+                );
+              },
+              isCancelled: () => _cancelRequests.contains(id),
+            );
+
+    ref.invalidate(cachedLibraryProvider);
+    final canceled = result.cancelled || _cancelRequests.contains(id);
+    final successfulWorks = result.processed - result.skipped - result.failed;
+    _update(
+      id,
+      status: canceled
+          ? BackgroundTaskStatus.canceled
+          : BackgroundTaskStatus.completed,
+      finishedAt: DateTime.now(),
+      processed: result.processed,
+      total: result.total,
+      success: successfulWorks,
+      skipped: result.skipped,
+      failed: result.failed,
+      detail: '元数据 ${result.metadataFilled} · '
+          '原版社团 ${result.originalCirclesFilled} · '
+          'tracks ${result.tracksFilled} · '
+          '封面 ${result.coversFilled}',
       cancelRequested: canceled ? true : null,
     );
     _cancelRequests.remove(id);

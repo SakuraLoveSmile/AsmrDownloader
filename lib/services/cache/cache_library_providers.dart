@@ -4,7 +4,9 @@ import 'dart:typed_data';
 import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_database.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/cache/cache_service.dart';
 import 'package:asmr_downloader/services/library/media_library_service.dart';
+import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,6 +19,8 @@ class CachedLibraryEntry {
     required this.workInfo,
     required this.hasTracks,
     required this.hasCover,
+    this.resolvedCircleName = '',
+    this.translationCircleName = '',
     this.locations = const [],
   });
 
@@ -26,6 +30,12 @@ class CachedLibraryEntry {
   final bool hasTracks;
   final bool hasCover;
 
+  /// 解析后的主社团名。简体中文版优先使用日文原版社团。
+  final String resolvedCircleName;
+
+  /// 当前作品的翻译社团名；仅在它与主社团不同时展示。
+  final String translationCircleName;
+
   /// 轻量扫描发现的目录位置；一个作品可能同时存在于本机和 NAS。
   final List<MediaLibraryLocationItem> locations;
 
@@ -33,11 +43,16 @@ class CachedLibraryEntry {
       ? sourceId
       : _readString(workInfo['title']);
 
-  String get circleName {
+  String get sourceCircleName {
     final circle = workInfo['circle'];
     if (circle is! Map) return '';
     return _readString(circle['name']);
   }
+
+  /// 媒体库分类使用的主社团名。
+  String get circleName => resolvedCircleName.trim().isNotEmpty
+      ? resolvedCircleName.trim()
+      : sourceCircleName;
 
   List<String> get cvNames => _readNames(workInfo['vas']);
 
@@ -132,6 +147,9 @@ final cachedLibraryProvider = FutureProvider<CachedLibrary>((ref) async {
       row == null ? const {} : _decodeWorkInfo(row.workInfoJson),
       registryById[sourceId],
     );
+    // 这里只查本地缓存，不因打开媒体库而隐式联网。点击“一键补全”后，
+    // 原版 workInfo 会被缓存，下一次扫描即可稳定按原版社团归类。
+    final circleNames = await _resolveCachedCircleNames(cache, workInfo);
     entries.add(
       CachedLibraryEntry(
         sourceId: sourceId,
@@ -140,12 +158,42 @@ final cachedLibraryProvider = FutureProvider<CachedLibrary>((ref) async {
         workInfo: workInfo,
         hasTracks: tracksSourceIds.contains(sourceId),
         hasCover: coverSourceIds.contains(sourceId),
+        resolvedCircleName: circleNames.primary,
+        translationCircleName: circleNames.translation,
         locations: List.unmodifiable(locationsById[sourceId]!),
       ),
     );
   }
   return CachedLibrary(List.unmodifiable(entries));
 });
+
+Future<ResolvedCircleNames> _resolveCachedCircleNames(
+  CacheService cache,
+  Map<String, dynamic> workInfo,
+) async {
+  final fallback = _readCircleName(workInfo);
+  return NavidromeOrganizer.resolveCircleNames(
+    workInfo: workInfo,
+    fallbackCircle: fallback,
+    fetchWorkInfo: (id) => _getCachedWorkInfo(cache, id),
+  );
+}
+
+Future<Map<String, dynamic>?> _getCachedWorkInfo(
+  CacheService cache,
+  String id,
+) async {
+  final trimmed = id.trim();
+  if (trimmed.isEmpty) return null;
+
+  if (RegExp(r'^(RJ|VJ|BJ)\d+$', caseSensitive: false).hasMatch(trimmed)) {
+    return cache.getWorkInfo(trimmed.toUpperCase());
+  }
+
+  final sourceId = await cache.findSourceIdByDigits(trimmed);
+  if (sourceId == null) return null;
+  return cache.getWorkInfo(sourceId);
+}
 
 /// 按作品懒加载封面 BLOB；provider 本身会复用 Riverpod 的结果缓存。
 final cachedCoverProvider = FutureProvider.family<Uint8List?, String>(
@@ -249,6 +297,8 @@ bool _matchesQuery(CachedLibraryEntry entry, String query) {
     entry.sourceId,
     entry.title,
     entry.circleName,
+    entry.sourceCircleName,
+    entry.translationCircleName,
     ...entry.cvNames,
   ];
   return fields.any((field) => field.toLowerCase().contains(query));

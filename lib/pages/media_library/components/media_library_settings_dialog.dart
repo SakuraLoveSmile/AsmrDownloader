@@ -33,7 +33,7 @@ class MediaLibrarySettingsDialog extends ConsumerWidget {
                 initialValue: interval,
                 decoration: const InputDecoration(
                   labelText: '统一请求间隔',
-                  helperText: '应用于主动缓存、补全缺失等媒体库后台网络任务',
+                  helperText: '应用于主动缓存、一键补全等媒体库后台网络任务',
                 ),
                 items: [
                   for (final option in mediaLibraryRequestIntervalOptions)

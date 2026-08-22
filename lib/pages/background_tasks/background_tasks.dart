@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 应用内长耗时操作的统一任务中心。
 ///
 /// 任务在应用进程内继续执行，切换到其他页面不会中断；
-/// 当前支持媒体库的「主动缓存」和「补全缺失」。
+/// 当前支持媒体库的「主动缓存」和「一键补全」。
 class BackgroundTasksPage extends ConsumerWidget {
   const BackgroundTasksPage({super.key});
 
@@ -344,7 +344,7 @@ class _EmptyTasks extends StatelessWidget {
           ),
           const SizedBox(height: 5),
           Text(
-            '媒体库的批量缓存和补全操作会显示在这里。',
+            '媒体库的批量缓存和一键补全操作会显示在这里。',
             style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 12),
           ),
         ],

@@ -5,7 +5,7 @@ import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 将补全媒体库缺失项加入后台任务队列。
+/// 将媒体库一键补全加入后台任务队列。
 class CompleteMissingDialog extends ConsumerWidget {
   const CompleteMissingDialog({super.key});
 
@@ -13,14 +13,17 @@ class CompleteMissingDialog extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('补全缺失'),
+      title: const Text('一键补全媒体库'),
       content: SizedBox(
         width: 480,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('将扫描已缓存的 workInfo，只请求缺少的 tracks 和封面。'),
+            const Text(
+              '将扫描已配置的媒体库目录，为未关联作品补全 workInfo；同时补全缺失的 '
+              'tracks、封面，并解析简体中文版对应的日文原版社团。',
+            ),
             const SizedBox(height: 8),
             Text(
               '统一请求间隔：${formatMediaLibraryRequestInterval(ref.watch(mediaLibraryRequestIntervalProvider))}',
@@ -42,12 +45,12 @@ class CompleteMissingDialog extends ConsumerWidget {
         ),
         FilledButton.icon(
           onPressed: () {
-            ref.read(backgroundTaskProvider.notifier).startCompleteMissing(
+            ref.read(backgroundTaskProvider.notifier).startCompleteMediaLibrary(
                   interval: ref.read(mediaLibraryRequestIntervalProvider),
                 );
             Navigator.of(context).pop();
             ref.read(uiServiceProvider).showSnack(
-                  '补全缺失已加入后台任务',
+                  '一键补全已加入后台任务',
                   action: SnackBarAction(
                     label: '查看任务',
                     onPressed: () => ref

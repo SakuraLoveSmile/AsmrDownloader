@@ -155,10 +155,12 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
     }
     final circle = entry.circleName;
     final cvs = entry.cvNames.join('、');
-    if (circle.isEmpty && cvs.isEmpty) return '社团/CV：-';
-    if (circle.isEmpty) return 'CV：$cvs';
-    if (cvs.isEmpty) return circle;
-    return '$circle · $cvs';
+    final translation = entry.translationCircleName;
+    final parts = <String>[];
+    if (circle.isNotEmpty) parts.add(circle);
+    if (translation.isNotEmpty) parts.add('翻译：$translation');
+    if (cvs.isNotEmpty) parts.add(cvs);
+    return parts.isEmpty ? '社团/CV：-' : parts.join(' · ');
   }
 
   Widget _buildCover(ColorScheme scheme) {
@@ -384,7 +386,15 @@ class _CachedWorkDetailsDialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DetailRow(label: 'sourceId', value: entry.sourceId),
-              _DetailRow(label: '社团', value: _orDash(entry.circleName)),
+              _DetailRow(
+                label: entry.translationCircleName.isNotEmpty ? '原版社团' : '社团',
+                value: _orDash(entry.circleName),
+              ),
+              if (entry.translationCircleName.isNotEmpty)
+                _DetailRow(
+                  label: '翻译社团',
+                  value: entry.translationCircleName,
+                ),
               _DetailRow(label: 'CV', value: _orDash(entry.cvNames.join('、'))),
               _DetailRow(label: '发售日期', value: _orDash(entry.releaseDate)),
               _DetailRow(label: 'dl_count', value: _orDash(entry.dlCount)),

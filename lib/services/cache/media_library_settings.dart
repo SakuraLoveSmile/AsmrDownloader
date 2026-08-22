@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 媒体库后台网络任务可选的请求间隔。
 ///
-/// 该设置由媒体库统一管理，主动缓存和补全缺失都会使用同一个值。
+/// 该设置由媒体库统一管理，主动缓存和一键补全都会使用同一个值。
 const mediaLibraryRequestIntervalOptions = <Duration>[
   Duration(milliseconds: 500),
   Duration(seconds: 1),

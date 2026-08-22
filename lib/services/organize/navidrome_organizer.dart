@@ -31,6 +31,22 @@ const int kMaxCircleDirChars = 50;
 /// circle 目录名最大 UTF-8 字节数
 const int kMaxCircleDirUtf8Bytes = 150;
 
+/// 作品在媒体库中的社团展示信息。
+///
+/// 简体中文版的 API `circle` 通常是翻译组，而媒体库应把日文原版社团
+/// 作为主分类；翻译组只作为附加信息保留。
+class ResolvedCircleNames {
+  const ResolvedCircleNames({
+    required this.primary,
+    this.translation = '',
+    this.originalResolved = false,
+  });
+
+  final String primary;
+  final String translation;
+  final bool originalResolved;
+}
+
 /// 将下载的作品整理成 Navidrome 媒体库结构：
 /// `<targetRoot>/<circleName>/<sourceId> - <cvNames> - <title>/<sourceId>/`
 /// 音轨/字幕/歌词文件扁平化复制，保留原名；封面保存为 cover.jpg（Navidrome 自动识别）。
@@ -49,15 +65,68 @@ class NavidromeOrganizer {
     required String fallbackCircle,
     required Future<Map<String, dynamic>?> Function(String id) fetchWorkInfo,
   }) async {
-    if (workInfo == null) return fallbackCircle;
+    final resolved = await resolveCircleNames(
+      workInfo: workInfo,
+      fallbackCircle: fallbackCircle,
+      fetchWorkInfo: fetchWorkInfo,
+    );
+    return resolved.primary;
+  }
+
+  /// 解析主社团和翻译社团。
+  ///
+  /// [primary] 优先为日文原版社团；无法解析原版时才回退到当前作品的
+  /// 社团名。原版关联成功且当前社团名不同，才返回 [translation]。
+  static Future<ResolvedCircleNames> resolveCircleNames({
+    required Map<String, dynamic>? workInfo,
+    required String fallbackCircle,
+    required Future<Map<String, dynamic>?> Function(String id) fetchWorkInfo,
+  }) async {
+    final fallback = fallbackCircle.trim();
+    if (workInfo == null) {
+      return ResolvedCircleNames(primary: fallback);
+    }
 
     final translationInfo = _asMap(workInfo['translation_info']);
     // 原版作品直接用当前 circle
     if (_isTrue(translationInfo?['is_original'])) {
-      return fallbackCircle;
+      return ResolvedCircleNames(primary: fallback, originalResolved: true);
     }
 
-    // 先用响应中明确标出的 original_workno，再兼容旧响应中只有原版条目的情况。
+    final candidates = originalWorkCandidates(workInfo);
+
+    // 汉化版：依次拉取候选原版，取原版 circle；单个候选失败不能阻断后续候选。
+    for (final candidate in candidates) {
+      try {
+        final originalInfo = await fetchWorkInfo(candidate);
+        final originalCircle = _circleNameFromWorkInfo(originalInfo);
+        if (originalCircle.isNotEmpty) {
+          Log.info('resolved original circle: $candidate -> $originalCircle');
+          return ResolvedCircleNames(
+            primary: originalCircle,
+            translation: fallback == originalCircle ? '' : fallback,
+            originalResolved: true,
+          );
+        }
+      } catch (e) {
+        Log.warning('fetch original work failed: $candidate\n' 'error: $e');
+      }
+    }
+
+    return ResolvedCircleNames(primary: fallback);
+  }
+
+  /// 返回当前作品关联的原版候选 sourceId / 数字 id。
+  ///
+  /// 统一收口字段兼容逻辑，媒体库补全、整理和展示使用同一套判断，避免
+  /// 某个 API channel 只提供其中一种字段时出现分类不一致。
+  static List<String> originalWorkCandidates(
+    Map<String, dynamic>? workInfo,
+  ) {
+    if (workInfo == null) return const [];
+
+    final translationInfo = _asMap(workInfo['translation_info']);
+    if (_isTrue(translationInfo?['is_original'])) return const [];
     final candidates = <String>[];
     void addCandidate(dynamic value) {
       final candidate = value?.toString().trim() ?? '';
@@ -92,21 +161,7 @@ class NavidromeOrganizer {
       }
     }
 
-    // 汉化版：依次拉取候选原版，取原版 circle；单个候选失败不能阻断后续候选。
-    for (final candidate in candidates) {
-      try {
-        final originalInfo = await fetchWorkInfo(candidate);
-        final originalCircle = _circleNameFromWorkInfo(originalInfo);
-        if (originalCircle.isNotEmpty) {
-          Log.info('resolved original circle: $candidate -> $originalCircle');
-          return originalCircle;
-        }
-      } catch (e) {
-        Log.warning('fetch original work failed: $candidate\n' 'error: $e');
-      }
-    }
-
-    return fallbackCircle;
+    return List.unmodifiable(candidates);
   }
 
   static Map<String, dynamic>? _asMap(dynamic value) {
