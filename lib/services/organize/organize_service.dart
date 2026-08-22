@@ -117,6 +117,16 @@ class OrganizeService {
     return const [];
   }
 
+  /// 音频标签多值分隔符：Navidrome 按分号拆分单值 artist/albumartist 标签，
+  /// "&" 会被当作名字的一部分（如 "a&b" 识别为一个 CV 而非两个）。
+  static String toArtistTagValue(String cvNames) {
+    return cvNames
+        .split('&')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .join('; ');
+  }
+
   /// 从目录名解析降级元数据：目录名形如 "cv1&cv2-title"
   static ({String cvNames, String title}) parseDirName(String dirName) {
     final idx = dirName.indexOf('-');
@@ -178,7 +188,8 @@ class OrganizeService {
     final circleDirName =
         [circleName, cvNames, sourceId].firstWhere((s) => s.isNotEmpty);
     // 音频 artist/albumArtist 标签 = CV 声优（用户需求：艺术家是声优而非社团名）
-    final artistTag = cvNames;
+    // 多 CV 用 "; " 分隔：Navidrome 据此拆分为多个独立艺术家
+    final artistTag = toArtistTagValue(cvNames);
 
     return NavidromeOrganizer.organize(
       sourceDir: sourceDir,
@@ -189,7 +200,7 @@ class OrganizeService {
       title: title,
       coverBytes: coverBytes,
       artist: artistTag,
-      albumArtist: cvNames,
+      albumArtist: artistTag,
       releaseDate: resolveRelease(workInfo),
       genres: resolveTags(workInfo),
     );

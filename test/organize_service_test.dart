@@ -218,6 +218,16 @@ void main() {
       expect(r2.cvNames, '');
       expect(r2.title, '无分隔符');
     });
+
+    test('toArtistTagValue：多 CV 用 "; " 连接（Navidrome 拆分为多个艺术家）', () {
+      expect(OrganizeService.toArtistTagValue('CV1&CV2'), 'CV1; CV2');
+      // 单 CV 原样返回
+      expect(OrganizeService.toArtistTagValue('涼花みなせ'), '涼花みなせ');
+      // 空段过滤
+      expect(OrganizeService.toArtistTagValue('CV1&&CV2'), 'CV1; CV2');
+      // 段两端空格 trim
+      expect(OrganizeService.toArtistTagValue(' CV1 & CV2 '), 'CV1; CV2');
+    });
   });
 
   group('organizeWork', () {
@@ -299,7 +309,7 @@ void main() {
       // artist(IART) = CV；albumartist(TP2/IPLS 映射由写器处理)由 writer 写入
       final list = _readListInfo(outWav);
       expect(list, isNotNull);
-      expect(list!['IART'], '声优A&声优B');
+      expect(list!['IART'], '声优A; 声优B');
     });
   });
 
