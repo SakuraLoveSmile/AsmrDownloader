@@ -50,8 +50,9 @@ class CompleteMissingDialog extends ConsumerWidget {
                   '补全缺失已加入后台任务',
                   action: SnackBarAction(
                     label: '查看任务',
-                    onPressed: () =>
-                        ref.read(currentPageProvider.notifier).state = 3,
+                    onPressed: () => ref
+                        .read(currentPageProvider.notifier)
+                        .state = AppPageIndex.backgroundTasks,
                   ),
                 );
           },

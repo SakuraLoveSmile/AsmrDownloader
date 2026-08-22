@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:asmr_downloader/models/track_item.dart';
+import 'package:asmr_downloader/pages/downloader/download_list_page.dart';
 import 'package:asmr_downloader/pages/downloader/download_activity_panel.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
@@ -10,6 +11,84 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  testWidgets('独立下载列表页没有任务时显示空状态', (tester) async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('download_list_page_empty_test');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+
+    final container = ProviderContainer(
+      overrides: [
+        downloadQueueFilePathProvider.overrideWithValue(
+          p.join(tempDir.path, 'queue.json'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: const Scaffold(body: DownloadListPage()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('下载列表'), findsOneWidget);
+    expect(find.text('暂无下载任务'), findsOneWidget);
+    expect(find.text('开始新下载'), findsOneWidget);
+  });
+
+  testWidgets('独立下载列表页显示当前文件进度和作品队列', (tester) async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('download_list_page_active_test');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+
+    final container = ProviderContainer(
+      overrides: [
+        downloadQueueFilePathProvider.overrideWithValue(
+          p.join(tempDir.path, 'queue.json'),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(dlStatusProvider.notifier).state =
+        DownloadStatus.downloading;
+    container.read(currentDownloadingSourceIdProvider.notifier).state =
+        'RJ90000001';
+    container.read(downloadSegmentsProvider.notifier).state = [
+      const DownloadSegment(
+        title: 'chapter-01.flac',
+        size: 2048,
+        fraction: 0.5,
+        status: DownloadStatus.downloading,
+        speed: 1024,
+      ),
+    ];
+    await tester.runAsync<void>(() async {
+      await container.read(downloadQueueProvider.notifier).add('RJ90000002');
+    });
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          home: const Scaffold(body: DownloadListPage()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('正在下载'), findsOneWidget);
+    expect(find.text('RJ90000001'), findsOneWidget);
+    expect(find.text('chapter-01'), findsOneWidget);
+    expect(find.text('下载队列'), findsOneWidget);
+    expect(find.text('RJ90000002'), findsOneWidget);
+  });
+
   testWidgets('下载中心在没有搜索结果时仍显示当前作品的逐文件列表', (tester) async {
     final tempDir =
         Directory.systemTemp.createTempSync('download_activity_test');
