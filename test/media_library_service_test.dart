@@ -101,6 +101,42 @@ void main() {
         p.join(root.path, 'RJ12345678'));
   });
 
+  test('简体中文版按日文原版社团分组，翻译社团作为附加信息', () async {
+    Directory(p.join(root.path, 'RJ12345678')).createSync(recursive: true);
+    final libraryDatabase = LibraryDatabase.forTesting(NativeDatabase.memory());
+    final cacheDatabase =
+        CacheService(CacheDatabase.forTesting(NativeDatabase.memory()));
+    addTearDown(libraryDatabase.close);
+    addTearDown(cacheDatabase.database.close);
+    await cacheDatabase.saveWorkInfo('RJ12345678', {
+      'title': '简体中文版作品',
+      'circle': {'name': '中文翻译组'},
+      'translation_info': {
+        'is_original': false,
+        'original_workno': 'RJ87654321',
+      },
+    });
+    await cacheDatabase.saveWorkInfo('RJ87654321', {
+      'title': '日本語原版作品',
+      'circle': {'name': '日文原版社团'},
+      'translation_info': {'is_original': true},
+    });
+
+    final container = ProviderContainer(overrides: [
+      libraryDatabaseProvider.overrideWithValue(libraryDatabase),
+      cacheServiceProvider.overrideWithValue(cacheDatabase),
+      mediaLibraryRootsProvider.overrideWith((ref) => [root.path]),
+    ]);
+    addTearDown(container.dispose);
+
+    final library = await container.read(cachedLibraryProvider.future);
+    final entry = library.entries.single;
+
+    expect(entry.circleName, '日文原版社团');
+    expect(entry.sourceCircleName, '中文翻译组');
+    expect(entry.translationCircleName, '中文翻译组');
+  });
+
   test('媒体库可用作品索引数据库补齐社团和 CV 分类信息', () async {
     Directory(p.join(root.path, 'RJ12345678')).createSync(recursive: true);
     final libraryDatabase = LibraryDatabase.forTesting(NativeDatabase.memory());

@@ -67,6 +67,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('暂无后台任务'), findsOneWidget);
-    expect(find.text('媒体库的批量缓存和补全操作会显示在这里。'), findsOneWidget);
+    expect(find.text('媒体库的批量缓存和一键补全操作会显示在这里。'), findsOneWidget);
   });
 }

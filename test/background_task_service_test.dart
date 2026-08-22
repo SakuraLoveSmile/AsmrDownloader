@@ -11,7 +11,9 @@ class _FakeCompleteService extends CacheCompleteService {
 
   final Duration delay;
   int calls = 0;
+  int mediaLibraryCalls = 0;
   Duration? lastRunInterval;
+  Duration? lastMediaLibraryRunInterval;
 
   @override
   Future<CompleteResult> completeMissing({
@@ -33,6 +35,40 @@ class _FakeCompleteService extends CacheCompleteService {
     return CompleteResult(
       tracksFilled: 1,
       coversFilled: 0,
+      failed: 0,
+      cancelled: isCancelled(),
+    );
+  }
+
+  @override
+  Future<MediaLibraryCompleteResult> completeMediaLibrary({
+    Duration? runInterval,
+    required void Function(MediaLibraryCompleteProgress) onProgress,
+    required bool Function() isCancelled,
+  }) async {
+    mediaLibraryCalls++;
+    lastMediaLibraryRunInterval = runInterval;
+    onProgress(const MediaLibraryCompleteProgress(
+      processed: 1,
+      total: 2,
+      metadataFilled: 1,
+      originalCirclesFilled: 1,
+      tracksFilled: 1,
+      coversFilled: 1,
+      skipped: 0,
+      failed: 0,
+      currentSourceId: 'RJ00003',
+      phase: '补全封面',
+    ));
+    await Future<void>.delayed(delay);
+    return MediaLibraryCompleteResult(
+      processed: 1,
+      total: 2,
+      metadataFilled: 1,
+      originalCirclesFilled: 1,
+      tracksFilled: 1,
+      coversFilled: 1,
+      skipped: 0,
       failed: 0,
       cancelled: isCancelled(),
     );
@@ -220,5 +256,28 @@ void main() {
     expect(container.read(backgroundTaskProvider), isEmpty);
     expect(complete?.calls ?? 0, 0);
     expect(batch?.calls ?? 0, 1);
+  });
+
+  test('一键补全媒体库使用独立后台任务并同步明细', () async {
+    _FakeCompleteService? complete;
+    _FakeBatchService? batch;
+    final container = makeContainer(
+      onComplete: (service) => complete = service,
+      onBatch: (service) => batch = service,
+      mediaInterval: const Duration(seconds: 3),
+    );
+    final notifier = container.read(backgroundTaskProvider.notifier);
+    final id = notifier.startCompleteMediaLibrary();
+
+    await waitFor(() => taskById(container, id).isFinished);
+    final task = taskById(container, id);
+    expect(task.kind, BackgroundTaskKind.completeMediaLibrary);
+    expect(task.status, BackgroundTaskStatus.completed);
+    expect(task.total, 2);
+    expect(task.processed, 1);
+    expect(task.detail, contains('原版社团 1'));
+    expect(complete!.mediaLibraryCalls, 1);
+    expect(complete!.lastMediaLibraryRunInterval, const Duration(seconds: 3));
+    expect(batch?.calls ?? 0, 0);
   });
 }
