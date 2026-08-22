@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/library/library_database_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -18,7 +19,10 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
   int? _workInfoCount;
   int? _tracksCount;
   int? _coverCount;
+  int? _libraryWorkCount;
+  int? _libraryLocationCount;
   String? _dbPath;
+  String? _libraryDbPath;
   String? _error;
   bool _busy = false;
 
@@ -31,17 +35,29 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
   Future<void> _reload() async {
     try {
       final cache = ref.read(cacheServiceProvider);
+      final libraryDatabase = ref.read(libraryDatabaseProvider);
       final counts = await Future.wait([
         cache.getCacheCount(),
         cache.getTracksCount(),
         cache.getCoverCount(),
+        libraryDatabase
+            .select(libraryDatabase.libraryWorks)
+            .get()
+            .then((rows) => rows.length),
+        libraryDatabase
+            .select(libraryDatabase.mediaLibraryLocations)
+            .get()
+            .then((rows) => rows.length),
       ]);
       if (!mounted) return;
       setState(() {
         _workInfoCount = counts[0];
         _tracksCount = counts[1];
         _coverCount = counts[2];
+        _libraryWorkCount = counts[3];
+        _libraryLocationCount = counts[4];
         _dbPath = cache.dbPath;
+        _libraryDbPath = libraryDatabase.dbFilePath;
         _error = null;
       });
     } catch (e) {
@@ -170,8 +186,18 @@ class _CacheDialogState extends ConsumerState<CacheDialog> {
             Text('封面条目：${_coverCount ?? '…'}',
                 style: theme.textTheme.bodyMedium),
             const SizedBox(height: 12),
-            Text('数据库文件：', style: theme.textTheme.bodySmall),
+            Text(
+                '作品索引：${_libraryWorkCount ?? '…'} 条 · 扫描位置：${_libraryLocationCount ?? '…'} 条',
+                style: theme.textTheme.bodyMedium),
+            const SizedBox(height: 12),
+            Text('缓存数据库文件：', style: theme.textTheme.bodySmall),
             SelectableText(_dbPath ?? '…',
+                style: theme.textTheme.bodySmall!.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                )),
+            const SizedBox(height: 8),
+            Text('作品索引数据库文件：', style: theme.textTheme.bodySmall),
+            SelectableText(_libraryDbPath ?? '…',
                 style: theme.textTheme.bodySmall!.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 )),

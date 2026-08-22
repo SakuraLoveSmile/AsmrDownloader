@@ -15,6 +15,12 @@ final downloadPathProvider = StateProvider<String>((ref) => '');
 /// Navidrome 媒体库根目录（整理功能的目标路径）
 final navidromePathProvider = StateProvider<String>((ref) => '');
 
+/// 媒体库扫描根目录（可包含本机下载目录和已挂载的 SMB/NAS 目录）。
+///
+/// 扫描器只读取目录名中的 RJ/VJ/BJ 号，不读取音频、字幕或封面明细。
+final mediaLibraryRootsProvider =
+    StateProvider<List<String>>((ref) => const []);
+
 /// 下载完成后自动整理到 Navidrome
 final autoOrganizeProvider = StateProvider<bool>((ref) => false);
 

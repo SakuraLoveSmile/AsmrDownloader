@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/background_tasks/background_tasks.dart';
 import 'package:asmr_downloader/pages/components/app_sidebar.dart';
+import 'package:asmr_downloader/pages/database/database.dart';
 import 'package:asmr_downloader/pages/downloader/downloader.dart';
 import 'package:asmr_downloader/pages/downloader/download_list_page.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
@@ -19,6 +20,7 @@ abstract final class AppPageIndex {
   static const library = 2;
   static const mediaLibrary = 3;
   static const backgroundTasks = 4;
+  static const database = 5;
 }
 
 /// 当前显示的页面，默认进入下载中心。
@@ -30,7 +32,7 @@ final currentNavTabProvider = currentPageProvider;
 
 /// 应用外壳：采用现代 macOS 侧边栏 + 主工作区分栏架构。
 ///
-/// 用 IndexedStack 保活五个页面——切页不销毁状态，
+/// 用 IndexedStack 保活六个页面——切页不销毁状态，
 /// 下载进度、整理/字幕运行中的任务切到另一页也不被打断。
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
@@ -57,6 +59,7 @@ class AppShell extends ConsumerWidget {
                     LibraryPage(),
                     MediaLibraryPage(),
                     BackgroundTasksPage(),
+                    DatabasePage(),
                   ],
                 ),
               ),
@@ -81,6 +84,7 @@ class AppNavTabs extends ConsumerWidget {
     ('作品库', Icons.folder_outlined),
     ('媒体库', Icons.photo_library_outlined),
     ('后台任务', Icons.task_alt_rounded),
+    ('数据库', Icons.storage_rounded),
   ];
 
   @override

@@ -31,7 +31,7 @@ class WindowTitleBar extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 导航标签（下载 / 作品库 / 媒体库）
+              // 导航标签（下载 / 作品库 / 媒体库 / 数据库）
               const Padding(
                 padding: EdgeInsets.only(left: 12),
                 child: AppNavTabs(),

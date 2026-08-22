@@ -6,9 +6,56 @@ import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
-/// 下载队列持久化：仅存待下载作品的 sourceId 有序列表。
+/// 下载队列中的一个作品项。
+///
+/// [selectedTrackIds] 为 null 表示旧版队列文件没有保存选择信息，恢复时
+/// 按全选处理；非 null（包括空列表）表示严格恢复用户入队时的勾选结果。
+class DownloadQueueItem {
+  DownloadQueueItem({
+    required this.sourceId,
+    Iterable<String>? selectedTrackIds,
+  }) : selectedTrackIds = selectedTrackIds == null
+            ? null
+            : List.unmodifiable(selectedTrackIds);
+
+  final String sourceId;
+  final List<String>? selectedTrackIds;
+
+  bool get hasSelectionSnapshot => selectedTrackIds != null;
+
+  Map<String, dynamic> toJson() => {
+        'sourceId': sourceId,
+        'selectedTrackIds': selectedTrackIds,
+      };
+
+  static DownloadQueueItem? fromJson(Object? value) {
+    if (value is String) {
+      // v0.10.7 及更早版本只保存 sourceId；null 表示兼容旧行为：全选。
+      return value.isEmpty ? null : DownloadQueueItem(sourceId: value);
+    }
+    if (value is! Map) return null;
+
+    final sourceId = value['sourceId']?.toString() ?? '';
+    if (sourceId.isEmpty) return null;
+
+    final rawIds = value['selectedTrackIds'];
+    final selectedIds = rawIds is List
+        ? rawIds.map((id) => id.toString()).where((id) => id.isNotEmpty)
+        : null;
+    return DownloadQueueItem(
+      sourceId: sourceId,
+      selectedTrackIds: selectedIds,
+    );
+  }
+}
+
+/// 下载队列持久化：保存待下载作品及其入队时勾选的文件 ID 有序列表。
 /// 作品间串行执行，下载中可继续搜索并把新作品「加入队列」，
-/// 当前作品下完后自动取队首继续。格式：{"items": ["RJ00001", ...]}
+/// 当前作品下完后自动取队首继续。
+///
+/// 新格式：
+/// `{ "items": [{"sourceId":"RJ00001","selectedTrackIds":["hash"]}] }`
+/// 旧格式 `{ "items": ["RJ00001"] }` 仍可读取。
 class DownloadQueue {
   final String filePath;
 
@@ -43,37 +90,46 @@ class DownloadQueue {
     }
   }
 
-  Future<List<String>> _readItems() async {
+  Future<List<DownloadQueueItem>> _readItems() async {
     final raw = await _readRaw();
     final items = raw['items'];
     if (items is List) {
-      return items.map((e) => e.toString()).toList();
+      return [
+        for (final item in items)
+          if (DownloadQueueItem.fromJson(item) case final parsed?) parsed,
+      ];
     }
-    return <String>[];
+    return <DownloadQueueItem>[];
   }
 
-  Future<void> _writeItems(List<String> items) async {
-    await _writeRaw({'items': items});
+  Future<void> _writeItems(List<DownloadQueueItem> items) async {
+    await _writeRaw({'items': items.map((item) => item.toJson()).toList()});
   }
 
   /// 读取当前队列。读取也要排在写操作之后，避免启动时的异步加载
   /// 把刚刚写入的条目覆盖掉。
-  Future<List<String>> list() {
+  Future<List<DownloadQueueItem>> list() {
     return _pendingWrite.then((_) => _readItems());
   }
 
   /// 查看队首但不移除。
-  Future<String?> peek() async {
+  Future<DownloadQueueItem?> peek() async {
     final items = await list();
     return items.isEmpty ? null : items.first;
   }
 
   /// 追加入队（去重），返回是否新增（已存在返回 false）。
-  Future<bool> add(String sourceId) async {
+  Future<bool> add(
+    String sourceId, {
+    Iterable<String>? selectedTrackIds,
+  }) async {
     final task = _pendingWrite.then((_) async {
       final items = await _readItems();
-      if (items.contains(sourceId)) return false;
-      items.add(sourceId);
+      if (items.any((item) => item.sourceId == sourceId)) return false;
+      items.add(DownloadQueueItem(
+        sourceId: sourceId,
+        selectedTrackIds: selectedTrackIds,
+      ));
       await _writeItems(items);
       return true;
     });
@@ -84,7 +140,9 @@ class DownloadQueue {
   Future<void> remove(String sourceId) async {
     final task = _pendingWrite.then((_) async {
       final items = await _readItems();
-      if (items.remove(sourceId)) {
+      final before = items.length;
+      items.removeWhere((item) => item.sourceId == sourceId);
+      if (items.length != before) {
         await _writeItems(items);
       }
     });
@@ -93,14 +151,14 @@ class DownloadQueue {
   }
 
   Future<void> clear() async {
-    final task = _pendingWrite.then((_) => _writeItems(<String>[]));
+    final task = _pendingWrite.then((_) => _writeItems(<DownloadQueueItem>[]));
     _pendingWrite = task.catchError((_) {});
     return task;
   }
 
   /// 取出并移除队首 sourceId；队列空返回 null。
-  Future<String?> popFront() async {
-    String? popped;
+  Future<DownloadQueueItem?> popFront() async {
+    DownloadQueueItem? popped;
     final task = _pendingWrite.then((_) async {
       final items = await _readItems();
       if (items.isEmpty) return null;
@@ -115,10 +173,10 @@ class DownloadQueue {
   /// 仅当队首仍是 [expected] 时取出它。
   /// 队列页允许用户在元数据加载期间移除条目，因此下载器不能
   /// 在条目已经被用户移除后误取出下一个作品。
-  Future<String?> popFrontIf(String expected) async {
+  Future<DownloadQueueItem?> popFrontIf(String expected) async {
     final task = _pendingWrite.then((_) async {
       final items = await _readItems();
-      if (items.isEmpty || items.first != expected) return null;
+      if (items.isEmpty || items.first.sourceId != expected) return null;
       final popped = items.removeAt(0);
       await _writeItems(items);
       return popped;
@@ -134,13 +192,13 @@ final downloadQueueFilePathProvider = Provider<String>((ref) {
 });
 
 /// 下载队列状态管理：每次变更后更新 state 并落盘。
-class DownloadQueueNotifier extends Notifier<List<String>> {
+class DownloadQueueNotifier extends Notifier<List<DownloadQueueItem>> {
   late final DownloadQueue _queue;
   late final Future<void> _ready;
   var _mounted = true;
 
   @override
-  List<String> build() {
+  List<DownloadQueueItem> build() {
     _queue = DownloadQueue(filePath: ref.read(downloadQueueFilePathProvider));
     _mounted = true;
     ref.onDispose(() => _mounted = false);
@@ -148,7 +206,7 @@ class DownloadQueueNotifier extends Notifier<List<String>> {
     // Notifier 必须同步返回初始 state，但所有写操作都会等待这次加载。
     // 否则「启动加载」与第一次点击加入队列会发生竞态，导致 UI 状态回退。
     _ready = _loadFromDisk();
-    return <String>[];
+    return <DownloadQueueItem>[];
   }
 
   Future<void> _loadFromDisk() async {
@@ -160,38 +218,53 @@ class DownloadQueueNotifier extends Notifier<List<String>> {
   Future<void> waitUntilReady() => _ready;
 
   /// 追加入队（去重），返回是否新增。
-  Future<bool> add(String sourceId) async {
+  Future<bool> add(
+    String sourceId, {
+    Iterable<String>? selectedTrackIds,
+  }) async {
     if (sourceId.trim().isEmpty) return false;
+    final normalizedSelection = selectedTrackIds?.toList(growable: false);
     await _ready;
-    final added = await _queue.add(sourceId);
-    if (added && _mounted) state = [...state, sourceId];
+    final added = await _queue.add(
+      sourceId,
+      selectedTrackIds: normalizedSelection,
+    );
+    if (added && _mounted) {
+      state = [
+        ...state,
+        DownloadQueueItem(
+          sourceId: sourceId,
+          selectedTrackIds: normalizedSelection,
+        ),
+      ];
+    }
     return added;
   }
 
   Future<void> remove(String sourceId) async {
     await _ready;
     await _queue.remove(sourceId);
-    if (_mounted) state = state.where((e) => e != sourceId).toList();
+    if (_mounted) state = state.where((e) => e.sourceId != sourceId).toList();
   }
 
   Future<void> clear() async {
     await _ready;
     await _queue.clear();
-    if (_mounted) state = <String>[];
+    if (_mounted) state = <DownloadQueueItem>[];
   }
 
   /// 取出并移除队首；队列空返回 null。
-  Future<String?> popFront() async {
+  Future<DownloadQueueItem?> popFront() async {
     await _ready;
     final popped = await _queue.popFront();
     if (popped != null && _mounted) {
-      state = state.where((e) => e != popped).toList();
+      state = state.skip(1).toList();
     }
     return popped;
   }
 
   /// 查看队首但不移除。
-  Future<String?> peek() async {
+  Future<DownloadQueueItem?> peek() async {
     await _ready;
     return _queue.peek();
   }
@@ -201,15 +274,15 @@ class DownloadQueueNotifier extends Notifier<List<String>> {
     await _ready;
     final popped = await _queue.popFrontIf(expected);
     if (popped != null && _mounted) {
-      state = state.where((e) => e != popped).toList();
+      state = state.where((e) => e.sourceId != expected).toList();
     }
     return popped != null;
   }
 }
 
-/// 下载队列 provider：当前待下载作品的 sourceId 有序列表。
+/// 下载队列 provider：当前待下载作品及其文件选择的有序列表。
 final downloadQueueProvider =
-    NotifierProvider<DownloadQueueNotifier, List<String>>(
+    NotifierProvider<DownloadQueueNotifier, List<DownloadQueueItem>>(
         DownloadQueueNotifier.new);
 
 /// 当前正在下载的作品 sourceId（下载中写入、结束置 null），

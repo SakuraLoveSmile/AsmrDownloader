@@ -29,7 +29,7 @@ class OnboardingController {
       pageIndex: AppPageIndex.downloader,
       targetKey: 'onboarding-sidebar-nav',
       title: '全新经典侧边栏',
-      body: '左侧边栏整合了「下载中心」、「下载列表」、「作品库」、「媒体库」与「后台任务」五大主模块。\n'
+      body: '左侧边栏整合了「下载中心」、「下载列表」、「作品库」、「媒体库」、「后台任务」与「数据库」六大主模块。\n'
           '边栏会实时显示活动下载任务数、未整理作品数和后台任务数等动态徽标，助你随时掌握后台状态。',
     ),
     _OnboardingStep(

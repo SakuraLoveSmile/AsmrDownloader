@@ -1,7 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:asmr_downloader/common/config_providers.dart';
+import 'package:asmr_downloader/services/cache/cache_database.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
+import 'package:asmr_downloader/services/library/media_library_service.dart';
+import 'package:asmr_downloader/services/organize/organize_providers.dart';
+import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// 媒体库中的一个本地缓存作品。
@@ -12,6 +17,7 @@ class CachedLibraryEntry {
     required this.workInfo,
     required this.hasTracks,
     required this.hasCover,
+    this.locations = const [],
   });
 
   final String sourceId;
@@ -19,6 +25,9 @@ class CachedLibraryEntry {
   final Map<String, dynamic> workInfo;
   final bool hasTracks;
   final bool hasCover;
+
+  /// 轻量扫描发现的目录位置；一个作品可能同时存在于本机和 NAS。
+  final List<MediaLibraryLocationItem> locations;
 
   String get title => _readString(workInfo['title']).isEmpty
       ? sourceId
@@ -35,6 +44,16 @@ class CachedLibraryEntry {
   String get releaseDate => _readString(workInfo['release']);
 
   String get dlCount => _readString(workInfo['dl_count']);
+
+  bool get hasMetadata => workInfo.isNotEmpty;
+
+  int get locationCount => locations.length;
+
+  String get locationSummary {
+    if (locations.isEmpty) return '未记录位置';
+    if (locations.length == 1) return locations.single.matchedPath;
+    return '${locations.length} 个位置';
+  }
 
   List<String> get tags {
     final rawTags = workInfo['tags'];
@@ -65,9 +84,34 @@ enum CacheSort {
   title,
 }
 
+/// 媒体库的浏览方式。
+///
+/// `cv` 模式下，一个作品可以同时出现在多个 CV 分组中，方便按声优
+/// 浏览合作作品；没有元数据的作品会进入「未关联」分组。
+enum MediaLibraryGroupBy {
+  none,
+  circle,
+  cv,
+}
+
 /// 全部缓存作品及 tracks / 封面存在性索引。
 final cachedLibraryProvider = FutureProvider<CachedLibrary>((ref) async {
   final cache = ref.watch(cacheServiceProvider);
+  final mediaLibrary = ref.watch(mediaLibraryServiceProvider);
+  final registryEntries = await ref.watch(worksIndexProvider).list();
+  final registryById = <String, WorkEntry>{
+    for (final entry in registryEntries) entry.sourceId: entry,
+  };
+
+  // 目录扫描只返回作品级 sourceId，文件数量/字幕/封面等明细不在这里扫描。
+  await mediaLibrary.scanConfiguredRoots();
+  final locations = await mediaLibrary.listLocations(
+    roots: ref.watch(mediaLibraryRootsProvider),
+  );
+  final locationsById = <String, List<MediaLibraryLocationItem>>{};
+  for (final location in locations) {
+    locationsById.putIfAbsent(location.sourceId, () => []).add(location);
+  }
 
   // 启动三个查询后再等待，避免列表数据和两个存在性索引串行读取。
   final workInfoFuture = cache.listWorkInfoEntries();
@@ -77,15 +121,26 @@ final cachedLibraryProvider = FutureProvider<CachedLibrary>((ref) async {
   final tracksSourceIds = await tracksFuture;
   final coverSourceIds = await coversFuture;
 
+  final workInfoById = <String, WorkInfoEntry>{
+    for (final row in workInfoEntries) row.sourceId: row,
+  };
+  final sourceIds = locationsById.keys.toList()..sort();
   final entries = <CachedLibraryEntry>[];
-  for (final row in workInfoEntries) {
+  for (final sourceId in sourceIds) {
+    final row = workInfoById[sourceId];
+    final workInfo = _mergeWorkInfo(
+      row == null ? const {} : _decodeWorkInfo(row.workInfoJson),
+      registryById[sourceId],
+    );
     entries.add(
       CachedLibraryEntry(
-        sourceId: row.sourceId,
-        cachedAt: row.cachedAt,
-        workInfo: _decodeWorkInfo(row.workInfoJson),
-        hasTracks: tracksSourceIds.contains(row.sourceId),
-        hasCover: coverSourceIds.contains(row.sourceId),
+        sourceId: sourceId,
+        // 未缓存元数据的作品仍显示在媒体库中，时间以扫描时间为准。
+        cachedAt: row?.cachedAt ?? locationsById[sourceId]!.first.scannedAt,
+        workInfo: workInfo,
+        hasTracks: tracksSourceIds.contains(sourceId),
+        hasCover: coverSourceIds.contains(sourceId),
+        locations: List.unmodifiable(locationsById[sourceId]!),
       ),
     );
   }
@@ -100,6 +155,10 @@ final cachedCoverProvider = FutureProvider.family<Uint8List?, String>(
 final cacheSearchQueryProvider = StateProvider<String>((ref) => '');
 
 final cacheSortProvider = StateProvider<CacheSort>((ref) => CacheSort.cachedAt);
+
+/// 媒体库分组方式：平铺、按社团、按 CV。
+final mediaLibraryGroupByProvider =
+    StateProvider<MediaLibraryGroupBy>((ref) => MediaLibraryGroupBy.none);
 
 /// 媒体库的客户端过滤和排序结果。
 final filteredCachedLibraryProvider =
@@ -129,6 +188,53 @@ Map<String, dynamic> _decodeWorkInfo(String rawJson) {
 }
 
 String _readString(Object? value) => value?.toString() ?? '';
+
+/// 优先使用 API 缓存，同时用作品索引数据库补齐标题、社团和 CV。
+///
+/// 这样即使用户清理过 workInfo 缓存，媒体库仍能按已有的本地数据库元数据
+/// 分类；API 返回的字段始终优先，不会被旧注册表覆盖。
+Map<String, dynamic> _mergeWorkInfo(
+  Map<String, dynamic> cached,
+  WorkEntry? registry,
+) {
+  if (registry == null) return cached;
+  final merged = Map<String, dynamic>.of(cached);
+
+  if (_readString(merged['title']).isEmpty && registry.title.isNotEmpty) {
+    merged['title'] = registry.title;
+  }
+  if (_readCircleName(merged).isEmpty && registry.circleName.isNotEmpty) {
+    merged['circle'] = {'name': registry.circleName};
+  }
+  if (_readNames(merged['vas']).isEmpty && registry.cvNames.isNotEmpty) {
+    merged['vas'] = registry.cvNames
+        .split('&')
+        .map((name) => name.trim())
+        .where((name) => name.isNotEmpty)
+        .map((name) => {'name': name})
+        .toList();
+  }
+  if (_readString(merged['release']).isEmpty &&
+      registry.releaseDate.isNotEmpty) {
+    merged['release'] = registry.releaseDate;
+  }
+  if ((merged['tags'] is! List || (merged['tags'] as List).isEmpty) &&
+      registry.tags.isNotEmpty) {
+    merged['tags'] = registry.tags
+        .map((tag) => {
+              'i18n': {
+                'zh-cn': {'name': tag},
+              },
+            })
+        .toList();
+  }
+  return merged;
+}
+
+String _readCircleName(Map<String, dynamic> workInfo) {
+  final circle = workInfo['circle'];
+  return circle is Map ? _readString(circle['name']) : '';
+}
 
 List<String> _readNames(Object? value) {
   if (value is! List) return const [];
