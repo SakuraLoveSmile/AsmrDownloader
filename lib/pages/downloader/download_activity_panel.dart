@@ -12,7 +12,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 当前作品的逐文件进度和作品队列放到搜索区之外，下载中切换搜索也不会
 /// 看不到正在下载的音声文件。
 class DownloadActivityPanel extends ConsumerWidget {
-  const DownloadActivityPanel({super.key});
+  const DownloadActivityPanel({
+    super.key,
+    this.showEmpty = false,
+    this.listMaxHeight = 280,
+    this.queueMaxHeight = 180,
+  });
+
+  final bool showEmpty;
+  final double listMaxHeight;
+  final double queueMaxHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -25,7 +34,9 @@ class DownloadActivityPanel extends ConsumerWidget {
     final hasCurrentActivity = currentSourceId != null || segments.isNotEmpty;
     final hasActivity = hasCurrentActivity || queue.isNotEmpty;
     if (!hasActivity && status != DownloadStatus.downloading) {
-      return const SizedBox.shrink();
+      return showEmpty
+          ? const _EmptyDownloadActivity()
+          : const SizedBox.shrink();
     }
 
     final sourceId = currentSourceId ?? lastSourceId;
@@ -39,11 +50,16 @@ class DownloadActivityPanel extends ConsumerWidget {
               sourceId: sourceId,
               status: status,
               hasSegments: segments.isNotEmpty,
+              listMaxHeight: listMaxHeight,
               onCancel: status == DownloadStatus.downloading
                   ? ref.read(downloadManagerProvider).cancelAllDownload
                   : null,
             ),
-          if (queue.isNotEmpty) const DownloadQueuePanel(tracksLPadding: 0),
+          if (queue.isNotEmpty)
+            DownloadQueuePanel(
+              tracksLPadding: 0,
+              maxHeight: queueMaxHeight,
+            ),
         ],
       ),
     );
@@ -55,12 +71,14 @@ class _CurrentDownloadCard extends StatelessWidget {
     required this.sourceId,
     required this.status,
     required this.hasSegments,
+    required this.listMaxHeight,
     required this.onCancel,
   });
 
   final String? sourceId;
   final DownloadStatus status;
   final bool hasSegments;
+  final double listMaxHeight;
   final VoidCallback? onCancel;
 
   @override
@@ -162,10 +180,51 @@ class _CurrentDownloadCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
           ] else if (hasSegments)
-            const DownloadListPanel(
+            DownloadListPanel(
               tracksLPadding: 0,
               initiallyExpanded: true,
+              maxHeight: listMaxHeight,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _EmptyDownloadActivity extends StatelessWidget {
+  const _EmptyDownloadActivity();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 72, horizontal: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.download_done_rounded,
+            size: 42,
+            color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '暂无下载任务',
+            style: TextStyle(
+              color: scheme.onSurface,
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            '开始搜索作品后，下载进度和队列会显示在这里',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );

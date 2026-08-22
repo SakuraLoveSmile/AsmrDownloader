@@ -155,7 +155,8 @@ class WorkInspectorDrawer extends ConsumerWidget {
                                 .read(uiServiceProvider)
                                 .search(entry.sourceId);
                             // 切换到下载 Tab
-                            ref.read(currentNavTabProvider.notifier).state = 0;
+                            ref.read(currentNavTabProvider.notifier).state =
+                                AppPageIndex.downloader;
                           },
                           icon: const Icon(Icons.download_rounded, size: 15),
                           label: const Text('前往下载',

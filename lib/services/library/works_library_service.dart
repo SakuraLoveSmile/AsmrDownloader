@@ -8,6 +8,7 @@ import 'package:asmr_downloader/services/organize/works_scanner.dart';
 import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
 import 'package:asmr_downloader/services/transcribe/vtt_converter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 
 /// 作品库列表项：一个已下载作品的展示与操作数据。
 class WorksListItem {
@@ -63,6 +64,50 @@ class WorksListItem {
 class WorksLibraryService {
   final Ref ref;
   WorksLibraryService(this.ref);
+
+  /// 删除本机临时下载目录，但保留作品注册表和 NAS 整理内容。
+  ///
+  /// 只允许删除下载根目录下的作品目录，并解析符号链接后再次校验，
+  /// 防止误删下载根目录、整理目录或下载根目录之外的路径。
+  Future<void> deleteLocalWork(WorksListItem item) async {
+    final downloadRootPath = ref.read(downloadPathProvider).trim();
+    if (downloadRootPath.isEmpty) {
+      throw StateError('未设置下载路径');
+    }
+
+    final sourceDir = Directory(item.sourceDir);
+    if (!await sourceDir.exists()) return;
+
+    final downloadRoot = Directory(downloadRootPath);
+    if (!await downloadRoot.exists()) {
+      throw StateError('下载路径不存在');
+    }
+
+    final resolvedRoot = p.normalize(await downloadRoot.resolveSymbolicLinks());
+    final resolvedSource = p.normalize(await sourceDir.resolveSymbolicLinks());
+    if (p.equals(resolvedRoot, resolvedSource) ||
+        !p.isWithin(resolvedRoot, resolvedSource)) {
+      throw StateError('拒绝删除下载根目录之外的路径');
+    }
+
+    // 整理根目录可能位于下载根目录内；即使作品库扫描已排除它，
+    // 删除前仍再次阻断，确保「删除本机下载」不会触及 NAS 目录。
+    final targetRootPath = ref.read(navidromePathProvider).trim();
+    if (targetRootPath.isNotEmpty) {
+      final targetRoot = Directory(targetRootPath);
+      if (await targetRoot.exists()) {
+        final resolvedTarget =
+            p.normalize(await targetRoot.resolveSymbolicLinks());
+        if (p.equals(resolvedTarget, resolvedSource) ||
+            p.isWithin(resolvedTarget, resolvedSource) ||
+            p.isWithin(resolvedSource, resolvedTarget)) {
+          throw StateError('作品目录位于整理目标中，未执行删除');
+        }
+      }
+    }
+
+    await sourceDir.delete(recursive: true);
+  }
 
   /// 列出全部已下载作品（目录存在才列出）。
   ///

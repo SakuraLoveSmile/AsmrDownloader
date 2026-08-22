@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
+import 'package:asmr_downloader/services/download/download_queue.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/ui/app_theme.dart';
@@ -33,6 +34,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
   Widget build(BuildContext context) {
     final worksAsync = ref.watch(worksLibraryProvider);
     final activeSourceId = ref.watch(activeTranscribeSourceIdProvider);
+    final downloadingSourceId = ref.watch(currentDownloadingSourceIdProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -51,7 +53,8 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
                 child: Text('加载作品库失败: $e',
                     style:
                         TextStyle(color: Theme.of(context).colorScheme.error))),
-            data: (works) => _buildList(works, activeSourceId),
+            data: (works) =>
+                _buildList(works, activeSourceId, downloadingSourceId),
           ),
         ),
       ],
@@ -124,7 +127,8 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
             visualDensity: VisualDensity.compact,
             style: IconButton.styleFrom(
               shape: const CircleBorder(),
-              backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+              backgroundColor:
+                  scheme.surfaceContainerHigh.withValues(alpha: 0.4),
             ),
           ),
         ],
@@ -134,7 +138,11 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
 
   // ---------- 列表 ----------
 
-  Widget _buildList(List<WorksListItem> works, String? activeSourceId) {
+  Widget _buildList(
+    List<WorksListItem> works,
+    String? activeSourceId,
+    String? downloadingSourceId,
+  ) {
     if (works.isEmpty) {
       return Center(
         child: Text('暂无已下载作品\n（设置下载路径并下载后自动出现）',
@@ -152,7 +160,10 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
         item: works[i],
         selected: _selected.contains(works[i].sourceId),
         transcribing: activeSourceId == works[i].sourceId,
+        deleteEnabled: activeSourceId != works[i].sourceId &&
+            downloadingSourceId != works[i].sourceId,
         onToggleSelect: () => _toggleSelect(works[i].sourceId),
+        onDelete: () => _deleteWork(works[i]),
       ),
     );
   }
@@ -178,7 +189,8 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
   }
 
   bool _isAllSelected(List<WorksListItem> works) {
-    return works.isNotEmpty && works.every((w) => _selected.contains(w.sourceId));
+    return works.isNotEmpty &&
+        works.every((w) => _selected.contains(w.sourceId));
   }
 
   // ---------- 批量操作 ----------
@@ -204,8 +216,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
         fail++;
       }
     }
-    var noteSuffix =
-        metadataNotes.isEmpty ? '' : '；${metadataNotes.join('；')}';
+    var noteSuffix = metadataNotes.isEmpty ? '' : '；${metadataNotes.join('；')}';
     if (tagFailures > 0) {
       noteSuffix += '；$tagFailures 个文件标签写入失败';
     }
@@ -230,6 +241,49 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     );
     if (mounted) setState(_selected.clear);
   }
+
+  Future<void> _deleteWork(WorksListItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除本机下载？'),
+        content: Text(
+          '将删除作品 ${item.sourceId} 的本机临时下载目录：\n\n'
+          '${item.sourceDir}\n\n'
+          '此操作不会删除已整理到 NAS 的内容，也不会删除作品索引。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除本机文件'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(worksLibraryServiceProvider).deleteLocalWork(item);
+      if (!mounted) return;
+      setState(() => _selected.remove(item.sourceId));
+      ref
+        ..invalidate(worksLibraryProvider)
+        ..invalidate(unorganizedCountProvider);
+      ref
+          .read(uiServiceProvider)
+          .showSnack('已删除 ${item.sourceId} 的本机下载，NAS 内容未删除');
+    } catch (e) {
+      ref.read(uiServiceProvider).showSnack('删除失败：$e');
+    }
+  }
 }
 
 /// 单行作品。
@@ -238,13 +292,17 @@ class _WorkRow extends ConsumerStatefulWidget {
     required this.item,
     required this.selected,
     required this.transcribing,
+    required this.deleteEnabled,
     required this.onToggleSelect,
+    required this.onDelete,
   });
 
   final WorksListItem item;
   final bool selected;
   final bool transcribing;
+  final bool deleteEnabled;
   final VoidCallback onToggleSelect;
+  final VoidCallback onDelete;
 
   @override
   ConsumerState<_WorkRow> createState() => _WorkRowState();
@@ -259,6 +317,8 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
     final item = widget.item;
     final selected = widget.selected;
     final transcribing = widget.transcribing;
+    final deleteEnabled = widget.deleteEnabled;
+    final onDelete = widget.onDelete;
     final onToggleSelect = widget.onToggleSelect;
     final scheme = Theme.of(context).colorScheme;
     final ui = ref.read(uiServiceProvider);
@@ -452,6 +512,13 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
               enabled: item.convertibleVttCount > 0 && !transcribing,
               onTap: () => ui.convertVttToLrcForWork(item.sourceDir),
             ),
+            _RowIconBtn(
+              icon: Icons.delete_outline_rounded,
+              tooltip: deleteEnabled ? '删除本机下载' : '任务运行中，暂不能删除',
+              enabled: deleteEnabled,
+              color: scheme.error,
+              onTap: onDelete,
+            ),
           ],
         ),
       ),
@@ -465,12 +532,14 @@ class _RowIconBtn extends StatelessWidget {
     required this.tooltip,
     required this.onTap,
     this.enabled = true,
+    this.color,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
   final bool enabled;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -488,7 +557,7 @@ class _RowIconBtn extends StatelessWidget {
           backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.3),
         ),
         color: enabled
-            ? scheme.onSurfaceVariant
+            ? (color ?? scheme.onSurfaceVariant)
             : scheme.onSurface.withValues(alpha: 0.2),
       ),
     );

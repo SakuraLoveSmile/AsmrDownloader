@@ -12,10 +12,12 @@ class DownloadListPanel extends ConsumerStatefulWidget {
     super.key,
     required this.tracksLPadding,
     this.initiallyExpanded = false,
+    this.maxHeight = 280,
   });
 
   final double tracksLPadding;
   final bool initiallyExpanded;
+  final double maxHeight;
 
   @override
   ConsumerState<DownloadListPanel> createState() => _DownloadListPanelState();
@@ -62,7 +64,10 @@ class _DownloadListPanelState extends ConsumerState<DownloadListPanel> {
           AnimatedCrossFade(
             duration: const Duration(milliseconds: 200),
             firstChild: const SizedBox.shrink(),
-            secondChild: _ListBody(segments: segments),
+            secondChild: _ListBody(
+              segments: segments,
+              maxHeight: widget.maxHeight,
+            ),
             crossFadeState: _expanded
                 ? CrossFadeState.showSecond
                 : CrossFadeState.showFirst,
@@ -127,14 +132,15 @@ class _Header extends StatelessWidget {
 }
 
 class _ListBody extends StatelessWidget {
-  const _ListBody({required this.segments});
+  const _ListBody({required this.segments, required this.maxHeight});
 
   final List<DownloadSegment> segments;
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context) {
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxHeight: 280),
+      constraints: BoxConstraints(maxHeight: maxHeight),
       child: ListView.separated(
         shrinkWrap: true,
         padding: const EdgeInsets.symmetric(vertical: 4),

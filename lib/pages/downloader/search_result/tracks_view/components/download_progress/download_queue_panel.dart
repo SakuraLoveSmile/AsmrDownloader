@@ -8,9 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// 仅当队列非空时渲染。每行展示 sourceId 与删除按钮，
 /// 底部提供「清空队列」，非下载中时额外显示「继续下载」。
 class DownloadQueuePanel extends ConsumerWidget {
-  const DownloadQueuePanel({super.key, required this.tracksLPadding});
+  const DownloadQueuePanel({
+    super.key,
+    required this.tracksLPadding,
+    this.maxHeight = 180,
+  });
 
   final double tracksLPadding;
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -38,7 +43,7 @@ class DownloadQueuePanel extends ConsumerWidget {
             _Header(count: queue.length),
             const SizedBox(height: 4),
             ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 180),
+              constraints: BoxConstraints(maxHeight: maxHeight),
               child: ListView.builder(
                 shrinkWrap: true,
                 itemCount: queue.length,

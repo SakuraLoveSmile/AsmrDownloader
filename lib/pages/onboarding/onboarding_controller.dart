@@ -26,40 +26,46 @@ class OnboardingController {
 
   static const _steps = <_OnboardingStep>[
     _OnboardingStep(
-      pageIndex: 0,
+      pageIndex: AppPageIndex.downloader,
       targetKey: 'onboarding-sidebar-nav',
       title: '全新经典侧边栏',
-      body: '左侧边栏整合了「下载中心」、「作品库」、「媒体库」与「后台任务」四大主模块。\n'
+      body: '左侧边栏整合了「下载中心」、「下载列表」、「作品库」、「媒体库」与「后台任务」五大主模块。\n'
           '边栏会实时显示活动下载任务数、未整理作品数和后台任务数等动态徽标，助你随时掌握后台状态。',
     ),
     _OnboardingStep(
-      pageIndex: 0,
+      pageIndex: AppPageIndex.downloader,
       targetKey: 'onboarding-search-box',
       title: '智能搜索与解析',
       body: '输入 sourceId（RJ / VJ / BJ 加数字，如 RJ01234567）\n'
           '也可以直接粘贴 asmr.one 作品页 URL，或拖入链接与文件，自动提取作品信息与完整音轨目录。',
     ),
     _OnboardingStep(
-      pageIndex: 0,
+      pageIndex: AppPageIndex.downloader,
       targetKey: 'onboarding-paste-search',
       title: '一键剪贴板搜索',
       body: '点击快速读取系统剪贴板并立即发起搜索与解析。\n'
           '旁边的刷新按钮支持在网络或元数据更新时一键强制刷新缓存。',
     ),
     _OnboardingStep(
-      pageIndex: 0,
+      pageIndex: AppPageIndex.downloader,
       targetKey: 'onboarding-settings',
       title: '下载与网络偏好',
       body: '点击打开下载设置弹窗：配置下载目录、多线程并行数、API 镜像通道、网络代理与 GitHub Token。',
     ),
     _OnboardingStep(
-      pageIndex: 1,
+      pageIndex: AppPageIndex.downloadList,
+      targetKey: 'onboarding-sidebar-download-list',
+      title: '独立下载列表',
+      body: '下载列表单独展示当前与最近一次下载的逐文件进度、速度、状态和作品队列。下载过程中切换页面，任务不会中断。',
+    ),
+    _OnboardingStep(
+      pageIndex: AppPageIndex.library,
       targetKey: 'onboarding-sidebar-library',
       title: '已下载作品库',
       body: '点击侧边栏「作品库」进入已下载作品管理中心，支持多选、分类筛选与元数据整理。',
     ),
     _OnboardingStep(
-      pageIndex: 1,
+      pageIndex: AppPageIndex.library,
       targetKey: 'onboarding-library-toolbar',
       title: '智能整理与 AI 字幕',
       body: '支持一键整理到 Navidrome 媒体库（自动写入音频 ID3 标签、封面、汉化版社团解析）。\n'
@@ -67,13 +73,13 @@ class OnboardingController {
           '点击工具栏右侧的设置按钮可配置目标媒体库路径与 AI 引擎。',
     ),
     _OnboardingStep(
-      pageIndex: 2,
+      pageIndex: AppPageIndex.mediaLibrary,
       targetKey: 'onboarding-sidebar-media',
       title: '离线媒体库',
       body: '点击侧边栏「媒体库」进入封面海报瀑布流，支持离线高速浏览全部已缓存作品。',
     ),
     _OnboardingStep(
-      pageIndex: 2,
+      pageIndex: AppPageIndex.mediaLibrary,
       targetKey: 'onboarding-media-toolbar',
       title: '海报浏览与详情检查器',
       body: '顶部工具栏支持关键词搜索、排序与一键批量缓存。\n'
@@ -107,7 +113,9 @@ class OnboardingController {
   Future<void> _finish() async {
     _entry?.remove();
     _entry = null;
-    await _container.read(configFileProvider).addOrUpdate({'onboardingCompleted': true});
+    await _container
+        .read(configFileProvider)
+        .addOrUpdate({'onboardingCompleted': true});
     _container.read(onboardingCompletedProvider.notifier).state = true;
   }
 
@@ -184,7 +192,7 @@ class _OnboardingStep {
     required this.body,
   });
 
-  /// 目标所在页面：0=下载, 1=作品库, 2=媒体库
+  /// 目标所在页面：由 [AppPageIndex] 定义。
   final int pageIndex;
 
   /// 目标元素的 ValueKey 字符串

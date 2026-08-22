@@ -24,23 +24,29 @@ class AppSidebar extends ConsumerWidget {
     // 动态徽标统计
     final currentDownloading = ref.watch(currentDownloadingSourceIdProvider);
     final queue = ref.watch(downloadQueueProvider);
-    final downloadingCount = (currentDownloading != null ? 1 : 0) + queue.length;
+    final downloadingCount =
+        (currentDownloading != null ? 1 : 0) + queue.length;
 
     final unorganized = ref.watch(unorganizedCountProvider).value ?? 0;
-    final cachedCount = ref.watch(cachedLibraryProvider).value?.entries.length ?? 0;
+    final cachedCount =
+        ref.watch(cachedLibraryProvider).value?.entries.length ?? 0;
     final activeTasks = ref.watch(backgroundTaskActiveCountProvider);
 
     return Container(
       width: 210,
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
-        border: Border(right: BorderSide(color: scheme.outlineVariant, width: 0.8)),
+        border:
+            Border(right: BorderSide(color: scheme.outlineVariant, width: 0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // macOS 下为系统红绿灯留出安全边距
-          if (Platform.isMacOS) const SizedBox(height: 38) else const SizedBox(height: 14),
+          if (Platform.isMacOS)
+            const SizedBox(height: 38)
+          else
+            const SizedBox(height: 14),
           // 顶部品牌区
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -93,47 +99,61 @@ class AppSidebar extends ConsumerWidget {
               children: [
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-download'),
-                  index: 0,
+                  index: AppPageIndex.downloader,
                   currentIndex: currentIndex,
                   icon: Icons.arrow_circle_down_rounded,
                   label: '下载中心',
+                  onTap: () => ref.read(currentPageProvider.notifier).state =
+                      AppPageIndex.downloader,
+                ),
+                const SizedBox(height: 4),
+                _SidebarItem(
+                  key: const ValueKey('onboarding-sidebar-download-list'),
+                  index: AppPageIndex.downloadList,
+                  currentIndex: currentIndex,
+                  icon: Icons.playlist_play_rounded,
+                  label: '下载列表',
                   badgeText: downloadingCount > 0 ? '$downloadingCount' : null,
                   badgeColor: scheme.primary,
-                  onTap: () => ref.read(currentPageProvider.notifier).state = 0,
+                  onTap: () => ref.read(currentPageProvider.notifier).state =
+                      AppPageIndex.downloadList,
                 ),
                 const SizedBox(height: 4),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-library'),
-                  index: 1,
+                  index: AppPageIndex.library,
                   currentIndex: currentIndex,
                   icon: Icons.folder_copy_rounded,
                   label: '作品库',
                   badgeText: unorganized > 0 ? '$unorganized' : null,
                   badgeColor: AppColors.warningSolid,
-                  onTap: () => ref.read(currentPageProvider.notifier).state = 1,
+                  onTap: () => ref.read(currentPageProvider.notifier).state =
+                      AppPageIndex.library,
                 ),
                 const SizedBox(height: 4),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-media'),
-                  index: 2,
+                  index: AppPageIndex.mediaLibrary,
                   currentIndex: currentIndex,
                   icon: Icons.photo_library_rounded,
                   label: '媒体库',
                   badgeText: cachedCount > 0 ? '$cachedCount' : null,
                   badgeColor: scheme.surfaceContainerHighest,
                   badgeTextColor: scheme.onSurfaceVariant,
-                  onTap: () => ref.read(currentPageProvider.notifier).state = 2,
+                  onTap: () => ref.read(currentPageProvider.notifier).state =
+                      AppPageIndex.mediaLibrary,
                 ),
                 const SizedBox(height: 4),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-tasks'),
-                  index: 3,
+                  index: AppPageIndex.backgroundTasks,
                   currentIndex: currentIndex,
                   icon: Icons.task_alt_rounded,
                   label: '后台任务',
                   badgeText: activeTasks > 0 ? '$activeTasks' : null,
                   badgeColor: scheme.primary,
-                  onTap: () => ref.read(currentPageProvider.notifier).state = 3,
+                  onTap: () => ref.read(currentPageProvider.notifier).state =
+                      AppPageIndex.backgroundTasks,
                 ),
               ],
             ),
@@ -158,10 +178,12 @@ class AppSidebar extends ConsumerWidget {
                           builder: (_) => const DownloaderSettingsPanel(),
                         ),
                         icon: const Icon(Icons.settings_outlined, size: 15),
-                        label: const Text('偏好设置', style: TextStyle(fontSize: 12)),
+                        label:
+                            const Text('偏好设置', style: TextStyle(fontSize: 12)),
                         style: TextButton.styleFrom(
                           alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
                           visualDensity: VisualDensity.compact,
                         ),
                       ),
@@ -260,7 +282,8 @@ class _SidebarItemState extends State<_SidebarItem> {
               ),
               if (widget.badgeText != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 1.5),
                   decoration: BoxDecoration(
                     color: widget.badgeColor ?? scheme.primary,
                     borderRadius: BorderRadius.circular(100),
