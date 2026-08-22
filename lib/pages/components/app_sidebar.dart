@@ -155,6 +155,16 @@ class AppSidebar extends ConsumerWidget {
                   onTap: () => ref.read(currentPageProvider.notifier).state =
                       AppPageIndex.backgroundTasks,
                 ),
+                const SizedBox(height: 4),
+                _SidebarItem(
+                  key: const ValueKey('onboarding-sidebar-database'),
+                  index: AppPageIndex.database,
+                  currentIndex: currentIndex,
+                  icon: Icons.storage_rounded,
+                  label: '数据库',
+                  onTap: () => ref.read(currentPageProvider.notifier).state =
+                      AppPageIndex.database,
+                ),
               ],
             ),
           ),

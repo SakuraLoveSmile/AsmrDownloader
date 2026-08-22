@@ -154,8 +154,9 @@ Map<String, String> _workTitles(List<String> sourceIds) {
 ProviderContainer _createContainer(
   Directory tempDir,
   _TestServer server,
-  List<String> sourceIds,
-) {
+  List<String> sourceIds, {
+  Map<String, Set<String>>? selectedTrackIdsBySource,
+}) {
   final titles = _workTitles(sourceIds);
   final queueFilePath = p.join(tempDir.path, 'download_queue.json');
 
@@ -203,7 +204,12 @@ ProviderContainer _createContainer(
           if (data == null) return null;
           final folder = Folder(id: sid, title: sid)
             ..children = getTrackItems(data);
-          folder.setSelection(true);
+          if (selectedTrackIdsBySource == null ||
+              !selectedTrackIdsBySource.containsKey(sid)) {
+            folder.setSelection(true);
+          } else {
+            applySelectedFileIds(folder, selectedTrackIdsBySource[sid]);
+          }
           return folder;
         },
         orElse: () => null,
@@ -249,9 +255,15 @@ void main() {
 
     final notifier = container.read(downloadQueueProvider.notifier);
     expect(await notifier.add('RJ00002'), isTrue);
-    expect(container.read(downloadQueueProvider), ['RJ00001', 'RJ00002']);
     expect(
-        await DownloadQueue(filePath: filePath).list(), ['RJ00001', 'RJ00002']);
+      container.read(downloadQueueProvider).map((item) => item.sourceId),
+      ['RJ00001', 'RJ00002'],
+    );
+    expect(
+      (await DownloadQueue(filePath: filePath).list())
+          .map((item) => item.sourceId),
+      ['RJ00001', 'RJ00002'],
+    );
   });
 
   test('队列去重与持久化：add 两次只保留一个，重新构造后条目仍在', () async {
@@ -264,18 +276,52 @@ void main() {
     final added2 = await queue.add('RJ00001');
     expect(added1, isTrue);
     expect(added2, isFalse);
-    expect(await queue.list(), ['RJ00001']);
+    expect((await queue.list()).map((item) => item.sourceId), ['RJ00001']);
 
     await queue.add('RJ00002');
-    expect(await queue.list(), ['RJ00001', 'RJ00002']);
+    expect((await queue.list()).map((item) => item.sourceId),
+        ['RJ00001', 'RJ00002']);
 
     // 重新构造（模拟重启）：条目应从磁盘恢复
     final queue2 = DownloadQueue(filePath: filePath);
-    expect(await queue2.list(), ['RJ00001', 'RJ00002']);
+    expect((await queue2.list()).map((item) => item.sourceId),
+        ['RJ00001', 'RJ00002']);
 
     // popFront 取出队首并落盘
-    expect(await queue2.popFront(), 'RJ00001');
-    expect(await queue2.list(), ['RJ00002']);
+    expect((await queue2.popFront())?.sourceId, 'RJ00001');
+    expect((await queue2.list()).map((item) => item.sourceId), ['RJ00002']);
+  });
+
+  test('队列持久化入队时的勾选音轨，并兼容旧版 sourceId 格式', () async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('dl_queue_test_selection');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final filePath = p.join(tempDir.path, 'download_queue.json');
+
+    final queue = DownloadQueue(filePath: filePath);
+    expect(
+      await queue.add(
+        'RJ00001',
+        selectedTrackIds: ['track-a', 'track-b'],
+      ),
+      isTrue,
+    );
+
+    final item = (await queue.list()).single;
+    expect(item.sourceId, 'RJ00001');
+    expect(item.selectedTrackIds, ['track-a', 'track-b']);
+    final raw = jsonDecode(File(filePath).readAsStringSync()) as Map;
+    expect(raw['items'][0]['selectedTrackIds'], ['track-a', 'track-b']);
+
+    // 旧版只有 sourceId，读取时用 null 表示兼容行为：恢复为全选。
+    File(filePath).writeAsStringSync(
+      jsonEncode({
+        'items': ['RJ00002']
+      }),
+    );
+    final legacyItem = (await DownloadQueue(filePath: filePath).list()).single;
+    expect(legacyItem.sourceId, 'RJ00002');
+    expect(legacyItem.selectedTrackIds, isNull);
   });
 
   test('队列顺序执行：下载中 enqueue 两个作品，按序下载且文件均落盘', () async {
@@ -303,7 +349,10 @@ void main() {
     }
     await container.read(downloadQueueProvider.notifier).add('RJ00002');
     await container.read(downloadQueueProvider.notifier).add('RJ00003');
-    expect(container.read(downloadQueueProvider), ['RJ00002', 'RJ00003']);
+    expect(
+      container.read(downloadQueueProvider).map((item) => item.sourceId),
+      ['RJ00002', 'RJ00003'],
+    );
 
     await runFuture;
 
@@ -393,12 +442,52 @@ void main() {
       isFalse,
     );
     // 队列条目保留
-    expect(container.read(downloadQueueProvider), ['RJ00002']);
+    expect(
+      container.read(downloadQueueProvider).map((item) => item.sourceId),
+      ['RJ00002'],
+    );
     // 第二个作品文件未下载
     expect(
       File(_workFilePath(tempDir, 'RJ00002', 'RJ00002_01.bin')).existsSync(),
       isFalse,
     );
+  });
+
+  test('从队列下载时恢复入队时的部分勾选，只下载选中的音轨', () async {
+    final sourceIds = ['RJ00001', 'RJ00002'];
+    final server = await _TestServer.start(
+      workFiles: _workFilesFor(sourceIds),
+    );
+    addTearDown(server.close);
+
+    final tempDir =
+        Directory.systemTemp.createTempSync('dl_queue_test_selection_restore');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+
+    final selectedId = 'RJ00002_RJ00002_01.bin';
+    final container = _createContainer(
+      tempDir,
+      server,
+      sourceIds,
+      selectedTrackIdsBySource: {'RJ00002': <String>{}},
+    );
+
+    await container.read(downloadQueueProvider.notifier).add(
+      'RJ00002',
+      selectedTrackIds: [selectedId],
+    );
+
+    await container.read(downloadManagerProvider).startFromQueue();
+
+    expect(
+      File(_workFilePath(tempDir, 'RJ00002', 'RJ00002_01.bin')).existsSync(),
+      isTrue,
+    );
+    expect(
+      File(_workFilePath(tempDir, 'RJ00002', 'RJ00002_02.bin')).existsSync(),
+      isFalse,
+    );
+    expect(container.read(downloadQueueProvider), isEmpty);
   });
 
   test('注册表快照：下载中切换搜索作品，works_index 写入快照作品的数据', () async {

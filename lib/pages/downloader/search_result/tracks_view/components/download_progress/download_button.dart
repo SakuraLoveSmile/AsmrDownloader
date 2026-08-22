@@ -32,7 +32,7 @@ class DownloadButton extends ConsumerWidget {
     // 重复下载同一个作品。
     final sourceId = ref.watch(sourceIdProvider);
     final queue = ref.watch(downloadQueueProvider);
-    if (sourceId != null && queue.contains(sourceId)) {
+    if (sourceId != null && queue.any((item) => item.sourceId == sourceId)) {
       return _PillButton(
         backgroundColor: scheme.surfaceContainerHighest,
         onColor: scheme.onSurfaceVariant,
@@ -84,6 +84,8 @@ class _EnqueueButtonState extends ConsumerState<_EnqueueButton> {
     final sourceId = ref.watch(sourceIdProvider);
     final currentDl = ref.watch(currentDownloadingSourceIdProvider);
     final queue = ref.watch(downloadQueueProvider);
+    final rootFolder = ref.watch(rootFolderProvider);
+    final tracksReady = rootFolder != null && rootFolder.id == sourceId;
 
     String? tooltip;
     var disabled = _adding;
@@ -93,7 +95,10 @@ class _EnqueueButtonState extends ConsumerState<_EnqueueButton> {
     } else if (sourceId == currentDl) {
       disabled = true;
       tooltip = '该作品正在下载中';
-    } else if (queue.contains(sourceId)) {
+    } else if (!tracksReady) {
+      disabled = true;
+      tooltip = '音轨仍在加载，请稍候';
+    } else if (queue.any((item) => item.sourceId == sourceId)) {
       disabled = true;
       tooltip = '该作品已在队列中';
     }
@@ -111,14 +116,29 @@ class _EnqueueButtonState extends ConsumerState<_EnqueueButton> {
     if (_adding) return;
     setState(() => _adding = true);
     try {
-      final added =
-          await ref.read(downloadQueueProvider.notifier).add(sourceId);
+      final rootFolder = ref.read(rootFolderProvider);
+      if (rootFolder == null || rootFolder.id != sourceId) {
+        ref.read(uiServiceProvider).showSnack('音轨仍在加载，请稍候再加入队列');
+        return;
+      }
+      final selectedIds = selectedFileIds(rootFolder);
+      final added = await ref.read(downloadQueueProvider.notifier).add(
+            sourceId,
+            selectedTrackIds: selectedIds,
+          );
       if (!mounted) return;
 
       if (added) {
         final remaining = ref.read(downloadQueueProvider).length;
-        ref.read(uiServiceProvider).showSnack('已加入下载队列（剩余 $remaining 个）');
-      } else if (ref.read(downloadQueueProvider).contains(sourceId)) {
+        final selectionText = selectedIds.isEmpty
+            ? '未勾选音轨，将只下载封面'
+            : '已记录 ${selectedIds.length} 个音轨';
+        ref
+            .read(uiServiceProvider)
+            .showSnack('已加入下载队列（$selectionText，剩余 $remaining 个）');
+      } else if (ref
+          .read(downloadQueueProvider)
+          .any((item) => item.sourceId == sourceId)) {
         ref.read(uiServiceProvider).showSnack('该作品已在下载队列中');
       } else {
         ref.read(uiServiceProvider).showSnack('加入队列失败，请重试');

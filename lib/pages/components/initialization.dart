@@ -92,8 +92,23 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
     savedDlPath = downloadsDir?.path ?? '';
   }
   ref.read(downloadPathProvider.notifier).state = savedDlPath;
-  ref.read(navidromePathProvider.notifier).state =
-      config['navidromePath'] as String? ?? '';
+  final savedNavidromePath = config['navidromePath'] as String? ?? '';
+  ref.read(navidromePathProvider.notifier).state = savedNavidromePath;
+
+  // 媒体库默认沿用下载目录和整理目录；用户一旦在媒体库设置中保存过
+  // 自定义列表，就只使用自定义列表。这样 NAS 可以直接作为第二个扫描根目录。
+  final hasConfiguredMediaRoots = config.containsKey('mediaLibraryRoots');
+  final configuredMediaRoots = (config['mediaLibraryRoots'] as List?)
+          ?.map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toList() ??
+      const <String>[];
+  final mediaRoots = hasConfiguredMediaRoots
+      ? configuredMediaRoots
+      : <String>{savedDlPath, savedNavidromePath}
+          .where((value) => value.isNotEmpty)
+          .toList();
+  ref.read(mediaLibraryRootsProvider.notifier).state = mediaRoots;
   ref.read(dlCoverProvider.notifier).state =
       config['dlCover'] as bool? ?? false;
 

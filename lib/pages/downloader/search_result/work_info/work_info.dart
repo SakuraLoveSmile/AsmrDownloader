@@ -1,5 +1,4 @@
 import 'package:asmr_downloader/pages/components/copyable_textbox.dart';
-import 'package:asmr_downloader/pages/downloader/search_result/empty_guidance.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_cv.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_misc_info.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_tags.dart';
@@ -29,10 +28,6 @@ class WorkInfo extends ConsumerWidget {
       child: workInfoLoadingState.when(
         data: (data) {
           if (data == null) {
-            // 尚未搜索：显示引导
-            if (ref.read(searchTextProvider) == null) {
-              return const EmptyGuidance();
-            }
             // 搜索了但拿不到 work info：
             // 无 sourceId 说明搜索结果为空；否则进入降级模式
             if (ref.read(sourceIdProvider) == null) {

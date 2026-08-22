@@ -1,4 +1,3 @@
-import 'package:asmr_downloader/pages/downloader/search_result/empty_guidance.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/tracks_view/components/download_progress/download_progress.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
@@ -22,10 +21,6 @@ class TracksView extends ConsumerWidget {
           left: horizontalPadding, right: horizontalPadding, bottom: 10.0),
       child: tracksLoadingState.when(
         data: (_) {
-          // 尚未搜索：显示引导而非空白
-          if (ref.read(searchTextProvider) == null) {
-            return const EmptyGuidance();
-          }
           final rootFolder = ref.read(rootFolderProvider);
           if (ref.read(workInfoLoadingStateProvider).value == null ||
               rootFolder == null) {

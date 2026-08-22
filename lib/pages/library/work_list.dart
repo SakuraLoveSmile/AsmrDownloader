@@ -355,10 +355,14 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            Checkbox(
-              value: selected,
-              onChanged: (_) => onToggleSelect(),
-              visualDensity: VisualDensity.compact,
+            Semantics(
+              label: '选择作品 ${item.sourceId}',
+              checked: selected,
+              child: Checkbox(
+                value: selected,
+                onChanged: (_) => onToggleSelect(),
+                visualDensity: VisualDensity.compact,
+              ),
             ),
             const SizedBox(width: 4),
             Expanded(
@@ -377,13 +381,17 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
                       ),
                       const SizedBox(width: 8),
                       Flexible(
-                        child: Text(
-                          item.title,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: scheme.onSurface,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w500,
+                        child: Tooltip(
+                          message: item.title,
+                          waitDuration: const Duration(milliseconds: 500),
+                          child: Text(
+                            item.title,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: scheme.onSurface,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
@@ -470,6 +478,11 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
               ),
             ),
             const SizedBox(width: 8),
+            Container(
+              width: 1,
+              height: 22,
+              color: scheme.outlineVariant,
+            ),
             // 行内操作
             _RowIconBtn(
               icon: Icons.folder_open_rounded,
@@ -546,19 +559,30 @@ class _RowIconBtn extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.only(left: 3),
-      child: IconButton(
-        onPressed: enabled ? onTap : null,
-        icon: Icon(icon, size: 16),
-        tooltip: tooltip,
-        visualDensity: VisualDensity.compact,
-        splashRadius: 14,
-        style: IconButton.styleFrom(
-          shape: const CircleBorder(),
-          backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.3),
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: tooltip,
+        child: Tooltip(
+          message: tooltip,
+          child: IconButton(
+            onPressed: enabled ? onTap : null,
+            icon: Icon(icon, size: 16),
+            // 统一保留足够的鼠标/触控点击区域，并让语义标签由外层提供。
+            tooltip: null,
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            padding: const EdgeInsets.all(10),
+            splashRadius: 18,
+            style: IconButton.styleFrom(
+              shape: const CircleBorder(),
+              backgroundColor:
+                  scheme.surfaceContainerHigh.withValues(alpha: 0.3),
+            ),
+            color: enabled
+                ? (color ?? scheme.onSurfaceVariant)
+                : scheme.onSurface.withValues(alpha: 0.2),
+          ),
         ),
-        color: enabled
-            ? (color ?? scheme.onSurfaceVariant)
-            : scheme.onSurface.withValues(alpha: 0.2),
       ),
     );
   }

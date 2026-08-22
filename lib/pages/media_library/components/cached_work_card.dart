@@ -148,6 +148,11 @@ class _CachedWorkCardState extends ConsumerState<CachedWorkCard> {
   }
 
   String get _secondaryLine {
+    if (!entry.hasMetadata) {
+      return entry.locationCount > 1
+          ? '未关联元数据 · ${entry.locationCount} 个位置'
+          : '未关联元数据 · 已扫描目录';
+    }
     final circle = entry.circleName;
     final cvs = entry.cvNames.join('、');
     if (circle.isEmpty && cvs.isEmpty) return '社团/CV：-';

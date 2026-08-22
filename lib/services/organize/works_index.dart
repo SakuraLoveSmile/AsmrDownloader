@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:asmr_downloader/services/library/library_database.dart';
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 
 /// 下载作品注册表条目。
-/// 记录本应用下载过的作品及其元数据，供批量整理使用；
-/// 不存放在下载目录（避免污染用户文件），统一存应用数据目录。
+///
+/// 记录本应用下载过的作品及其作品级元数据，供整理和作品库使用；
+/// 不保存音轨明细，音轨/封面缓存由 cache 数据库按 sourceId 管理。
 class WorkEntry {
   /// 作品 sourceId，如 RJ01619789
   final String sourceId;
@@ -75,97 +78,179 @@ class WorkEntry {
   }
 
   Map<String, dynamic> toJson() => {
-    'sourceId': sourceId,
-    'dlPath': dlPath,
-    'dirName': dirName,
-    'title': title,
-    'cvNames': cvNames,
-    'circleName': circleName,
-    'releaseDate': releaseDate,
-    'tags': tags,
-    'coverUrl': coverUrl,
-    'organizedAt': organizedAt,
-  };
+        'sourceId': sourceId,
+        'dlPath': dlPath,
+        'dirName': dirName,
+        'title': title,
+        'cvNames': cvNames,
+        'circleName': circleName,
+        'releaseDate': releaseDate,
+        'tags': tags,
+        'coverUrl': coverUrl,
+        'organizedAt': organizedAt,
+      };
 
   factory WorkEntry.fromJson(Map<String, dynamic> json) => WorkEntry(
-    sourceId: json['sourceId']?.toString() ?? '',
-    dlPath: json['dlPath']?.toString() ?? '',
-    dirName: json['dirName']?.toString() ?? '',
-    title: json['title']?.toString() ?? '',
-    cvNames: json['cvNames']?.toString() ?? '',
-    circleName: json['circleName']?.toString() ?? '',
-    releaseDate: json['releaseDate']?.toString() ?? '',
-    tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-    coverUrl: json['coverUrl']?.toString() ?? '',
-    organizedAt: json['organizedAt']?.toString(),
-  );
+        sourceId: json['sourceId']?.toString() ?? '',
+        dlPath: json['dlPath']?.toString() ?? '',
+        dirName: json['dirName']?.toString() ?? '',
+        title: json['title']?.toString() ?? '',
+        cvNames: json['cvNames']?.toString() ?? '',
+        circleName: json['circleName']?.toString() ?? '',
+        releaseDate: json['releaseDate']?.toString() ?? '',
+        tags: (json['tags'] as List?)?.map((e) => e.toString()).toList() ??
+            const [],
+        coverUrl: json['coverUrl']?.toString() ?? '',
+        organizedAt: json['organizedAt']?.toString(),
+      );
 }
 
-/// 下载作品注册表：记录本应用下载过的作品及元数据。
-/// 存储为 JSON 文件：{sourceId: entryJson}
+/// 下载作品注册表。
+///
+/// 新版本使用 SQLite/Drift 保存，旧版本的 [filePath] 只作为 JSON 迁移源保留。
+/// 这样不会把数据库写进下载目录，也不会因为目录扫描失败而丢失作品元数据。
 class WorksIndex {
+  static const _legacyMigrationKey = 'legacy_works_index_json_imported_v1';
+
+  /// 旧版 JSON 路径，保留公开属性以兼容设置/测试和迁移提示。
   final String filePath;
 
-  WorksIndex({required this.filePath});
+  late final LibraryDatabase database;
+  late final bool _ownsDatabase;
+  Future<void>? _migration;
 
-  Future<Map<String, dynamic>> _readRaw() async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) return {};
-      final decoded = json.decode(await file.readAsString());
-      return decoded is Map<String, dynamic> ? decoded : {};
-    } catch (e) {
-      Log.warning('read works index failed: $filePath\n' 'error: $e');
-      return {};
-    }
+  WorksIndex({required this.filePath, LibraryDatabase? database}) {
+    this.database = database ??
+        LibraryDatabase.fromPath(_databasePathForLegacyFile(filePath));
+    _ownsDatabase = database == null;
   }
 
-  Future<void> _writeRaw(Map<String, dynamic> data) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        await file.create(recursive: true);
+  static String _databasePathForLegacyFile(String legacyPath) {
+    final dir = p.dirname(legacyPath);
+    final name = p.basenameWithoutExtension(legacyPath);
+    return p.join(dir, '$name.db');
+  }
+
+  Future<void> _ensureMigrated() {
+    return _migration ??= _migrateLegacyJson();
+  }
+
+  Future<void> _migrateLegacyJson() async {
+    final marker = await (database.select(database.libraryMeta)
+          ..where((t) => t.key.equals(_legacyMigrationKey)))
+        .getSingleOrNull();
+    if (marker != null) return;
+
+    final legacyEntries = <WorkEntry>[];
+    final legacyFile = File(filePath);
+    if (await legacyFile.exists()) {
+      try {
+        final decoded = jsonDecode(await legacyFile.readAsString());
+        if (decoded is Map) {
+          for (final raw in decoded.values) {
+            if (raw is Map) {
+              final entry = WorkEntry.fromJson(
+                Map<String, dynamic>.from(raw),
+              );
+              if (entry.sourceId.isNotEmpty) legacyEntries.add(entry);
+            }
+          }
+        }
+        Log.info('migrating ${legacyEntries.length} works from $filePath');
+      } catch (e) {
+        // 损坏的旧 JSON 不应阻止新数据库启动；保留空索引供用户重新扫描。
+        Log.warning('read legacy works index failed: $filePath\nerror: $e');
       }
-      await file.writeAsString(json.encode(data));
-    } catch (e) {
-      Log.error('write works index failed: $filePath\n' 'error: $e');
-      rethrow;
     }
+
+    await database.transaction(() async {
+      for (final entry in legacyEntries) {
+        await database.into(database.libraryWorks).insertOnConflictUpdate(
+              _toCompanion(entry),
+            );
+      }
+      await database.into(database.libraryMeta).insertOnConflictUpdate(
+            LibraryMetaCompanion.insert(
+              key: _legacyMigrationKey,
+              value: DateTime.now().toIso8601String(),
+            ),
+          );
+    });
   }
 
-  /// 全部条目
+  static LibraryWorksCompanion _toCompanion(WorkEntry entry) {
+    return LibraryWorksCompanion.insert(
+      sourceId: entry.sourceId,
+      dlPath: Value(entry.dlPath),
+      dirName: Value(entry.dirName),
+      title: Value(entry.title),
+      cvNames: Value(entry.cvNames),
+      circleName: Value(entry.circleName),
+      releaseDate: Value(entry.releaseDate),
+      tagsJson: Value(jsonEncode(entry.tags)),
+      coverUrl: Value(entry.coverUrl),
+      organizedAt: Value(entry.organizedAt),
+      updatedAt: Value(DateTime.now()),
+    );
+  }
+
+  static WorkEntry _fromRow(LibraryWork row) {
+    var tags = const <String>[];
+    try {
+      final decoded = jsonDecode(row.tagsJson);
+      if (decoded is List) {
+        tags = decoded.map((e) => e.toString()).toList();
+      }
+    } catch (_) {
+      // 坏的标签字段不应影响作品库其它字段。
+    }
+    return WorkEntry(
+      sourceId: row.sourceId,
+      dlPath: row.dlPath,
+      dirName: row.dirName,
+      title: row.title,
+      cvNames: row.cvNames,
+      circleName: row.circleName,
+      releaseDate: row.releaseDate,
+      tags: tags,
+      coverUrl: row.coverUrl,
+      organizedAt: row.organizedAt,
+    );
+  }
+
+  /// 全部条目，按 sourceId 稳定排序。
   Future<List<WorkEntry>> list() async {
-    final raw = await _readRaw();
-    return raw.values
-        .whereType<Map<String, dynamic>>()
-        .map(WorkEntry.fromJson)
-        .where((e) => e.sourceId.isNotEmpty)
-        .toList();
+    await _ensureMigrated();
+    final query = database.select(database.libraryWorks)
+      ..orderBy([(t) => OrderingTerm.asc(t.sourceId)]);
+    return (await query.get()).map(_fromRow).toList();
   }
 
   Future<WorkEntry?> get(String sourceId) async {
-    final raw = await _readRaw();
-    final json = raw[sourceId];
-    if (json is! Map<String, dynamic>) return null;
-    return WorkEntry.fromJson(json);
+    await _ensureMigrated();
+    final row = await (database.select(database.libraryWorks)
+          ..where((t) => t.sourceId.equals(sourceId)))
+        .getSingleOrNull();
+    return row == null ? null : _fromRow(row);
   }
 
-  /// 新增或更新条目
+  /// 新增或更新条目。
   Future<void> upsert(WorkEntry entry) async {
-    final raw = await _readRaw();
-    raw[entry.sourceId] = entry.toJson();
-    await _writeRaw(raw);
+    await _ensureMigrated();
+    await database.into(database.libraryWorks).insertOnConflictUpdate(
+          _toCompanion(entry),
+        );
   }
 
-  /// 删除条目
+  /// 删除条目。不会删除媒体库扫描位置，也不会删除实际文件。
   Future<void> remove(String sourceId) async {
-    final raw = await _readRaw();
-    if (raw.remove(sourceId) != null) {
-      await _writeRaw(raw);
-    }
+    await _ensureMigrated();
+    await (database.delete(database.libraryWorks)
+          ..where((t) => t.sourceId.equals(sourceId)))
+        .go();
   }
 
-  /// 记录整理完成时间
+  /// 记录整理完成时间。
   Future<void> markOrganized(String sourceId, {DateTime? time}) async {
     final entry = await get(sourceId);
     if (entry == null) return;
@@ -173,18 +258,23 @@ class WorksIndex {
         organizedAt: (time ?? DateTime.now()).toIso8601String()));
   }
 
-  /// 下载目录已不存在的条目
+  /// 下载目录已不存在的条目。
   Future<List<WorkEntry>> listMissing() async {
     final entries = await list();
     return entries.where((e) => !Directory(e.sourceDir).existsSync()).toList();
   }
 
-  /// 清理下载目录已不存在的条目，返回清理数量
+  /// 清理下载目录已不存在的条目，返回清理数量。
   Future<int> cleanMissing() async {
     final missing = await listMissing();
     for (final entry in missing) {
       await remove(entry.sourceId);
     }
     return missing.length;
+  }
+
+  /// 仅用于测试/Provider 关闭。
+  Future<void> close() async {
+    if (_ownsDatabase) await database.close();
   }
 }

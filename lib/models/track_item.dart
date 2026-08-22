@@ -90,6 +90,58 @@ class Folder extends TrackItem {
   }
 }
 
+/// 返回作品中当前勾选的文件 ID。
+///
+/// 文件 ID 来自音轨接口的 hash，跨重新搜索/重新构建音轨树仍保持稳定，
+/// 适合写入下载队列持久化；目录本身不写入，因为目录勾选最终代表的是
+/// 其下所有文件的选择结果。
+List<String> selectedFileIds(Folder root) {
+  final ids = <String>[];
+
+  void walk(TrackItem item) {
+    if (item is Folder) {
+      for (final child in item.children) {
+        walk(child);
+      }
+    } else if (item is FileAsset && item.selected) {
+      ids.add(item.id);
+    }
+  }
+
+  walk(root);
+  return ids;
+}
+
+/// 将持久化的文件选择恢复到重新构建的音轨树。
+///
+/// [selectedIds] 为 null 表示旧版队列条目没有选择信息，按旧行为默认
+/// 全选；非 null（包括空集合）表示严格恢复用户当时的勾选结果。
+void applySelectedFileIds(Folder root, Iterable<String>? selectedIds) {
+  if (selectedIds == null) {
+    root.setSelection(true);
+    return;
+  }
+
+  final selected = selectedIds.toSet();
+
+  bool walk(TrackItem item) {
+    if (item is Folder) {
+      var allSelected = item.children.isNotEmpty;
+      for (final child in item.children) {
+        allSelected = walk(child) && allSelected;
+      }
+      item.selected = allSelected;
+      return allSelected;
+    }
+
+    final isSelected = item is FileAsset && selected.contains(item.id);
+    item.selected = isSelected;
+    return isSelected;
+  }
+
+  walk(root);
+}
+
 enum DownloadStatus { notStarted, downloading, completed, failed, canceled }
 
 class FileAsset extends TrackItem {

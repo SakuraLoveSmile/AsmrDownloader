@@ -621,6 +621,7 @@ class UIService {
     ref
       ..read(downloadPathProvider.notifier).state = dlPath
       ..read(configFileProvider).addOrUpdate({'dlPath': dlPath});
+    _addMediaLibraryRoot(dlPath);
     Log.info('dlPath: $dlPath');
     showSnack('下载路径已设置为 $dlPath');
   }
@@ -632,8 +633,22 @@ class UIService {
     ref
       ..read(navidromePathProvider.notifier).state = navidromePath
       ..read(configFileProvider).addOrUpdate({'navidromePath': navidromePath});
+    _addMediaLibraryRoot(navidromePath);
     Log.info('navidromePath: $navidromePath');
     showSnack('整理路径已设置为 $navidromePath');
+  }
+
+  /// 下载/整理路径变更后自动加入轻量媒体库扫描根目录。
+  /// 用户仍可在媒体库设置中移除不想扫描的目录。
+  void _addMediaLibraryRoot(String path) {
+    final normalized = p.normalize(path.trim());
+    if (normalized.isEmpty) return;
+    final roots = [...ref.read(mediaLibraryRootsProvider)];
+    if (roots.any((root) => p.equals(p.normalize(root), normalized))) return;
+    roots.add(normalized);
+    ref
+      ..read(mediaLibraryRootsProvider.notifier).state = roots
+      ..read(configFileProvider).addOrUpdate({'mediaLibraryRoots': roots});
   }
 
   /// 执行整理（不依赖 UI），返回整理结果；未执行成功返回 null

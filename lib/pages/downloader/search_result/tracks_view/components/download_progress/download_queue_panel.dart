@@ -48,13 +48,16 @@ class DownloadQueuePanel extends ConsumerWidget {
                 shrinkWrap: true,
                 itemCount: queue.length,
                 itemBuilder: (_, index) {
-                  final sourceId = queue[index];
+                  final item = queue[index];
                   return _QueueRow(
-                    sourceId: sourceId,
+                    sourceId: item.sourceId,
+                    selectionLabel: item.selectedTrackIds == null
+                        ? '全部音轨（旧版队列）'
+                        : '已选 ${item.selectedTrackIds!.length} 个音轨',
                     isDownloading: downloading,
                     onRemove: () => ref
                         .read(downloadQueueProvider.notifier)
-                        .remove(sourceId),
+                        .remove(item.sourceId),
                   );
                 },
               ),
@@ -110,11 +113,13 @@ class _Header extends StatelessWidget {
 class _QueueRow extends StatelessWidget {
   const _QueueRow({
     required this.sourceId,
+    required this.selectionLabel,
     required this.isDownloading,
     required this.onRemove,
   });
 
   final String sourceId;
+  final String selectionLabel;
   final bool isDownloading;
   final VoidCallback onRemove;
 
@@ -128,13 +133,25 @@ class _QueueRow extends StatelessWidget {
           Icon(Icons.audio_file, size: 16, color: scheme.onSurfaceVariant),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              sourceId,
-              style: TextStyle(
-                fontSize: 13,
-                color: scheme.onSurface,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sourceId,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: scheme.onSurface,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                Text(
+                  selectionLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
           IconButton(

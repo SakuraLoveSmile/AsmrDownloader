@@ -9,6 +9,7 @@ import 'package:asmr_downloader/services/download/multi_thread_downloader.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/services/library/media_library_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
@@ -202,6 +203,20 @@ class DownloadManager {
       return _RunOutcome.aborted;
     }
 
+    // 媒体库扫描只记录 RJ 号，因此本机下载根目录里的断点目录不会阻止
+    // 恢复；但 NAS/其它扫描根目录已有记录时，直接阻止重复下载。
+    final existingExternalCopy =
+        await ref.read(mediaLibraryServiceProvider).findExistingOutsideRoot(
+              sourceId: sourceId,
+              excludedRoot: ref.read(downloadPathProvider),
+            );
+    if (existingExternalCopy != null) {
+      ref.read(uiServiceProvider).showSnack(
+            '媒体库已存在 $sourceId（${existingExternalCopy.matchedPath}），已跳过重复下载',
+          );
+      return _RunOutcome.aborted;
+    }
+
     // 标题/目录名为空（title 降级链尚未给出保底值）时拒绝下载
     final voiceWorkPath = ref.read(voiceWorkPathProvider);
     if (p.basename(voiceWorkPath) == '-' ||
@@ -351,8 +366,9 @@ class DownloadManager {
     if (_cancelRequested || runSeq != _runSeq) return false;
 
     final queueNotifier = ref.read(downloadQueueProvider.notifier);
-    final nextSourceId = await queueNotifier.peek();
+    final queuedWork = await queueNotifier.peek();
     if (runSeq != _runSeq) return false;
+    final nextSourceId = queuedWork?.sourceId;
     if (nextSourceId == null) return false;
 
     // 搜索队首作品并等待元数据就绪（与 search_box._refresh 同写法，
@@ -368,16 +384,22 @@ class DownloadManager {
     // 先确认搜索和音轨都成功，再从队列移除。这样 API/网络异常时，
     // 条目会继续留在队列里，用户可以稍后重试，而不会无声丢失。
     final tracks = ref.read(rawTracksProvider);
+    final rootFolder = ref.read(rootFolderProvider);
     final prepared = ref.read(sourceIdProvider) == nextSourceId &&
         tracks.hasValue &&
         tracks.value != null &&
-        ref.read(rootFolderProvider) != null;
+        rootFolder != null;
     if (!prepared) {
       ref
           .read(uiServiceProvider)
           .showSnack('队列作品 $nextSourceId 加载失败，条目已保留，可稍后重试');
       return false;
     }
+
+    // 重新搜索会构建一棵全新的音轨树；恢复入队时保存的文件选择，
+    // 非 null（包括空列表）表示严格恢复，null 则兼容旧版队列的全选行为。
+    applySelectedFileIds(rootFolder, queuedWork!.selectedTrackIds);
+    ref.read(rootFolderProvider.notifier).state = rootFolder;
 
     // 仅当队首仍未被用户移除时才消费它，避免异步加载期间错删下一个条目。
     final claimed = await queueNotifier.popFrontIf(nextSourceId);

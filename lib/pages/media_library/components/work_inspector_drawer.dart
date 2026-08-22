@@ -252,8 +252,29 @@ class WorkInspectorDrawer extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   _InfoItem(
-                    label: '缓存时间',
+                    label: entry.hasMetadata ? '元数据缓存' : '最近扫描',
                     content: Text(_formatDateTime(entry.cachedAt)),
+                  ),
+                  const SizedBox(height: 8),
+                  _InfoItem(
+                    label: '扫描位置',
+                    content: entry.locations.isEmpty
+                        ? const Text('未记录')
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              for (final location in entry.locations)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 3),
+                                  child: Text(
+                                    location.matchedPath,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 11),
+                                  ),
+                                ),
+                            ],
+                          ),
                   ),
                   const SizedBox(height: 16),
                   const Divider(height: 1),

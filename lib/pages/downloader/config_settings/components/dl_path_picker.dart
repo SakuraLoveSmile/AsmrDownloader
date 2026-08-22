@@ -15,23 +15,27 @@ class DownloadPathPicker extends ConsumerWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            minWidth: 150,
-            maxWidth: (MediaQuery.sizeOf(context).width * 0.22)
-                .clamp(180.0, 240.0)
-                .toDouble(),
-          ),
-          child: TextField(
-            enabled: false,
-            style: const TextStyle(fontSize: 12.5),
-            decoration: InputDecoration(
-              prefixIcon: const Icon(
-                Icons.folder_rounded,
-                size: 16,
-                color: AppColors.folder,
+        Tooltip(
+          message: dlPath.isEmpty ? '尚未设置下载路径' : dlPath,
+          waitDuration: const Duration(milliseconds: 500),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 150,
+              maxWidth: (MediaQuery.sizeOf(context).width * 0.22)
+                  .clamp(180.0, 240.0)
+                  .toDouble(),
+            ),
+            child: TextField(
+              enabled: false,
+              style: const TextStyle(fontSize: 12.5),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(
+                  Icons.folder_rounded,
+                  size: 16,
+                  color: AppColors.folder,
+                ),
+                hintText: dlPath.isEmpty ? '选择下载路径' : dlPath,
               ),
-              hintText: dlPath.isEmpty ? '选择下载路径' : dlPath,
             ),
           ),
         ),

@@ -10,7 +10,8 @@ import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 本地缓存媒体库：以封面网格展示 workInfo 缓存条目。
+/// 媒体库：扫描配置目录中的 RJ/VJ/BJ 目录，再与本地 API 元数据数据库关联。
+/// 扫描只建立作品存在性索引，不读取音轨、字幕或封面明细。
 class MediaLibraryPage extends ConsumerStatefulWidget {
   const MediaLibraryPage({super.key});
 
@@ -73,6 +74,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
 
   Widget _buildToolbar(int? total, int? matched) {
     final sort = ref.watch(cacheSortProvider);
+    final groupBy = ref.watch(mediaLibraryGroupByProvider);
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
@@ -128,6 +130,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               ),
             ),
             _buildSortSelector(sort),
+            _buildGroupSelector(groupBy),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -144,10 +147,15 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                 ),
               ),
             ),
+            OutlinedButton.icon(
+              onPressed: () => ref.invalidate(cachedLibraryProvider),
+              icon: const Icon(Icons.manage_search_rounded, size: 15),
+              label: const Text('扫描目录'),
+            ),
             IconButton(
               onPressed: () => ref.invalidate(cachedLibraryProvider),
               icon: const Icon(Icons.refresh_rounded, size: 17),
-              tooltip: '刷新媒体库',
+              tooltip: '重新扫描目录',
               visualDensity: VisualDensity.compact,
               style: IconButton.styleFrom(
                 shape: const CircleBorder(),
@@ -159,7 +167,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               key: const ValueKey('onboarding-cache-management'),
               onPressed: _openCacheManagement,
               icon: const Icon(Icons.tune_rounded, size: 15),
-              label: const Text('缓存管理'),
+              label: const Text('数据库管理'),
             ),
             OutlinedButton.icon(
               key: const ValueKey('onboarding-media-library-settings'),
@@ -175,6 +183,47 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               onPressed: _openCompleteMissing,
               icon: const Icon(Icons.auto_fix_high_rounded, size: 15),
               label: const Text('补全缺失'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupSelector(MediaLibraryGroupBy groupBy) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
+        border: Border.all(color: scheme.outlineVariant, width: 0.8),
+        borderRadius: BorderRadius.circular(100),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<MediaLibraryGroupBy>(
+          value: groupBy,
+          isDense: true,
+          style: TextStyle(color: scheme.onSurface, fontSize: 12),
+          dropdownColor: scheme.surfaceContainerHigh,
+          icon: const Icon(Icons.account_tree_outlined, size: 15),
+          onChanged: (value) {
+            if (value != null) {
+              ref.read(mediaLibraryGroupByProvider.notifier).state = value;
+            }
+          },
+          items: const [
+            DropdownMenuItem(
+              value: MediaLibraryGroupBy.none,
+              child: Text('平铺浏览'),
+            ),
+            DropdownMenuItem(
+              value: MediaLibraryGroupBy.circle,
+              child: Text('按社团分类'),
+            ),
+            DropdownMenuItem(
+              value: MediaLibraryGroupBy.cv,
+              child: Text('按 CV 分类'),
             ),
           ],
         ),
@@ -227,7 +276,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     if (total == 0) {
       return _buildEmpty(
         icon: Icons.photo_library_outlined,
-        message: '暂无缓存作品\n访问作品或使用批量缓存后，会在这里显示。',
+        message: '暂无扫描到的作品\n请在媒体库设置中添加下载目录或已挂载的 NAS 目录。',
       );
     }
     if (entries.isEmpty) {
@@ -244,20 +293,38 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
             ? entries.firstWhere((e) => e.sourceId == selected.sourceId)
             : null;
 
-    final grid = LayoutBuilder(
+    final groupBy = ref.watch(mediaLibraryGroupByProvider);
+    final grid = groupBy == MediaLibraryGroupBy.none
+        ? _buildFlatGrid(entries, currentSelectedEntry)
+        : _buildGroupedGrid(entries, groupBy, currentSelectedEntry);
+
+    return Row(
+      children: [
+        Expanded(child: grid),
+        if (currentSelectedEntry != null)
+          WorkInspectorDrawer(
+            entry: currentSelectedEntry,
+            onClose: () => setState(() => _selectedEntry = null),
+            onRemoved: () => setState(() => _selectedEntry = null),
+            onSelectTag: _applyFilter,
+            onSelectCv: _applyFilter,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildFlatGrid(
+    List<CachedLibraryEntry> entries,
+    CachedLibraryEntry? selectedEntry,
+  ) {
+    return LayoutBuilder(
       builder: (context, constraints) {
-        const targetCardWidth = 176.0;
         const gap = 12.0;
-        final columns = math
-            .max(
-              1,
-              ((constraints.maxWidth + gap) / (targetCardWidth + gap)).floor(),
-            )
-            .toInt();
+        final columns = _columnCount(constraints.maxWidth);
         final gridWidth = math
             .min(
               constraints.maxWidth,
-              columns * targetCardWidth + (columns - 1) * gap + 24,
+              columns * _targetCardWidth + (columns - 1) * gap + 24,
             )
             .toDouble();
         return Align(
@@ -273,46 +340,169 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                 mainAxisSpacing: 14,
               ),
               itemCount: entries.length,
-              itemBuilder: (context, index) {
-                final entry = entries[index];
-                final isSelected =
-                    currentSelectedEntry?.sourceId == entry.sourceId;
-                return CachedWorkCard(
-                  entry: entry,
-                  isSelected: isSelected,
-                  onTap: () {
-                    setState(() {
-                      _selectedEntry = isSelected ? null : entry;
-                    });
-                  },
-                  onRemoved: () {
-                    if (isSelected) {
-                      setState(() => _selectedEntry = null);
-                    } else {
-                      setState(() {});
-                    }
-                  },
-                );
-              },
+              itemBuilder: (context, index) => _buildWorkCard(
+                entries[index],
+                selectedEntry,
+              ),
             ),
           ),
         );
       },
     );
+  }
 
+  Widget _buildGroupedGrid(
+    List<CachedLibraryEntry> entries,
+    MediaLibraryGroupBy groupBy,
+    CachedLibraryEntry? selectedEntry,
+  ) {
+    final groups = _groupEntries(entries, groupBy);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 12.0;
+        final columns = _columnCount(constraints.maxWidth);
+        return ListView(
+          key: const ValueKey('media-library-grouped-list'),
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
+          children: [
+            for (final group in groups.entries) ...[
+              _buildGroupHeader(context, group.key, group.value.length),
+              const SizedBox(height: 8),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisExtent: 300,
+                  crossAxisSpacing: gap,
+                  mainAxisSpacing: 14,
+                ),
+                itemCount: group.value.length,
+                itemBuilder: (context, index) => _buildWorkCard(
+                  group.value[index],
+                  selectedEntry,
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildGroupHeader(BuildContext context, String title, int count) {
+    final scheme = Theme.of(context).colorScheme;
     return Row(
       children: [
-        Expanded(child: grid),
-        if (currentSelectedEntry != null)
-          WorkInspectorDrawer(
-            entry: currentSelectedEntry,
-            onClose: () => setState(() => _selectedEntry = null),
-            onRemoved: () => setState(() => _selectedEntry = null),
-            onSelectTag: _applyFilter,
-            onSelectCv: _applyFilter,
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            color: scheme.primary,
+            borderRadius: BorderRadius.circular(2),
           ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHigh,
+            borderRadius: BorderRadius.circular(100),
+            border: Border.all(color: scheme.outlineVariant, width: 0.7),
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(
+              color: scheme.onSurfaceVariant,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ],
     );
+  }
+
+  Widget _buildWorkCard(
+    CachedLibraryEntry entry,
+    CachedLibraryEntry? selectedEntry,
+  ) {
+    final isSelected = selectedEntry?.sourceId == entry.sourceId;
+    return CachedWorkCard(
+      entry: entry,
+      isSelected: isSelected,
+      onTap: () {
+        setState(() {
+          _selectedEntry = isSelected ? null : entry;
+        });
+      },
+      onRemoved: () {
+        if (isSelected) {
+          setState(() => _selectedEntry = null);
+        } else {
+          setState(() {});
+        }
+      },
+    );
+  }
+
+  static const _targetCardWidth = 176.0;
+
+  static int _columnCount(double width) {
+    const gap = 12.0;
+    return math
+        .max(1, ((width + gap) / (_targetCardWidth + gap)).floor())
+        .toInt();
+  }
+
+  Map<String, List<CachedLibraryEntry>> _groupEntries(
+    List<CachedLibraryEntry> entries,
+    MediaLibraryGroupBy groupBy,
+  ) {
+    final grouped = <String, List<CachedLibraryEntry>>{};
+    for (final entry in entries) {
+      final names = switch (groupBy) {
+        MediaLibraryGroupBy.circle => entry.circleName.trim().isEmpty
+            ? const ['未关联社团']
+            : [entry.circleName.trim()],
+        MediaLibraryGroupBy.cv => entry.cvNames
+                .map((name) => name.trim())
+                .where((name) => name.isNotEmpty)
+                .toSet()
+                .toList()
+                .isEmpty
+            ? const ['未关联 CV']
+            : entry.cvNames
+                .map((name) => name.trim())
+                .where((name) => name.isNotEmpty)
+                .toSet()
+                .toList(),
+        MediaLibraryGroupBy.none => const ['全部'],
+      };
+      for (final name in names) {
+        grouped.putIfAbsent(name, () => []).add(entry);
+      }
+    }
+
+    final sortedKeys = grouped.keys.toList()
+      ..sort((left, right) {
+        final leftMissing = left.startsWith('未关联');
+        final rightMissing = right.startsWith('未关联');
+        if (leftMissing != rightMissing) return leftMissing ? 1 : -1;
+        return left.toLowerCase().compareTo(right.toLowerCase());
+      });
+    return {
+      for (final key in sortedKeys) key: grouped[key]!,
+    };
   }
 
   Widget _buildEmpty({required IconData icon, required String message}) {
