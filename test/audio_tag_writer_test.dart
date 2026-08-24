@@ -291,7 +291,7 @@ void main() {
       track: '2',
     );
 
-    expect(ok, false); // 已存在音乐标签时跳过
+    expect(ok, true); // 已有标签跳过视为成功
     expect(wavFile.lengthSync(), lenAfterFirst);
     // 标签内容保持第一次写入的
     final info = _readListInfo(wavFile);
@@ -359,7 +359,7 @@ void main() {
       track: '2',
     );
 
-    expect(ok, false); // 已有 id3 chunk 时跳过
+    expect(ok, true); // 已有 id3 chunk 跳过视为成功
     expect(wavFile.lengthSync(), lenAfterFirst);
   });
 
@@ -380,7 +380,7 @@ void main() {
       track: '1',
     );
 
-    expect(ok, false);
+    expect(ok, true); // 已有 INAM 跳过视为成功
     expect(wavFile.lengthSync(), len);
     expect(countChunks(wavFile, 'id3 '), 0);
   });
