@@ -218,6 +218,8 @@ class ChunkDownloader {
           tmpFile.path,
           cancelToken: cancelToken,
           deleteOnError: false,
+          // dio 默认 FileMode.write 会先截断已有 tmp 文件；续传要求追加
+          fileAccessMode: FileAccessMode.append,
           options: downloadedBytes > 0
               ? Options(headers: {'range': 'bytes=$downloadedBytes-'})
               : null,
@@ -407,11 +409,13 @@ class ChunkDownloader {
 
       final rangeStart = segment.start + resumeFrom;
       try {
+        // 与 MultiThreadDownloader 相同：dio 默认截断已有文件，续传须 append
         await _dio.download(
           url,
           partPath,
           cancelToken: token,
           deleteOnError: false,
+          fileAccessMode: FileAccessMode.append,
           options: Options(
               headers: {'range': 'bytes=$rangeStart-${segment.end}'}),
           onReceiveProgress: (received, total) {
