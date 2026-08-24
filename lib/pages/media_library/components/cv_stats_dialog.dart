@@ -88,10 +88,8 @@ class CvStatsDialog extends ConsumerWidget {
 
   Widget _buildDirRow(BuildContext context, WidgetRef ref, String dir) {
     final scheme = Theme.of(context).colorScheme;
-    return Wrap(
-      spacing: 10,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: dir.isEmpty
@@ -106,13 +104,17 @@ class CvStatsDialog extends ConsumerWidget {
               : SelectableText(
                   dir,
                   style: TextStyle(fontSize: 12.5, color: scheme.onSurface),
+                  maxLines: 2,
+                  minLines: 1,
                 ),
         ),
+        const SizedBox(width: 10),
         OutlinedButton.icon(
           onPressed: () => ref.read(uiServiceProvider).pickCvAvatarPath(),
           icon: const Icon(Icons.folder_open_rounded, size: 15),
           label: const Text('选择目录'),
         ),
+        const SizedBox(width: 8),
         OutlinedButton.icon(
           onPressed: dir.isEmpty
               ? null
