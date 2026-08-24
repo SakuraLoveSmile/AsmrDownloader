@@ -7,6 +7,7 @@ import 'package:asmr_downloader/pages/media_library/components/cached_work_card.
 import 'package:asmr_downloader/pages/media_library/components/media_library_settings_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/work_inspector_drawer.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
+import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,6 +42,13 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     _searchController.text = query;
     ref.read(cacheSearchQueryProvider.notifier).state = query;
     setState(() {});
+  }
+
+  /// 重扫/删除后刷新媒体库列表与搜索页的入库状态徽章
+  /// （扫描会更新媒体库位置记录，入库判定随之变化）。
+  void _refreshLibrary() {
+    ref.invalidate(cachedLibraryProvider);
+    ref.invalidate(workLibraryStatusProvider);
   }
 
   @override
@@ -148,12 +156,12 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               ),
             ),
             OutlinedButton.icon(
-              onPressed: () => ref.invalidate(cachedLibraryProvider),
+              onPressed: _refreshLibrary,
               icon: const Icon(Icons.manage_search_rounded, size: 15),
               label: const Text('扫描目录'),
             ),
             IconButton(
-              onPressed: () => ref.invalidate(cachedLibraryProvider),
+              onPressed: _refreshLibrary,
               icon: const Icon(Icons.refresh_rounded, size: 17),
               tooltip: '重新扫描目录',
               visualDensity: VisualDensity.compact,
@@ -176,7 +184,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               label: const Text('媒体库设置'),
             ),
             BatchCacheButton(
-              onClosed: () => ref.invalidate(cachedLibraryProvider),
+              onClosed: _refreshLibrary,
             ),
             OutlinedButton.icon(
               key: const ValueKey('onboarding-complete-missing'),
@@ -534,7 +542,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
           Text('加载媒体库失败：$error', style: TextStyle(color: scheme.error)),
           const SizedBox(height: 8),
           OutlinedButton.icon(
-            onPressed: () => ref.invalidate(cachedLibraryProvider),
+            onPressed: _refreshLibrary,
             icon: const Icon(Icons.refresh, size: 17),
             label: const Text('重试'),
           ),
@@ -548,7 +556,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       context: context,
       builder: (_) => const CacheDialog(),
     );
-    if (mounted) ref.invalidate(cachedLibraryProvider);
+    if (mounted) _refreshLibrary();
   }
 
   Future<void> _openCompleteMissing() async {
@@ -556,7 +564,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
       context: context,
       builder: (_) => const CompleteMissingDialog(),
     );
-    if (mounted) ref.invalidate(cachedLibraryProvider);
+    if (mounted) _refreshLibrary();
   }
 
   Future<void> _openSettings() {

@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
@@ -276,7 +277,8 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
       setState(() => _selected.remove(item.sourceId));
       ref
         ..invalidate(worksLibraryProvider)
-        ..invalidate(unorganizedCountProvider);
+        ..invalidate(unorganizedCountProvider)
+        ..invalidate(workLibraryStatusProvider);
       ref
           .read(uiServiceProvider)
           .showSnack('已删除 ${item.sourceId} 的本机下载，NAS 内容未删除');

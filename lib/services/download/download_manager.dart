@@ -10,6 +10,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/media_library_service.dart';
+import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
@@ -211,6 +212,8 @@ class DownloadManager {
               excludedRoot: ref.read(downloadPathProvider),
             );
     if (existingExternalCopy != null) {
+      // 刚执行过实时重扫，同步刷新搜索页的入库状态徽章
+      ref.invalidate(workLibraryStatusProvider);
       ref.read(uiServiceProvider).showSnack(
             '媒体库已存在 $sourceId（${existingExternalCopy.matchedPath}），已跳过重复下载',
           );
@@ -316,9 +319,10 @@ class DownloadManager {
     } catch (e) {
       ref.read(uiServiceProvider).showSnack('作品已下载，但注册表写入失败（$e），可手动整理');
     }
-    // 新作品入库：刷新作品库列表与 badge
+    // 新作品入库：刷新作品库列表与 badge，以及搜索页的入库状态徽章
     ref.invalidate(worksLibraryProvider);
     ref.invalidate(unorganizedCountProvider);
+    ref.invalidate(workLibraryStatusProvider);
     if (Platform.isWindows) {
       await WindowsTaskbar.setFlashTaskbarAppIcon(
         mode: TaskbarFlashMode.all | TaskbarFlashMode.timernofg,

@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/components/copyable_textbox.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_cv.dart';
+import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_library_status.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_misc_info.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_tags.dart';
 import 'package:asmr_downloader/pages/downloader/search_result/work_info/components/asmr_circle_name.dart';
@@ -45,6 +46,7 @@ class WorkInfo extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     AsmrCover(),
+                    AsmrLibraryStatus(verticalPadding: _verticalPadding),
                     AsmrTitle(verticalPadding: _verticalPadding),
                     AsmrCircleName(verticalPadding: _verticalPadding),
                     AsmrMiscInfo(verticalPadding: _verticalPadding),
@@ -158,6 +160,8 @@ class WorkInfo extends ConsumerWidget {
           textStyle: Theme.of(context).textTheme.bodyMedium,
           padding: EdgeInsets.zero,
         ),
+        // 降级模式下同样展示入库状态（检测只依赖 sourceId）
+        AsmrLibraryStatus(verticalPadding: 8),
       ],
     );
   }
