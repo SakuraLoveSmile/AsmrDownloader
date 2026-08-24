@@ -355,6 +355,15 @@ void main() {
       // 批量整理会先刷新元数据，以便把旧注册表里的汉化组名修正为原版社团。
       expect(progressEvents.first.statusMessage, '获取元数据中…');
 
+      // 缺失条目标记 missing，成功条目 missing 为 false（缺失与失败分开）。
+      final missingResult =
+          result.results.firstWhere((r) => r.sourceId == 'RJ00003');
+      expect(missingResult.missing, isTrue);
+      expect(missingResult.success, isFalse);
+      for (final r in result.results.where((r) => r.sourceId != 'RJ00003')) {
+        expect(r.missing, isFalse);
+      }
+
       // 成功项已记录 organizedAt
       expect((await index.get('RJ00001'))!.organizedAt, isNotNull);
       expect((await index.get('RJ00002'))!.organizedAt, isNotNull);
