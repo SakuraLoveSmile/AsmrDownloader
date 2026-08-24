@@ -46,6 +46,11 @@ void main() {
   });
 
   testWidgets('媒体库可以切换按社团和 CV 分组', (tester) async {
+    tester.view.physicalSize = const Size(900, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final entries = [
       CachedLibraryEntry(
         sourceId: 'RJ10000001',
@@ -98,7 +103,7 @@ void main() {
         container: container,
         child: const MaterialApp(
           home: Scaffold(
-            body: SizedBox(width: 900, height: 900, child: MediaLibraryPage()),
+            body: SizedBox(width: 900, height: 1000, child: MediaLibraryPage()),
           ),
         ),
       ),
@@ -121,7 +126,7 @@ void main() {
     expect(find.text('CV 甲'), findsOneWidget);
     expect(find.text('CV 乙'), findsOneWidget);
     await tester.drag(
-      find.byKey(const ValueKey('media-library-grouped-list')),
+      find.byKey(const ValueKey('media-library-grouped-list-cv')),
       const Offset(0, -700),
     );
     await tester.pumpAndSettle();

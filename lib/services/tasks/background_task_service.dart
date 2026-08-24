@@ -5,6 +5,7 @@ import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/cache/media_library_settings.dart';
+import 'package:asmr_downloader/services/ui/system_notifier.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -446,7 +447,8 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
   }) {
     final index = state.indexWhere((task) => task.id == id);
     if (index < 0) return;
-    final updated = state[index].copyWith(
+    final prev = state[index];
+    final updated = prev.copyWith(
       status: status,
       startedAt: startedAt,
       finishedAt: finishedAt,
@@ -463,6 +465,24 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
     final next = [...state];
     next[index] = updated;
     state = next;
+
+    if (status != null && prev.status != status) {
+      if (status == BackgroundTaskStatus.completed) {
+        final info = updated.detail.isNotEmpty ? '：${updated.detail}' : '';
+        ref.read(systemNotifierProvider).notify(
+              '后台任务完成',
+              '${updated.title} 已完成$info',
+            );
+      } else if (status == BackgroundTaskStatus.failed) {
+        final err = updated.error != null && updated.error!.isNotEmpty
+            ? '：${updated.error}'
+            : '';
+        ref.read(systemNotifierProvider).notify(
+              '后台任务失败',
+              '${updated.title} 执行失败$err',
+            );
+      }
+    }
   }
 }
 

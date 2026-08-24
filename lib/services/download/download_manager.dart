@@ -14,6 +14,7 @@ import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
+import 'package:asmr_downloader/services/ui/system_notifier.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -330,6 +331,9 @@ class DownloadManager {
         timeout: const Duration(milliseconds: 500),
       );
     }
+    await ref
+        .read(systemNotifierProvider)
+        .notify('下载完成', '$sourceId 下载已完成');
 
     ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
 

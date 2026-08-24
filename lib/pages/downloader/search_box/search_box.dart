@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:asmr_downloader/common/const.dart';
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
@@ -10,6 +12,9 @@ import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+/// 全局搜索框 FocusNode，支持快捷键全局聚焦。
+final searchBoxFocusNode = FocusNode();
 
 class SearchBox extends ConsumerStatefulWidget {
   const SearchBox({super.key});
@@ -178,6 +183,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
               ),
               child: TextField(
                 controller: _controller,
+                focusNode: searchBoxFocusNode,
                 style: const TextStyle(fontSize: 13),
                 decoration: InputDecoration(
                   hintText: '输入 sourceId 或作品 URL',
@@ -192,7 +198,7 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                               : scheme.onSurfaceVariant.withValues(alpha: 0.7),
                     ),
                     onPressed: canSubmit ? () => _searchInput(_inputText) : null,
-                    tooltip: '搜索',
+                    tooltip: Platform.isMacOS ? '搜索 (⌘F)' : '搜索 (Ctrl+F)',
                     splashRadius: 14,
                     visualDensity: VisualDensity.compact,
                   ),

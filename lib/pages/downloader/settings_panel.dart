@@ -5,8 +5,10 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_c
 import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/github_token_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/notify_on_complete_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/onboarding_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/parallel_downloads_selector.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/theme_mode_selector.dart';
 import 'package:flutter/material.dart';
 
 /// Compact settings panel for the downloader page.
@@ -24,7 +26,7 @@ class DownloaderSettingsPanel extends StatelessWidget {
         side: BorderSide(color: scheme.outlineVariant, width: 0.8),
       ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 460),
+        constraints: const BoxConstraints(maxWidth: 580, maxHeight: 490),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
           child: Column(
@@ -62,6 +64,15 @@ class DownloaderSettingsPanel extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: const [
+                      _SettingsSection(
+                        title: '外观与通知',
+                        icon: Icons.palette_outlined,
+                        children: [
+                          ThemeModeSelector(),
+                          NotifyOnCompleteCheck(),
+                        ],
+                      ),
+                      SizedBox(height: 12),
                       _SettingsSection(
                         title: '下载与线程',
                         icon: Icons.download_rounded,
