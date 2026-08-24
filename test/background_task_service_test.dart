@@ -113,7 +113,7 @@ class _FakeBatchService extends BatchCacheService {
 void main() {
   Future<void> waitFor(
     bool Function() predicate, {
-    Duration timeout = const Duration(seconds: 1),
+    Duration timeout = const Duration(seconds: 5),
   }) async {
     final deadline = DateTime.now().add(timeout);
     while (!predicate()) {

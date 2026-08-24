@@ -118,9 +118,13 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
   final Set<String> _cancelRequests = <String>{};
   bool _draining = false;
   int _sequence = 0;
+  bool _disposed = false;
 
   @override
-  List<BackgroundTask> build() => const [];
+  List<BackgroundTask> build() {
+    ref.onDispose(() => _disposed = true);
+    return const [];
+  }
 
   String startCompleteMissing({Duration? interval}) {
     final id = _newId('complete');
@@ -304,7 +308,7 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
           isCancelled: () => _cancelRequests.contains(id),
         );
 
-    ref.invalidate(cachedLibraryProvider);
+    if (!_disposed) ref.invalidate(cachedLibraryProvider);
     final canceled = result.cancelled || _cancelRequests.contains(id);
     _update(
       id,
@@ -354,7 +358,7 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
               isCancelled: () => _cancelRequests.contains(id),
             );
 
-    ref.invalidate(cachedLibraryProvider);
+    if (!_disposed) ref.invalidate(cachedLibraryProvider);
     final canceled = result.cancelled || _cancelRequests.contains(id);
     final successfulWorks = result.processed - result.skipped - result.failed;
     _update(
@@ -403,7 +407,7 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
           isCancelled: () => _cancelRequests.contains(id),
         );
 
-    ref.invalidate(cachedLibraryProvider);
+    if (!_disposed) ref.invalidate(cachedLibraryProvider);
     final canceled = result.cancelled || _cancelRequests.contains(id);
     _update(
       id,
@@ -445,6 +449,7 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
     String? error,
     bool? cancelRequested,
   }) {
+    if (_disposed) return;
     final index = state.indexWhere((task) => task.id == id);
     if (index < 0) return;
     final prev = state[index];
