@@ -214,6 +214,7 @@ class AsmrApi {
     CancelToken? cancelToken,
     bool deleteOnError = true,
     String lengthHeader = Headers.contentLengthHeader,
+    FileAccessMode fileAccessMode = FileAccessMode.write,
     Object? data,
     Options? options,
   }) {
@@ -225,6 +226,7 @@ class AsmrApi {
       cancelToken: cancelToken,
       deleteOnError: deleteOnError,
       lengthHeader: lengthHeader,
+      fileAccessMode: fileAccessMode,
       data: data,
       options: options,
     );

@@ -14,6 +14,7 @@ class _TestServer {
     this.content,
     this.ignoreRange,
     this.ignoreRangeAfterProbe,
+    this.cutSegment0Once,
   );
 
   final HttpServer server;
@@ -23,12 +24,19 @@ class _TestServer {
   /// 仅探测请求（bytes=0-0）返回 206，其余 Range 请求都忽略并返回完整文件。
   /// 用于模拟“探测通过但实际分段不支持 Range”的异常服务器。
   final bool ignoreRangeAfterProbe;
+
+  /// 第一个分段 0 请求（bytes=0-…）只发一半字节后强行断开连接，
+  /// 模拟下载中途网络中断；之后的请求正常服务。
+  final bool cutSegment0Once;
+  bool _cutDone = false;
+
   final List<Map<String, String?>> requests = [];
 
   static Future<_TestServer> start({
     required Uint8List content,
     bool ignoreRange = false,
     bool ignoreRangeAfterProbe = false,
+    bool cutSegment0Once = false,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final testServer = _TestServer._(
@@ -36,6 +44,7 @@ class _TestServer {
       content,
       ignoreRange,
       ignoreRangeAfterProbe,
+      cutSegment0Once,
     );
     server.listen(testServer._handle);
     return testServer;
@@ -66,6 +75,18 @@ class _TestServer {
         return;
       }
       final bytes = content.sublist(start, end + 1);
+      if (cutSegment0Once && !_cutDone && !isProbe && start == 0) {
+        _cutDone = true;
+        // 故意不声明 Content-Length 并只发一半字节就结束响应，
+        // 模拟下载中途断流：客户端收到比分段预期短的响应
+        final response = request.response;
+        response
+          ..statusCode = HttpStatus.partialContent
+          ..headers.set('content-range', 'bytes $start-$end/${content.length}');
+        response.add(bytes.sublist(0, bytes.length ~/ 2));
+        await response.close();
+        return;
+      }
       request.response
         ..statusCode = HttpStatus.partialContent
         ..headers.contentLength = bytes.length
@@ -235,6 +256,67 @@ void main() {
         .toList();
     expect(rangeRequests, hasLength(3));
     expect(rangeRequests.first['range'], 'bytes=0-0');
+  });
+
+  test('部分下载的分段可续传完成（不再 100% 后倒退死循环）', () async {
+    const partSize = MultiThreadDownloader.minPartSize;
+    final content = _makeContent(partSize * 4);
+    final server = await _TestServer.start(content: content);
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'partial_part.bin');
+    // 模拟上次中断：part0 只下了一半（0 < len < segment.size）。
+    // dio.download 默认截断已有文件，若续传未用 append 会永远补不满该段
+    await File('$savePath.downloading')
+        .writeAsBytes(content.sublist(0, partSize ~/ 2));
+
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: content.length,
+      threadCount: 4,
+    );
+
+    expect(ok, isTrue);
+    expect(await File(savePath).readAsBytes(), content);
+
+    // 探测 1 次 + 4 个分段各 1 次；part0 从一半处续传而非从头重下
+    final rangeRequests = server.requests
+        .where((request) => request['range'] != null)
+        .toList();
+    expect(rangeRequests, hasLength(5));
+    final starts = <int>{
+      for (final request in rangeRequests.skip(1))
+        int.parse(RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
+    };
+    expect(starts, {partSize ~/ 2, partSize, partSize * 2, partSize * 3});
+  });
+
+  test('分段中途断流后自动重试并续传完成', () async {
+    const partSize = MultiThreadDownloader.minPartSize;
+    final content = _makeContent(partSize * 4);
+    final server = await _TestServer.start(
+      content: content,
+      cutSegment0Once: true,
+    );
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'cut.bin');
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: content.length,
+      threadCount: 4,
+    );
+
+    expect(ok, isTrue);
+    expect(await File(savePath).readAsBytes(), content);
+
+    // 探测 1 + 4 个分段 + 断连分段至少重试 1 次
+    final rangeRequestCnt = server.requests
+        .where((request) => request['range'] != null)
+        .length;
+    expect(rangeRequestCnt, greaterThan(5));
   });
 
   test('空文件直接创建，不请求服务器', () async {

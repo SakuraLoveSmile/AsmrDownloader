@@ -517,11 +517,15 @@ class MultiThreadDownloader {
 
       final rangeStart = segment.start + resumeFrom;
       try {
+        // dio 默认 FileMode.write 会先把已有 part 文件截断成 0，
+        // 续传必须用 append：文件里已有 resumeFrom 字节 + 本次 range 响应
+        // 正好补满一个分段
         await api.download(
           url,
           partPath,
           cancelToken: token,
           deleteOnError: false,
+          fileAccessMode: FileAccessMode.append,
           onReceiveProgress: (received, total) {
             segment.completedBytes = resumeFrom + received;
             notify();
