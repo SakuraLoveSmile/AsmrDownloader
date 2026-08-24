@@ -662,26 +662,29 @@ class UIService {
       ..read(configFileProvider).addOrUpdate({'mediaLibraryRoots': roots});
   }
 
-  /// 执行整理（不依赖 UI），返回整理结果；未执行成功返回 null
+  /// 执行整理（不依赖 UI），返回整理结果；未执行成功返回 null。
   /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器（手动整理时 true，自动整理时 false）
-  Future<OrganizeResult?> organizeCurrentWork(
+  /// 整理成功后会校验产物并把缺陷摘要并入 [verifyNote]（校验通过时为 null）。
+  Future<({OrganizeResult? result, String? verifyNote})> organizeCurrentWork(
       {bool pickPathIfEmpty = false}) async {
     var navidromePath = ref.read(navidromePathProvider);
     if (navidromePath.isEmpty) {
       if (!pickPathIfEmpty) {
         Log.warning('organize skipped: navidromePath not set');
-        return null;
+        return (result: null, verifyNote: null);
       }
       await pickNavidromePath();
       navidromePath = ref.read(navidromePathProvider);
-      if (navidromePath.isEmpty) return null;
+      if (navidromePath.isEmpty) return (result: null, verifyNote: null);
     }
 
     final sourceId = ref.read(sourceIdProvider);
-    if (sourceId == null) return null;
+    if (sourceId == null) return (result: null, verifyNote: null);
 
     final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
-    if (!Directory(sourceDir).existsSync()) return null;
+    if (!Directory(sourceDir).existsSync()) {
+      return (result: null, verifyNote: null);
+    }
 
     // 复用封面下载功能获取封面字节（不依赖本地 *_cover.jpg 文件）
     Uint8List? coverBytes;
@@ -713,23 +716,40 @@ class UIService {
 
     // 补录注册表（含整理时间），批量整理依赖它
     if (result != null) {
-      await ref.read(worksIndexProvider).upsert(WorkEntry(
-            sourceId: sourceId,
-            dlPath: ref.read(downloadPathProvider),
-            dirName: p.basename(ref.read(voiceWorkPathProvider)),
-            title: ref.read(titleProvider),
-            cvNames: cvNames,
-            circleName: circleName,
-            releaseDate: ref.read(releaseDateProvider),
-            tags: ref.read(tagLsProvider),
-            coverUrl: ref.read(coverUrlProvider),
-            organizedAt: DateTime.now().toIso8601String(),
-          ));
+      final entry = WorkEntry(
+        sourceId: sourceId,
+        dlPath: ref.read(downloadPathProvider),
+        dirName: p.basename(ref.read(voiceWorkPathProvider)),
+        title: ref.read(titleProvider),
+        cvNames: cvNames,
+        circleName: circleName,
+        releaseDate: ref.read(releaseDateProvider),
+        tags: ref.read(tagLsProvider),
+        coverUrl: ref.read(coverUrlProvider),
+        organizedAt: DateTime.now().toIso8601String(),
+      );
+      await ref.read(worksIndexProvider).upsert(entry);
       ref.invalidate(worksLibraryProvider);
       ref.invalidate(unorganizedCountProvider);
+      return (result: result, verifyNote: await _verifyEntryNote(entry));
     }
 
-    return result;
+    return (result: null, verifyNote: null);
+  }
+
+  /// 整理成功后校验产物（内嵌歌词/封面），返回「校验：缺陷摘要」；
+  /// 校验通过或校验失败返回 null。
+  Future<String?> _verifyEntryNote(WorkEntry entry) async {
+    final targetRoot = ref.read(navidromePathProvider);
+    if (targetRoot.isEmpty) return null;
+    try {
+      final verify = await ref.read(verifyServiceProvider).verifyWork(entry,
+          targetRoot: targetRoot);
+      return verify.ok ? null : '校验：${verify.summary}';
+    } catch (e) {
+      Log.warning('verify work failed: ${entry.sourceId}\n' 'error: $e');
+      return null;
+    }
   }
 
   /// 对作品库中的单个作品执行整理（离线优先：注册表元数据 → 目录名解析）。
@@ -781,7 +801,8 @@ class UIService {
 
   /// 下载完成后的自动整理（路径未设置时弹目录选择器）
   Future<void> autoOrganize() async {
-    final result = await organizeCurrentWork(pickPathIfEmpty: true);
+    final outcome = await organizeCurrentWork(pickPathIfEmpty: true);
+    final result = outcome.result;
 
     if (result == null) {
       showSnack('自动整理未执行：未设置整理路径或作品未下载');
@@ -790,6 +811,9 @@ class UIService {
     var msg = '自动整理完成：复制 ${result.copied} 个文件，跳过 ${result.skipped} 个';
     if (result.tagWriteFailures > 0) {
       msg += '，${result.tagWriteFailures} 个文件标签写入失败';
+    }
+    if (outcome.verifyNote != null) {
+      msg += '，${outcome.verifyNote}';
     }
     showSnack(msg);
   }

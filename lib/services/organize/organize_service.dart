@@ -70,10 +70,15 @@ class OrganizeEntryOutcome {
   final WorkEntry resolvedEntry;
   final String? metadataNote;
 
+  /// 整理产物校验摘要（如「校验通过」「校验：2 首缺歌词、封面 cover.jpg 缺失」），
+  /// 校验未执行（取消/异常）时为 null。
+  final String? verifyNote;
+
   const OrganizeEntryOutcome({
     required this.result,
     required this.resolvedEntry,
     this.metadataNote,
+    this.verifyNote,
   });
 }
 
@@ -177,6 +182,7 @@ class OrganizeService {
     String? resolvedCircleName,
     Uint8List? coverBytes,
     bool keepDirStructure = false,
+    bool forceWavRewrite = false,
   }) async {
     if (!Directory(sourceDir).existsSync()) return null;
 
@@ -210,6 +216,7 @@ class OrganizeService {
       releaseDate: resolveRelease(workInfo),
       genres: resolveTags(workInfo),
       keepDirStructure: keepDirStructure,
+      forceWavRewrite: forceWavRewrite,
     );
   }
 
@@ -223,6 +230,7 @@ class OrganizeService {
     required String targetRoot,
     bool fetchWorkInfo = true,
     bool keepDirStructure = false,
+    bool forceWavRewrite = false,
   }) async {
     Map<String, dynamic>? workInfo;
     String? metadataNote;
@@ -299,6 +307,7 @@ class OrganizeService {
       resolvedCircleName: resolvedCircleName,
       coverBytes: coverBytes,
       keepDirStructure: keepDirStructure,
+      forceWavRewrite: forceWavRewrite,
     );
 
     // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段）
@@ -321,10 +330,28 @@ class OrganizeService {
           : entry.coverUrl,
       organizedAt: entry.organizedAt,
     );
+
+    // 整理产物校验（缺歌词/封面等缺陷摘要，供批量消息与 snack 展示）。
+    // 校验只读不修改文件；用解析后的 resolvedEntry 保证目标目录与本次整理一致。
+    String? verifyNote;
+    if (result != null) {
+      try {
+        final verify = await ref.read(verifyServiceProvider).verifyWork(
+              resolved,
+              targetRoot: targetRoot,
+              keepDirStructure: keepDirStructure,
+            );
+        verifyNote = verify.ok ? '校验通过' : '校验：${verify.summary}';
+      } catch (e) {
+        Log.warning('verify work failed: ${entry.sourceId}\n' 'error: $e');
+      }
+    }
+
     return OrganizeEntryOutcome(
       result: result,
       resolvedEntry: resolved,
       metadataNote: metadataNote,
+      verifyNote: verifyNote,
     );
   }
 
@@ -522,10 +549,12 @@ class OrganizeService {
           results.add(BatchItemResult(
               sourceId: entry.sourceId,
               success: true,
-              message: _appendMetadataNote(
-                  _appendTagNote('已是最新（复制 0 跳过 ${result.skipped}）',
-                      result.tagWriteFailures),
-                  outcome.metadataNote)));
+              message: _appendVerifyNote(
+                  _appendMetadataNote(
+                      _appendTagNote('已是最新（复制 0 跳过 ${result.skipped}）',
+                          result.tagWriteFailures),
+                      outcome.metadataNote),
+                  outcome.verifyNote)));
           await index.upsert(outcome.resolvedEntry
               .copyWith(organizedAt: DateTime.now().toIso8601String()));
         } else {
@@ -533,10 +562,12 @@ class OrganizeService {
           results.add(BatchItemResult(
               sourceId: entry.sourceId,
               success: true,
-              message: _appendMetadataNote(
-                  _appendTagNote('复制 ${result.copied} 跳过 ${result.skipped}',
-                      result.tagWriteFailures),
-                  outcome.metadataNote)));
+              message: _appendVerifyNote(
+                  _appendMetadataNote(
+                      _appendTagNote('复制 ${result.copied} 跳过 ${result.skipped}',
+                          result.tagWriteFailures),
+                      outcome.metadataNote),
+                  outcome.verifyNote)));
           await index.upsert(outcome.resolvedEntry
               .copyWith(organizedAt: DateTime.now().toIso8601String()));
         }
@@ -568,6 +599,11 @@ class OrganizeService {
   static String _appendMetadataNote(String message, String? metadataNote) {
     if (metadataNote == null || metadataNote.isEmpty) return message;
     return '$message；$metadataNote';
+  }
+
+  static String _appendVerifyNote(String message, String? verifyNote) {
+    if (verifyNote == null || verifyNote.isEmpty) return message;
+    return '$message；$verifyNote';
   }
 
   static String _appendTagNote(String message, int tagWriteFailures) {

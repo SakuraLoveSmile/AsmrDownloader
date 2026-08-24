@@ -1,3 +1,4 @@
+import 'package:asmr_downloader/pages/library/tools/batch_verify_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/library_config_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
 import 'package:asmr_downloader/pages/library/tools/transcribe_status_indicator.dart';
@@ -34,6 +35,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           children: [
             const OrganizeAllButton(),
             const WorksIndexButton(),
+            const VerifyButton(),
             TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
             IconButton(
               key: const ValueKey('onboarding-library-config'),
@@ -99,5 +101,21 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       return;
     }
     listState.transcribeSelected();
+  }
+}
+
+/// 整理产物校验按钮：打开批量校验对话框（进度/取消/修复缺失）。
+class VerifyButton extends ConsumerWidget {
+  const VerifyButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return OutlinedButton(
+      onPressed: () => showDialog(
+        context: context,
+        builder: (_) => const BatchVerifyDialog(),
+      ),
+      child: const Text('校验'),
+    );
   }
 }

@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/services/organize/organize_service.dart';
+import 'package:asmr_downloader/services/organize/verify_service.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/library/library_database_providers.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -18,4 +19,9 @@ final worksIndexProvider = Provider<WorksIndex>((ref) {
 /// 整理编排层
 final organizeServiceProvider = Provider<OrganizeService>((ref) {
   return OrganizeService(ref);
+});
+
+/// 整理产物校验服务（只读检查内嵌歌词/封面）
+final verifyServiceProvider = Provider<VerifyService>((ref) {
+  return VerifyService(ref);
 });
