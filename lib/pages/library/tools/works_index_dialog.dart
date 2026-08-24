@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/ui/ui_service.dart';
@@ -64,10 +65,11 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
     }
   }
 
-  /// 注册表变化后刷新作品库列表与 tab badge
+  /// 注册表变化后刷新作品库列表与 tab badge，以及搜索页入库状态
   void _invalidateLibrary() {
     ref.invalidate(worksLibraryProvider);
     ref.invalidate(unorganizedCountProvider);
+    ref.invalidate(workLibraryStatusProvider);
   }
 
   @override

@@ -2,6 +2,7 @@ import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/library/media_library_service.dart';
+import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -158,5 +159,6 @@ class MediaLibrarySettingsDialog extends ConsumerWidget {
     ref.read(mediaLibraryRootsProvider.notifier).state = roots;
     ref.read(configFileProvider).addOrUpdate({'mediaLibraryRoots': roots});
     ref.invalidate(cachedLibraryProvider);
+    ref.invalidate(workLibraryStatusProvider);
   }
 }
