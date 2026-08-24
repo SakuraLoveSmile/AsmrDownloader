@@ -17,7 +17,8 @@ class AudioTagWriter {
     return _audioExtensions.contains(ext);
   }
 
-  /// 写标签，失败返回 false（不抛出，避免阻断整理流程）
+  /// 写标签（不抛出，避免阻断整理流程）。
+  /// 返回 true 表示目标状态已达成（文件已带标签跳过或写入成功）；仅真正失败返回 false。
   /// [lyrics] 内嵌歌词（LRC 文本，mp3→USLT / flac→LYRICS；wav 不支持）
   /// [coverBytes] 内嵌封面（mp3→APIC / flac→PICTURE；wav 不支持）
   /// [year] 发行年份（mp3→TYER / flac→YEAR / wav→TYER）
@@ -134,7 +135,7 @@ class AudioTagWriter {
       final scan = await _scanWavTagChunks(raf);
       if (scan.hasId3 || scan.hasListInam) {
         Log.info('wav already has music tags, skip: $filePath');
-        return false;
+        return true;
       }
 
       final chunks = BytesBuilder();
