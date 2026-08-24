@@ -17,11 +17,14 @@ class BatchItemResult {
   final String sourceId;
   final bool success;
   final String message;
+  /// 下载目录不存在（缺失），与「整理失败」分开统计与展示。
+  final bool missing;
 
   const BatchItemResult({
     required this.sourceId,
     required this.success,
     required this.message,
+    this.missing = false,
   });
 }
 
@@ -495,7 +498,10 @@ class OrganizeService {
       if (!Directory(entry.sourceDir).existsSync()) {
         missing++;
         results.add(BatchItemResult(
-            sourceId: entry.sourceId, success: false, message: '下载目录不存在'));
+            sourceId: entry.sourceId,
+            success: false,
+            message: '下载目录不存在',
+            missing: true));
         continue;
       }
 

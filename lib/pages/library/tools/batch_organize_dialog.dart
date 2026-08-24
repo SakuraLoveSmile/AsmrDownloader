@@ -24,6 +24,7 @@ class BatchOrganizeDialog extends ConsumerStatefulWidget {
 class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
   bool _running = false;
   bool _cancelled = false;
+  bool _onlyFailed = false;
   String? _error;
   BatchProgress? _progress;
   BatchOrganizeResult? _result;
@@ -81,6 +82,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
     setState(() {
       _running = true;
       _cancelled = false;
+      _onlyFailed = false;
       _error = null;
       _progress = null;
       _result = null;
@@ -177,6 +179,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
     final p = _progress;
     final total = p?.total ?? 0;
     final done = p?.done ?? 0;
+    final results = p?.results ?? const <BatchItemResult>[];
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,8 +193,9 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         if (p?.statusMessage.isNotEmpty == true)
           Text(p!.statusMessage, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
+        if (results.isNotEmpty) _buildResultFilter(results),
         Flexible(
-          child: _buildResultList(p?.results ?? const []),
+          child: _buildResultList(results),
         ),
       ],
     );
@@ -223,26 +227,61 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
           ),
         ],
         const SizedBox(height: 8),
+        if (r.results.isNotEmpty) _buildResultFilter(r.results),
         Flexible(child: _buildResultList(r.results)),
       ],
     );
   }
 
+  /// 结果筛选：开启「仅失败」时只保留失败（缺失条目不计入失败）。
+  List<BatchItemResult> _visibleResults(List<BatchItemResult> results) {
+    if (!_onlyFailed) return results;
+    return results.where((item) => !item.success && !item.missing).toList();
+  }
+
+  /// 失败条目数（缺失不计入）。
+  int _failureCount(List<BatchItemResult> results) =>
+      results.where((item) => !item.success && !item.missing).length;
+
+  /// 结果列表上方的「全部 / 仅失败」切换。
+  Widget _buildResultFilter(List<BatchItemResult> results) {
+    final failedCount = _failureCount(results);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: [
+          const ButtonSegment(value: false, label: Text('全部')),
+          ButtonSegment(value: true, label: Text('仅失败 ($failedCount)')),
+        ],
+        selected: {_onlyFailed},
+        onSelectionChanged: (set) => setState(() => _onlyFailed = set.first),
+      ),
+    );
+  }
+
   Widget _buildResultList(List<BatchItemResult> results) {
-    if (results.isEmpty) {
+    final visible = _visibleResults(results);
+    if (visible.isEmpty) {
+      // 筛选后无匹配：区分「过滤为空」与「原本就没有结果」，避免歧义。
+      if (_onlyFailed && results.isNotEmpty) {
+        return const Text('没有失败的条目');
+      }
       return const Text('暂无结果');
     }
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: ListView.builder(
         shrinkWrap: true,
-        itemCount: results.length,
+        itemCount: visible.length,
         itemBuilder: (context, i) {
-          final item = results[i];
-          final icon = item.success
-              ? const Icon(Icons.check_circle,
-                  size: 16, color: AppColors.success)
-              : const Icon(Icons.error, size: 16, color: AppColors.danger);
+          final item = visible[i];
+          final icon = item.missing
+              ? const Icon(Icons.folder_off, size: 16, color: AppColors.textFile)
+              : item.success
+                  ? const Icon(Icons.check_circle,
+                      size: 16, color: AppColors.success)
+                  : const Icon(Icons.error, size: 16, color: AppColors.danger);
           return ListTile(
             dense: true,
             leading: icon,
