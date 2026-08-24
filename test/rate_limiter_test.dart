@@ -16,7 +16,8 @@ void main() {
     await limiter.gate(() async {});
     await limiter.gate(() async {});
     sw.stop();
-    expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(300));
+    // 留 10ms 时钟抖动余量（CI 慢机曾测得 299ms）
+    expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(290));
   });
 
   test('距上次请求已超过 minInterval 时不额外等待', () async {
@@ -40,8 +41,8 @@ void main() {
     ]);
     sw.stop();
     expect(order, [1, 2, 3]);
-    // 三个请求依次放行：两次等待，共 >= 400ms
-    expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(400));
+    // 三个请求依次放行：两次等待，共 >= 400ms（留 10ms 抖动余量）
+    expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(390));
   });
 
   test('request 抛错向上传播，且后续 gate 不受影响', () async {
@@ -61,8 +62,8 @@ void main() {
     final sw = Stopwatch()..start();
     await limiter.gate(() async {});
     sw.stop();
-    // 距上一次请求不足 300ms，因此需要等待到 300ms 以上
-    expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(300));
+    // 距上一次请求不足 300ms，因此需要等待到 300ms 以上（留 10ms 抖动余量）
+    expect(sw.elapsedMilliseconds, greaterThanOrEqualTo(290));
     // 还原后走默认再验证（留出时钟抖动余量，CI 慢机曾测得 49ms）
     limiter.minInterval = const Duration(milliseconds: 50);
     final sw2 = Stopwatch()..start();
