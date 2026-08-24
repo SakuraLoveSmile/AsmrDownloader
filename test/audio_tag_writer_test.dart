@@ -430,4 +430,166 @@ void main() {
     );
     expect(ok, false);
   });
+
+  group('readWavEmbed', () {
+    test('含 USLT/APIC 帧判定正确（无标签/仅歌词/仅封面/两者）', () async {
+      final bare = File('${tmpDir.path}/bare.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      expect(await AudioTagWriter.readWavEmbed(bare.path),
+          (lyrics: false, cover: false));
+
+      final lyricsOnly = File('${tmpDir.path}/lyrics.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      await AudioTagWriter.writeTags(
+        lyricsOnly.path,
+        title: 't',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+        lyrics: '[00:01.00]测试歌词',
+      );
+      expect(await AudioTagWriter.readWavEmbed(lyricsOnly.path),
+          (lyrics: true, cover: false));
+
+      final coverOnly = File('${tmpDir.path}/cover.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      await AudioTagWriter.writeTags(
+        coverOnly.path,
+        title: 't',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+        coverBytes: Uint8List.fromList(List.filled(20, 1)),
+      );
+      expect(await AudioTagWriter.readWavEmbed(coverOnly.path),
+          (lyrics: false, cover: true));
+
+      final both = File('${tmpDir.path}/both.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      await AudioTagWriter.writeTags(
+        both.path,
+        title: 't',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+        lyrics: '[00:01.00]测试歌词',
+        coverBytes: Uint8List.fromList(List.filled(20, 1)),
+      );
+      expect(
+          await AudioTagWriter.readWavEmbed(both.path), (lyrics: true, cover: true));
+    });
+
+    test('第三方 LIST/INFO INAM（无 id3）→ 无内嵌标签且判定为第三方', () async {
+      final wavFile = File('${tmpDir.path}/third.wav')
+        ..writeAsBytesSync(buildWavWithListInfo({'INAM': '他人标题'}));
+      expect(await AudioTagWriter.readWavEmbed(wavFile.path),
+          (lyrics: false, cover: false));
+      expect(await AudioTagWriter.isThirdPartyTaggedWav(wavFile.path), true);
+    });
+
+    test('本工具写入 id3 后不再是「第三方标签」', () async {
+      final wavFile = File('${tmpDir.path}/ours.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      await AudioTagWriter.writeTags(
+        wavFile.path,
+        title: 't',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+      );
+      expect(await AudioTagWriter.isThirdPartyTaggedWav(wavFile.path), false);
+    });
+  });
+
+  group('forceWavRewrite', () {
+    test('已有 id3 chunk 剥离后重写：新歌词/封面生效且仅一个 id3 chunk、RIFF size 正确',
+        () async {
+      final wavFile = File('${tmpDir.path}/rewrite.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      await AudioTagWriter.writeTags(
+        wavFile.path,
+        title: '旧标题',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+        track: '1',
+      );
+
+      final ok = await AudioTagWriter.writeTags(
+        wavFile.path,
+        title: '新标题',
+        artist: 'a2',
+        album: 'al2',
+        albumArtist: 'aa2',
+        track: '1',
+        lyrics: '[00:01.00]新歌词',
+        coverBytes: Uint8List.fromList(List.filled(30, 2)),
+        forceWavRewrite: true,
+      );
+
+      expect(ok, true);
+      expect(countChunks(wavFile, 'id3 '), 1);
+      expect(countChunks(wavFile, 'LIST'), 1);
+      // 旧标签被剥离，LIST/INFO 与 id3 都按新值重建
+      final info = _readListInfo(wavFile);
+      expect(info!['INAM'], '新标题');
+      expect(await AudioTagWriter.readWavEmbed(wavFile.path),
+          (lyrics: true, cover: true));
+      // 新歌词内容已写入（UTF-16 LE）
+      final bytes = wavFile.readAsBytesSync();
+      final lyricsUtf16 = [
+        0xFF,
+        0xFE,
+        ...'[00:01.00]新歌词'.codeUnits.expand((u) => [u & 0xFF, u >> 8]),
+      ];
+      expect(bytes, containsAllInOrder(lyricsUtf16));
+      // RIFF size = 文件长 - 8
+      final riffSize = (bytes[4] |
+              (bytes[5] << 8) |
+              (bytes[6] << 16) |
+              (bytes[7] << 24)) &
+          0x7FFFFFFF;
+      expect(riffSize + 8, bytes.length);
+    });
+
+    test('无 id3 的 wav：force 与普通写入一致（不剥离也不跳过）', () async {
+      final wavFile = File('${tmpDir.path}/clean.wav')
+        ..writeAsBytesSync(buildMinimalWav());
+      final ok = await AudioTagWriter.writeTags(
+        wavFile.path,
+        title: 't',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+        lyrics: '[00:01.00]歌词',
+        forceWavRewrite: true,
+      );
+      expect(ok, true);
+      expect(countChunks(wavFile, 'id3 '), 1);
+      expect(await AudioTagWriter.readWavEmbed(wavFile.path),
+          (lyrics: true, cover: false));
+    });
+
+    test('第三方 LIST/INFO INAM 仍不覆盖（force 也不写）', () async {
+      final wavFile = File('${tmpDir.path}/third_force.wav')
+        ..writeAsBytesSync(buildWavWithListInfo({'INAM': '他人标题'}));
+      final len = wavFile.lengthSync();
+
+      final ok = await AudioTagWriter.writeTags(
+        wavFile.path,
+        title: 't',
+        artist: 'a',
+        album: 'al',
+        albumArtist: 'aa',
+        lyrics: 'x',
+        forceWavRewrite: true,
+      );
+
+      expect(ok, true); // 已有他人标签跳过视为成功
+      expect(wavFile.lengthSync(), len);
+      expect(await AudioTagWriter.isThirdPartyTaggedWav(wavFile.path), true);
+      expect(await AudioTagWriter.readWavEmbed(wavFile.path),
+          (lyrics: false, cover: false));
+    });
+  });
 }

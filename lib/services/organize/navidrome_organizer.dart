@@ -280,6 +280,8 @@ class NavidromeOrganizer {
   /// [albumArtist] 标签 albumartist 字段（CV 声优名）
   /// [releaseDate] 发行日期（如 2026-06-18），年份写入标签
   /// [genres] 流派标签列表
+  /// [forceWavRewrite] 强制重写 wav 标签（剥离已有 'id3 ' chunk 后重写），
+  /// 供整理产物校验修复路径补齐缺失的歌词/封面；mp3/flac 本来就整体重写。
   ///
   /// 字幕处理：同名 .lrc 直接使用（优先）；同名 .vtt 自动转换为 LRC，
   /// 内嵌为音频歌词标签并额外生成 `<音频名>.lrc` 侧车文件。
@@ -296,6 +298,7 @@ class NavidromeOrganizer {
     String releaseDate = '',
     List<String> genres = const [],
     bool keepDirStructure = false,
+    bool forceWavRewrite = false,
   }) async {
     final source = Directory(sourceDir);
     if (!await source.exists()) {
@@ -424,15 +427,17 @@ class NavidromeOrganizer {
           album: title,
           albumArtist: albumArtist,
           track: track,
-          // 内嵌歌词：同名 LRC 或 VTT 转换结果（wav 不支持则自动跳过）
-          lyrics: lyrics,
-          // 专辑封面嵌入每首歌（wav 不支持则自动跳过）
-          coverBytes: coverBytes,
-          // 发行年份（releaseDate 取前 4 位）
-          year: releaseDate.length >= 4 ? releaseDate.substring(0, 4) : null,
-          // 流派（前 3 个，防止字段过长）
-          genre: genres.take(3).join('; '),
-        );
+// 内嵌歌词：同名 LRC 或 VTT 转换结果（mp3→USLT / flac→LYRICS / wav→id3 USLT）
+        lyrics: lyrics,
+        // 专辑封面嵌入每首歌（mp3→APIC / flac→PICTURE / wav→id3 APIC）
+        coverBytes: coverBytes,
+        // 发行年份（releaseDate 取前 4 位）
+        year: releaseDate.length >= 4 ? releaseDate.substring(0, 4) : null,
+        // 流派（前 3 个，防止字段过长）
+        genre: genres.take(3).join('; '),
+        // 校验修复路径：剥离 wav 旧标签后重写，补齐缺失歌词/封面
+        forceWavRewrite: forceWavRewrite,
+      );
         if (!tagOk) tagWriteFailures++;
       }
     }

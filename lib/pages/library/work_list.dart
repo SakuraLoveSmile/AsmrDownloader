@@ -205,6 +205,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     var ok = 0;
     var fail = 0;
     final metadataNotes = <String>{};
+    final verifyNotes = <String>{};
     var tagFailures = 0;
     for (final item in items) {
       final outcome = await ui.organizeWorkFor(item, pickPathIfEmpty: true);
@@ -212,12 +213,17 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
         ok++;
         final note = outcome?.metadataNote;
         if (note != null && note.isNotEmpty) metadataNotes.add(note);
+        final verify = outcome?.verifyNote;
+        if (verify != null && verify.isNotEmpty) verifyNotes.add(verify);
         tagFailures += outcome?.result?.tagWriteFailures ?? 0;
       } else {
         fail++;
       }
     }
     var noteSuffix = metadataNotes.isEmpty ? '' : '；${metadataNotes.join('；')}';
+    if (verifyNotes.isNotEmpty) {
+      noteSuffix += '；${verifyNotes.join('；')}';
+    }
     if (tagFailures > 0) {
       noteSuffix += '；$tagFailures 个文件标签写入失败';
     }
@@ -501,6 +507,10 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
                 if (result != null) {
                   final note = outcome?.metadataNote;
                   var suffix = note == null ? '' : '；$note';
+                  final verify = outcome?.verifyNote;
+                  if (verify != null && verify.isNotEmpty) {
+                    suffix += '；$verify';
+                  }
                   if (result.tagWriteFailures > 0) {
                     suffix += '；${result.tagWriteFailures} 个文件标签写入失败';
                   }
