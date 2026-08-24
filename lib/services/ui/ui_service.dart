@@ -638,6 +638,17 @@ class UIService {
     showSnack('整理路径已设置为 $navidromePath');
   }
 
+  Future<void> pickCvAvatarPath() async {
+    final path = await FilePicker.platform.getDirectoryPath();
+    if (path == null) return;
+
+    ref
+      ..read(cvAvatarPathProvider.notifier).state = path
+      ..read(configFileProvider).addOrUpdate({'cvAvatarPath': path});
+    Log.info('cvAvatarPath: $path');
+    showSnack('CV 头像目录已设置为 $path');
+  }
+
   /// 下载/整理路径变更后自动加入轻量媒体库扫描根目录。
   /// 用户仍可在媒体库设置中移除不想扫描的目录。
   void _addMediaLibraryRoot(String path) {

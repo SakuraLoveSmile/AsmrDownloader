@@ -405,6 +405,144 @@ void main() {
     });
   });
 
+  group('保留原目录结构', () {
+    test('keepDirStructure: 子目录按相对路径复制、封面仍在根、幂等', () async {
+      createMockDownload();
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: Uint8List.fromList(List.filled(80, 9)),
+        keepDirStructure: true,
+      );
+
+      expect(result.copied, 4);
+
+      final workDir = p.join(
+        targetRoot.path,
+        '测试社团',
+        'RJ12345678 - CV1&CV2 - 测试标题',
+        'RJ12345678',
+      );
+
+      // 封面仍在作品根目录
+      expect(File(p.join(workDir, 'cover.jpg')).existsSync(), true);
+
+      // 子目录结构保留（音声/ 与 音声/特典/）
+      expect(
+        File(p.join(workDir, '音声', 'e01_01_『舔耳』.wav')).existsSync(),
+        true,
+      );
+      expect(
+        File(p.join(workDir, '音声', 'e01_01_『舔耳』.wav.vtt')).existsSync(),
+        true,
+      );
+      expect(
+        File(p.join(workDir, '音声', '特典', 'ex01_留言.wav')).existsSync(),
+        true,
+      );
+
+      // 扁平化位置不应存在
+      expect(File(p.join(workDir, 'e01_01_『舔耳』.wav')).existsSync(), false);
+      expect(File(p.join(workDir, 'ex01_留言.wav')).existsSync(), false);
+
+      // 幂等：重复整理全部跳过
+      final result2 = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: Uint8List.fromList(List.filled(80, 9)),
+        keepDirStructure: true,
+      );
+      expect(result2.copied, 0);
+      expect(result2.skipped, 4);
+    });
+
+    test('hasExpectedFiles: 保留结构模式返回 true，默认模式对其产物返回 false',
+        () async {
+      createMockDownload();
+      final args = {
+        'sourceDir': sourceDir.path,
+        'targetRoot': targetRoot.path,
+        'circleName': '测试社团',
+        'sourceId': 'RJ12345678',
+        'cvNames': 'CV1&CV2',
+        'title': '测试标题',
+      };
+
+      // 整理前两种模式都判未整理
+      expect(
+        await NavidromeOrganizer.hasExpectedFiles(
+          sourceDir: args['sourceDir']!,
+          targetRoot: args['targetRoot']!,
+          circleName: args['circleName']!,
+          sourceId: args['sourceId']!,
+          cvNames: args['cvNames']!,
+          title: args['title']!,
+        ),
+        false,
+      );
+      expect(
+        await NavidromeOrganizer.hasExpectedFiles(
+          sourceDir: args['sourceDir']!,
+          targetRoot: args['targetRoot']!,
+          circleName: args['circleName']!,
+          sourceId: args['sourceId']!,
+          cvNames: args['cvNames']!,
+          title: args['title']!,
+          keepDirStructure: true,
+        ),
+        false,
+      );
+
+      // 保留结构模式整理
+      await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '测试社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV1&CV2',
+        title: '测试标题',
+        coverBytes: Uint8List.fromList(List.filled(80, 9)),
+        keepDirStructure: true,
+      );
+
+      // 保留结构模式判为已整理
+      expect(
+        await NavidromeOrganizer.hasExpectedFiles(
+          sourceDir: args['sourceDir']!,
+          targetRoot: args['targetRoot']!,
+          circleName: args['circleName']!,
+          sourceId: args['sourceId']!,
+          cvNames: args['cvNames']!,
+          title: args['title']!,
+          keepDirStructure: true,
+        ),
+        true,
+      );
+
+      // 默认（扁平）模式对保留结构的产物返回 false（扁平位置缺文件）
+      expect(
+        await NavidromeOrganizer.hasExpectedFiles(
+          sourceDir: args['sourceDir']!,
+          targetRoot: args['targetRoot']!,
+          circleName: args['circleName']!,
+          sourceId: args['sourceId']!,
+          cvNames: args['cvNames']!,
+          title: args['title']!,
+        ),
+        false,
+      );
+    });
+  });
+
   group('resolveCircleName', () {
     // 汉化版数据结构（与 asmr API 实际返回一致）
     Map<String, dynamic> translatedWork({String circle = '汉化组'}) => {

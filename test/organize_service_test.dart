@@ -410,6 +410,78 @@ void main() {
       expect(result.skipped, 1);
     });
 
+    test('保留原目录结构：organizeAll 产物保留子目录，仅未整理二次跳过',
+        () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      // 构造带子目录的源：音声/ 与 音声/disc2/
+      final workDir = Directory(
+          p.join(dlPath.path, '社团-标题RJ00001', 'RJ00001'))
+        ..createSync(recursive: true);
+      final audioDir = Directory(p.join(workDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+      final disc2 = Directory(p.join(audioDir.path, 'disc2'))..createSync();
+      File(p.join(disc2.path, 'e02_留言.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+      await index.upsert(WorkEntry(
+        sourceId: 'RJ00001',
+        dlPath: dlPath.path,
+        dirName: '社团-标题RJ00001',
+        title: '标题RJ00001',
+        cvNames: 'CV1&CV2',
+        circleName: '社团',
+      ));
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            keepDirStructure: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      expect(result.success, 1);
+
+      final outDir = p.join(
+        targetRoot.path,
+        '社团',
+        'RJ00001 - CV1&CV2 - 标题RJ00001',
+        'RJ00001',
+      );
+      expect(
+        File(p.join(outDir, '音声', 'e01_舔耳.wav')).existsSync(),
+        true,
+      );
+      expect(
+        File(p.join(outDir, '音声', 'disc2', 'e02_留言.wav')).existsSync(),
+        true,
+      );
+      // 扁平位置不应存在
+      expect(File(p.join(outDir, 'e01_舔耳.wav')).existsSync(), false);
+
+      // 仅未整理二次执行：已按结构整理则被正确跳过（不进入结果）
+      final entries2 = await index.list();
+      final e2 = entries2.firstWhere((e) => e.sourceId == 'RJ00001');
+      expect(
+        await container.read(organizeServiceProvider).isOrganized(
+              e2,
+              targetRoot: targetRoot.path,
+              keepDirStructure: true,
+            ),
+        isTrue,
+      );
+      final result2 = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            keepDirStructure: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      expect(result2.success, 0);
+      expect(result2.results, isEmpty);
+    });
+
     test('目标文件被删除后仅整理未整理会重新整理', () async {
       final container = makeContainer();
       addTearDown(container.dispose);
