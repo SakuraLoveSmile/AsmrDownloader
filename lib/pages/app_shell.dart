@@ -6,10 +6,9 @@ import 'package:asmr_downloader/pages/downloader/download_list_page.dart';
 import 'package:asmr_downloader/pages/library/library.dart';
 import 'package:asmr_downloader/pages/media_library/media_library.dart';
 import 'package:asmr_downloader/pages/update/update_banner.dart';
-import 'package:asmr_downloader/pages/update/update_entry.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
-import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/tasks/background_task_service.dart';
+import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,15 +50,24 @@ class AppShell extends ConsumerWidget {
             children: [
               const UpdateBanner(),
               Expanded(
-                child: IndexedStack(
-                  index: index,
-                  children: const [
-                    Downloader(),
-                    DownloadListPage(),
-                    LibraryPage(),
-                    MediaLibraryPage(),
-                    BackgroundTasksPage(),
-                    DatabasePage(),
+                child: Stack(
+                  children: [
+                    IndexedStack(
+                      index: index,
+                      children: const [
+                        Downloader(),
+                        DownloadListPage(),
+                        LibraryPage(),
+                        MediaLibraryPage(),
+                        BackgroundTasksPage(),
+                        DatabasePage(),
+                      ],
+                    ),
+                    const Positioned(
+                      right: 18,
+                      bottom: 16,
+                      child: _GlobalTaskPill(),
+                    ),
                   ],
                 ),
               ),
@@ -71,182 +79,90 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-/// 顶部导航标签（可嵌入自绘标题栏，也可独立成行）。
-class AppNavTabs extends ConsumerWidget {
-  const AppNavTabs({super.key, this.standalone = false});
-
-  /// 独立成行（macOS 无自绘标题栏时使用）：自带深色背景与高度。
-  final bool standalone;
-
-  static const _tabs = <(String, IconData)>[
-    ('下载', Icons.arrow_downward_rounded),
-    ('下载列表', Icons.playlist_play_rounded),
-    ('作品库', Icons.folder_outlined),
-    ('媒体库', Icons.photo_library_outlined),
-    ('后台任务', Icons.task_alt_rounded),
-    ('数据库', Icons.storage_rounded),
-  ];
+/// 全局任务指示浮条：当有正在进行的下载、AI字幕或后台任务时在右下角悬浮提示，点击直达对应页面。
+class _GlobalTaskPill extends ConsumerWidget {
+  const _GlobalTaskPill();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final index = ref.watch(currentPageProvider);
-    final unorganized = ref.watch(unorganizedCountProvider).value ?? 0;
-    final activeTasks = ref.watch(backgroundTaskActiveCountProvider);
-    final currentDownloading = ref.watch(currentDownloadingSourceIdProvider);
-    final queue = ref.watch(downloadQueueProvider);
-    final downloadingCount =
-        (currentDownloading != null ? 1 : 0) + queue.length;
+    final downloadingSourceId = ref.watch(currentDownloadingSourceIdProvider);
+    final isDownloading = downloadingSourceId != null;
+    final isTranscribing = ref.watch(activeTranscribeSourceIdProvider) != null;
+    final tasks = ref.watch(backgroundTaskProvider);
+    final activeTasks = tasks
+        .where((t) =>
+            t.status == BackgroundTaskStatus.running ||
+            t.status == BackgroundTaskStatus.queued)
+        .length;
+
+    if (!isDownloading && !isTranscribing && activeTasks == 0) {
+      return const SizedBox.shrink();
+    }
+
     final scheme = Theme.of(context).colorScheme;
 
-    // Segmented Pill 胶囊底座
-    final tabs = Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLow,
+    String label;
+    if (isDownloading && activeTasks > 0) {
+      label = '下载中 · $activeTasks 个后台任务';
+    } else if (isDownloading) {
+      label = '正在下载 $downloadingSourceId';
+    } else if (isTranscribing) {
+      label = '正在生成 AI 字幕';
+    } else {
+      label = '$activeTasks 个后台任务运行中';
+    }
+
+    return Material(
+      key: const ValueKey('global-task-pill'),
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (activeTasks > 0) {
+            ref.read(currentPageProvider.notifier).state =
+                AppPageIndex.backgroundTasks;
+          } else {
+            ref.read(currentPageProvider.notifier).state =
+                AppPageIndex.downloadList;
+          }
+        },
         borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: scheme.outlineVariant, width: 0.8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var i = 0; i < _tabs.length; i++)
-            _NavTab(
-              key: ValueKey('onboarding-nav-tab-$i'),
-              label: _tabs[i].$1,
-              icon: _tabs[i].$2,
-              selected: i == index,
-              badgeCount: i == 1
-                  ? downloadingCount
-                  : i == 2
-                      ? unorganized
-                      : i == 4
-                          ? activeTasks
-                          : 0,
-              onTap: () => ref.read(currentPageProvider.notifier).state = i,
-            ),
-        ],
-      ),
-    );
-
-    if (!standalone) return tabs;
-    return Container(
-      width: double.infinity,
-      height: 46,
-      decoration: BoxDecoration(
-        color: scheme.surface,
-        border: Border(
-          bottom: BorderSide(color: scheme.outlineVariant, width: 0.8),
-        ),
-      ),
-      alignment: Alignment.centerLeft,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        child: Row(
-          children: [
-            tabs,
-            const Spacer(),
-            // 版本号 + 检查更新入口
-            const UpdateEntry(),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NavTab extends StatefulWidget {
-  const _NavTab({
-    super.key,
-    required this.label,
-    required this.icon,
-    required this.selected,
-    required this.onTap,
-    this.badgeCount = 0,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final VoidCallback onTap;
-  final int badgeCount;
-
-  @override
-  State<_NavTab> createState() => _NavTabState();
-}
-
-class _NavTabState extends State<_NavTab> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final selected = widget.selected;
-    final color = selected ? scheme.onSurface : scheme.onSurfaceVariant;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOutCubic,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: selected
-                ? scheme.surfaceContainerHighest
-                : _hovered
-                    ? scheme.surfaceContainerHigh.withValues(alpha: 0.5)
-                    : Colors.transparent,
+            color: scheme.surfaceContainerHighest.withValues(alpha: 0.92),
             borderRadius: BorderRadius.circular(100),
-            boxShadow: selected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      blurRadius: 4,
-                      offset: const Offset(0, 1),
-                    )
-                  ]
-                : null,
+            border: Border.all(
+              color: scheme.primary.withValues(alpha: 0.35),
+              width: 0.8,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.15),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                widget.icon,
-                size: 14,
-                color: selected ? scheme.primary : color,
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(scheme.primary),
+                ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               Text(
-                widget.label,
+                label,
                 style: TextStyle(
-                  color: color,
-                  fontSize: 12.5,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                  letterSpacing: -0.1,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurface,
                 ),
               ),
-              if (widget.badgeCount > 0) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                  child: Text(
-                    '${widget.badgeCount}',
-                    style: TextStyle(
-                      color: scheme.onPrimary,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -254,3 +170,4 @@ class _NavTabState extends State<_NavTab> {
     );
   }
 }
+

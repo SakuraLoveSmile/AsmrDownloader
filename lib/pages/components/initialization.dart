@@ -159,6 +159,10 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['chickenRiceEngineVariant'] as String? ?? '';
   ref.read(autoTranscribeProvider.notifier).state =
       config['autoTranscribe'] as bool? ?? false;
+  ref.read(notifyOnCompleteProvider.notifier).state =
+      config['notifyOnComplete'] as bool? ?? true;
+  ref.read(themeModeProvider.notifier).state =
+      config['themeMode'] as String? ?? 'dark';
   ref.read(autoCheckUpdateProvider.notifier).state =
       config['autoCheckUpdate'] as bool? ?? true;
   ref.read(githubTokenProvider.notifier).state =

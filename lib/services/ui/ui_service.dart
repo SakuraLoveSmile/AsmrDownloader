@@ -20,6 +20,7 @@ import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:asmr_downloader/services/transcribe/vtt_converter.dart';
+import 'package:asmr_downloader/services/ui/system_notifier.dart';
 import 'package:asmr_downloader/services/update/update_providers.dart';
 import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
@@ -251,6 +252,24 @@ class UIService {
       ..read(parallelDownloadCountProvider.notifier).state = value
       ..read(configFileProvider).addOrUpdate({'parallelDownloadCount': value});
     Log.info('parallelDownloadCount: $value');
+  }
+
+  void onNotifyOnCompleteChanged(bool? value) {
+    if (value == null || value == ref.read(notifyOnCompleteProvider)) return;
+
+    ref
+      ..read(notifyOnCompleteProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'notifyOnComplete': value});
+    Log.info('notifyOnComplete: $value');
+  }
+
+  void onThemeModeChanged(String? value) {
+    if (value == null || value == ref.read(themeModeProvider)) return;
+
+    ref
+      ..read(themeModeProvider.notifier).state = value
+      ..read(configFileProvider).addOrUpdate({'themeMode': value});
+    Log.info('themeMode: $value');
   }
 
   /// 保存媒体库后台网络任务的统一请求间隔。
@@ -543,13 +562,17 @@ class UIService {
     // 假成功检测：退出码 0 但 ChickenRice 明确「未找到要处理的文件」
     // （多为音频后缀/格式不匹配），给出可操作的提示而不是「完成」。
     final skipped = noGap + notExist;
-    showSnack(
-      !completed
-          ? '字幕翻译失败或已取消'
-          : (result.filesProcessed == 0
-              ? '未找到需要处理的文件（请检查音频格式配置）'
-              : (skipped > 0 ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）' : '字幕翻译完成')),
-    );
+    final snackMsg = !completed
+        ? '字幕翻译失败或已取消'
+        : (result.filesProcessed == 0
+            ? '未找到需要处理的文件（请检查音频格式配置）'
+            : (skipped > 0
+                ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）'
+                : '字幕翻译完成'));
+    showSnack(snackMsg);
+    if (completed && (result.filesProcessed ?? 0) > 0) {
+      ref.read(systemNotifierProvider).notify('AI 字幕完成', snackMsg);
+    }
     ref.invalidate(worksLibraryProvider);
     return completed;
   }
@@ -816,6 +839,7 @@ class UIService {
       msg += '，${outcome.verifyNote}';
     }
     showSnack(msg);
+    ref.read(systemNotifierProvider).notify('自动整理完成', msg);
   }
 
   /// 弹出用户可见的提示（无 BuildContext 时走全局 scaffoldMessengerKey）。

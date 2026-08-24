@@ -73,13 +73,17 @@ class AppSidebar extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  'ASMR Downloader',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                    color: scheme.onSurface,
-                    letterSpacing: -0.2,
+                Expanded(
+                  child: Text(
+                    'ASMR Downloader',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.onSurface,
+                      letterSpacing: -0.2,
+                    ),
                   ),
                 ),
               ],
@@ -90,13 +94,15 @@ class AppSidebar extends ConsumerWidget {
             padding: EdgeInsets.symmetric(horizontal: 14),
             child: Divider(height: 1),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           // 主导航列表
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Column(
               key: const ValueKey('onboarding-sidebar-nav'),
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const _SidebarSectionHeader(title: '下载'),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-download'),
                   index: AppPageIndex.downloader,
@@ -106,7 +112,7 @@ class AppSidebar extends ConsumerWidget {
                   onTap: () => ref.read(currentPageProvider.notifier).state =
                       AppPageIndex.downloader,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-download-list'),
                   index: AppPageIndex.downloadList,
@@ -118,32 +124,36 @@ class AppSidebar extends ConsumerWidget {
                   onTap: () => ref.read(currentPageProvider.notifier).state =
                       AppPageIndex.downloadList,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
+                const _SidebarSectionHeader(title: '库'),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-library'),
                   index: AppPageIndex.library,
                   currentIndex: currentIndex,
                   icon: Icons.folder_copy_rounded,
                   label: '作品库',
+                  tooltip: '本机下载整理/字幕',
                   badgeText: unorganized > 0 ? '$unorganized' : null,
                   badgeColor: AppColors.warningSolid,
                   onTap: () => ref.read(currentPageProvider.notifier).state =
                       AppPageIndex.library,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-media'),
                   index: AppPageIndex.mediaLibrary,
                   currentIndex: currentIndex,
                   icon: Icons.photo_library_rounded,
                   label: '媒体库',
+                  tooltip: '缓存作品浏览/元数据',
                   badgeText: cachedCount > 0 ? '$cachedCount' : null,
                   badgeColor: scheme.surfaceContainerHighest,
                   badgeTextColor: scheme.onSurfaceVariant,
                   onTap: () => ref.read(currentPageProvider.notifier).state =
                       AppPageIndex.mediaLibrary,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
+                const _SidebarSectionHeader(title: '系统'),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-tasks'),
                   index: AppPageIndex.backgroundTasks,
@@ -155,7 +165,7 @@ class AppSidebar extends ConsumerWidget {
                   onTap: () => ref.read(currentPageProvider.notifier).state =
                       AppPageIndex.backgroundTasks,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 3),
                 _SidebarItem(
                   key: const ValueKey('onboarding-sidebar-database'),
                   index: AppPageIndex.database,
@@ -219,6 +229,29 @@ class AppSidebar extends ConsumerWidget {
   }
 }
 
+class _SidebarSectionHeader extends StatelessWidget {
+  const _SidebarSectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurfaceVariant,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
 class _SidebarItem extends StatefulWidget {
   const _SidebarItem({
     super.key,
@@ -227,6 +260,7 @@ class _SidebarItem extends StatefulWidget {
     required this.icon,
     required this.label,
     required this.onTap,
+    this.tooltip,
     this.badgeText,
     this.badgeColor,
     this.badgeTextColor,
@@ -237,6 +271,7 @@ class _SidebarItem extends StatefulWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final String? tooltip;
   final String? badgeText;
   final Color? badgeColor;
   final Color? badgeTextColor;
@@ -253,7 +288,7 @@ class _SidebarItemState extends State<_SidebarItem> {
     final scheme = Theme.of(context).colorScheme;
     final isSelected = widget.index == widget.currentIndex;
 
-    return MouseRegion(
+    final itemWidget = MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
@@ -312,5 +347,14 @@ class _SidebarItemState extends State<_SidebarItem> {
         ),
       ),
     );
+
+    if (widget.tooltip != null) {
+      return Tooltip(
+        message: widget.tooltip!,
+        waitDuration: const Duration(milliseconds: 600),
+        child: itemWidget,
+      );
+    }
+    return itemWidget;
   }
 }

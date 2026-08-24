@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/services/tasks/background_task_service.dart';
+import 'package:asmr_downloader/ui/page_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,11 +20,22 @@ class BackgroundTasksPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildToolbar(
-          context,
-          ref,
-          activeCount: activeCount,
-          finishedCount: finishedCount,
+        PageHeader(
+          icon: Icons.task_alt_rounded,
+          title: '后台任务',
+          subtitle: activeCount > 0 ? '进行中 $activeCount 项任务' : '暂无进行中任务',
+          actions: [
+            if (finishedCount > 0)
+              TextButton.icon(
+                onPressed: () =>
+                    ref.read(backgroundTaskProvider.notifier).clearFinished(),
+                icon: const Icon(Icons.cleaning_services_outlined, size: 16),
+                label: const Text('清除历史'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+          ],
         ),
         const Divider(height: 1),
         Expanded(
@@ -45,83 +57,6 @@ class BackgroundTasksPage extends ConsumerWidget {
                 ),
         ),
       ],
-    );
-  }
-
-  Widget _buildToolbar(
-    BuildContext context,
-    WidgetRef ref, {
-    required int activeCount,
-    required int finishedCount,
-  }) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
-      child: Container(
-        key: const ValueKey('background-tasks-toolbar'),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLow,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: scheme.outlineVariant, width: 0.8),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.task_alt_rounded, size: 20, color: scheme.primary),
-            const SizedBox(width: 10),
-            const Text(
-              '后台任务',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(width: 10),
-            _CountPill(
-              label: activeCount > 0 ? '进行中 $activeCount' : '暂无进行中任务',
-              color: activeCount > 0 ? scheme.primary : scheme.onSurfaceVariant,
-            ),
-            const Spacer(),
-            if (finishedCount > 0)
-              TextButton.icon(
-                onPressed: () =>
-                    ref.read(backgroundTaskProvider.notifier).clearFinished(),
-                icon: const Icon(Icons.cleaning_services_outlined, size: 16),
-                label: const Text('清除历史'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CountPill extends StatelessWidget {
-  const _CountPill({required this.label, required this.color});
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(100),
-        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color == scheme.onSurfaceVariant
-              ? scheme.onSurfaceVariant
-              : color,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
     );
   }
 }

@@ -9,6 +9,7 @@ import 'package:asmr_downloader/pages/media_library/components/media_library_set
 import 'package:asmr_downloader/pages/media_library/components/work_inspector_drawer.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/library/work_library_status.dart';
+import 'package:asmr_downloader/ui/page_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -62,6 +63,11 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const PageHeader(
+          icon: Icons.photo_library_rounded,
+          title: '媒体库',
+          subtitle: '浏览已缓存与已扫描的作品元数据',
+        ),
         _buildToolbar(total, matched),
         const Divider(height: 1),
         Expanded(
@@ -350,7 +356,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: columns,
-                mainAxisExtent: 300,
+                mainAxisExtent: 312,
                 crossAxisSpacing: gap,
                 mainAxisSpacing: 14,
               ),
@@ -377,7 +383,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
         const gap = 12.0;
         final columns = _columnCount(constraints.maxWidth);
         return ListView(
-          key: const ValueKey('media-library-grouped-list'),
+          key: ValueKey('media-library-grouped-list-${groupBy.name}'),
           padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
           children: [
             for (final group in groups.entries) ...[
@@ -388,7 +394,7 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
                 physics: const NeverScrollableScrollPhysics(),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: columns,
-                  mainAxisExtent: 300,
+                  mainAxisExtent: 312,
                   crossAxisSpacing: gap,
                   mainAxisSpacing: 14,
                 ),

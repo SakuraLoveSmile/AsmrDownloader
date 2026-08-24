@@ -4,6 +4,7 @@ import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
 import 'package:asmr_downloader/pages/library/tools/transcribe_status_indicator.dart';
 import 'package:asmr_downloader/pages/library/work_list.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
+import 'package:asmr_downloader/ui/page_header.dart';
 import 'package:asmr_downloader/ui/toolbar_row.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +29,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildPageHeader(scheme),
+        const PageHeader(
+          icon: Icons.folder_copy_rounded,
+          title: '作品库',
+          subtitle: '管理本机下载与 NAS 整理状态',
+        ),
         // 单行紧凑工具栏：核心操作 + 偏好配置
         AppToolbarRow(
           key: const ValueKey('onboarding-library-toolbar'),
@@ -58,38 +63,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         // 作品库内容：已下载作品列表
         Expanded(child: LibraryWorkList(key: _workListKey)),
       ],
-    );
-  }
-
-  Widget _buildPageHeader(ColorScheme scheme) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-      child: Row(
-        children: [
-          Icon(Icons.folder_copy_rounded, size: 20, color: scheme.primary),
-          const SizedBox(width: 8),
-          Text(
-            '作品库',
-            style: TextStyle(
-              color: scheme.onSurface,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '管理本机下载与 NAS 整理状态',
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: scheme.onSurfaceVariant,
-                fontSize: 12,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 

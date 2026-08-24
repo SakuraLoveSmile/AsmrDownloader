@@ -1,5 +1,6 @@
 import 'package:asmr_downloader/pages/media_library/components/cache_dialog.dart';
 import 'package:asmr_downloader/services/database/database_providers.dart';
+import 'package:asmr_downloader/ui/page_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -18,7 +19,39 @@ class DatabasePage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildHeader(context, ref, scheme),
+        PageHeader(
+          icon: Icons.storage_rounded,
+          title: '数据库',
+          subtitle: '查看元数据缓存与媒体库扫描索引的状态',
+          actions: [
+            OutlinedButton.icon(
+              key: const ValueKey('database-cache-management'),
+              onPressed: () async {
+                await showDialog<void>(
+                  context: context,
+                  builder: (_) => const CacheDialog(),
+                );
+                ref.invalidate(databaseOverviewProvider);
+              },
+              icon: const Icon(Icons.tune_rounded, size: 15),
+              label: const Text('缓存管理'),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              key: const ValueKey('database-refresh'),
+              onPressed: () => ref.invalidate(databaseOverviewProvider),
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              tooltip: '刷新数据库统计',
+              visualDensity: VisualDensity.compact,
+              style: IconButton.styleFrom(
+                shape: const CircleBorder(),
+                backgroundColor: scheme.surfaceContainerHigh.withValues(
+                  alpha: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
         const Divider(height: 1),
         Expanded(
           child: overview.when(
@@ -46,60 +79,6 @@ class DatabasePage extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildHeader(
-    BuildContext context,
-    WidgetRef ref,
-    ColorScheme scheme,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
-      child: Row(
-        children: [
-          Icon(Icons.storage_rounded, size: 21, color: scheme.primary),
-          const SizedBox(width: 10),
-          const Text(
-            '数据库',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              '查看元数据缓存与媒体库扫描索引的状态',
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-            ),
-          ),
-          OutlinedButton.icon(
-            key: const ValueKey('database-cache-management'),
-            onPressed: () async {
-              await showDialog<void>(
-                context: context,
-                builder: (_) => const CacheDialog(),
-              );
-              ref.invalidate(databaseOverviewProvider);
-            },
-            icon: const Icon(Icons.tune_rounded, size: 15),
-            label: const Text('缓存管理'),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            key: const ValueKey('database-refresh'),
-            onPressed: () => ref.invalidate(databaseOverviewProvider),
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-            tooltip: '刷新数据库统计',
-            visualDensity: VisualDensity.compact,
-            style: IconButton.styleFrom(
-              shape: const CircleBorder(),
-              backgroundColor: scheme.surfaceContainerHigh.withValues(
-                alpha: 0.5,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

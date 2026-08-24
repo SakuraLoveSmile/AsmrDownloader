@@ -105,3 +105,11 @@ final chickenRiceConfigProvider = Provider<ChickenRiceConfig>((ref) {
 /// 新手引导是否已完成。首次启动时为 false，弹窗完成或跳过后写 true 并持久化，
 /// 之后启动不再自动弹出；用户仍可从「下载设置 → 新手引导」手动重新打开。
 final onboardingCompletedProvider = StateProvider<bool>((ref) => false);
+
+// ---------- 任务通知与外观 ----------
+
+/// 任务完成（下载/整理/AI字幕/后台任务）是否发送桌面系统通知
+final notifyOnCompleteProvider = StateProvider<bool>((ref) => true);
+
+/// 应用外观主题模式：'dark' (深色) / 'light' (浅色) / 'system' (跟随系统)
+final themeModeProvider = StateProvider<String>((ref) => 'dark');

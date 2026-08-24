@@ -3,6 +3,7 @@ import 'package:asmr_downloader/pages/downloader/download_activity_panel.dart';
 import 'package:asmr_downloader/models/track_item.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
+import 'package:asmr_downloader/ui/page_header.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,41 +32,22 @@ class DownloadListPage extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-          child: Row(
-            children: [
-              Icon(Icons.playlist_play_rounded, color: scheme.primary),
-              const SizedBox(width: 8),
-              Text(
-                '下载列表',
-                style: TextStyle(
-                  color: scheme.onSurface,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
+        PageHeader(
+          icon: Icons.playlist_play_rounded,
+          title: '下载列表',
+          subtitle: statusText,
+          actions: [
+            TextButton.icon(
+              onPressed: () => ref.read(currentPageProvider.notifier).state =
+                  AppPageIndex.downloader,
+              icon: const Icon(Icons.search_rounded, size: 16),
+              label: const Text('开始新下载'),
+              style: TextButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
               ),
-              const SizedBox(width: 10),
-              Text(
-                statusText,
-                style: TextStyle(
-                  color: scheme.onSurfaceVariant,
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () => ref.read(currentPageProvider.notifier).state =
-                    AppPageIndex.downloader,
-                icon: const Icon(Icons.search_rounded, size: 16),
-                label: const Text('开始新下载'),
-                style: TextButton.styleFrom(
-                  visualDensity: VisualDensity.compact,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
         Divider(height: 1, color: scheme.outlineVariant),
         Expanded(

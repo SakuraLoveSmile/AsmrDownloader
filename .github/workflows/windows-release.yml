@@ -15,8 +15,32 @@ permissions:
   contents: write
 
 jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.3'
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Flutter test
+        run: flutter test
+
   build-windows:
     runs-on: windows-latest
+    needs: quality-gate
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
@@ -53,6 +77,7 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    needs: quality-gate
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
