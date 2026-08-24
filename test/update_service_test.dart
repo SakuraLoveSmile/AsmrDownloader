@@ -9,6 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
+  // 应用仅面向 Windows/macOS；Linux 仅作 CI quality-gate 运行环境，
+  // 更新机制的平台相关用例在 Linux 上跳过。
+  final supportedUpdatePlatform = Platform.isWindows || Platform.isMacOS;
+
   group('isNewerVersion 版本比较', () {
     test('更高版本 → true', () {
       expect(UpdateService.isNewerVersion('0.8.0', '0.9.0'), isTrue);
@@ -249,7 +253,7 @@ void main() {
             (e) => e.message, 'message', contains('Connection refused'))),
       );
     });
-  });
+  }, skip: supportedUpdatePlatform ? false : 'Windows/macOS only');
 
   group('evaluateRelease 缓存判定', () {
     // asset 后缀随平台；Linux CI 无该值，测试用 macOS 后缀保持自洽
@@ -288,7 +292,7 @@ void main() {
       expect(UpdateService.evaluateRelease('', '0.8.0'), isNull);
       expect(UpdateService.evaluateRelease('not json', '0.8.0'), isNull);
     });
-  });
+  }, skip: supportedUpdatePlatform ? false : 'Windows/macOS only');
 
   group('downloadUpdate', () {
     test('下载成功且大小一致 → 返回 zip 路径', () async {
@@ -433,7 +437,7 @@ void main() {
       expect(exitCode, 0);
       File(scriptPath).deleteSync();
       tmp.deleteSync(recursive: true);
-    });
+    }, skip: supportedUpdatePlatform ? false : 'Windows/macOS only');
 
     test('解压失败 → 返回 false 且不启动脚本、不退出', () async {
       final tmp = Directory.systemTemp.createTempSync('upd_apply_fail');

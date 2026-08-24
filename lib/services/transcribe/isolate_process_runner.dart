@@ -221,24 +221,41 @@ void _processWorkerMain(List<Object?> args) {
       final process = processes[id];
       if (process == null) return;
       try {
+        var exitCode = -1;
         if (Platform.isWindows) {
-          Process.run('taskkill', ['/pid', '${process.pid}', '/t', '/f']);
-          process.kill();
+          // taskkill /t /f terminates the whole tree.
+          await Process.run('taskkill', ['/pid', '${process.pid}', '/t', '/f']);
+          await process.exitCode.catchError((_) => -1);
+          try {
+            exitCode = await process.exitCode.timeout(const Duration(seconds: 3));
+          } catch (_) {
+            exitCode = -1;
+          }
         } else {
           // POSIX shells defer SIGTERM while waiting on a child, so a plain
           // kill may not terminate `sh -c 'sleep N'` until the child exits.
-          // Escalate to SIGKILL and wait for the final exit code so the
-          // handle always completes promptly.
+          // Escalate to SIGKILL after a grace period.
           process.kill();
           try {
-            await process.exitCode.timeout(const Duration(seconds: 2));
+            exitCode = await process.exitCode.timeout(const Duration(seconds: 2));
           } on TimeoutException {
             process.kill(ProcessSignal.sigkill);
-            await process.exitCode;
+            try {
+              exitCode = await process.exitCode
+                  .timeout(const Duration(seconds: 2));
+            } catch (_) {
+              exitCode = -1;
+            }
           }
         }
+        // The killed process may leave children holding the output pipes open
+        // (e.g. `sh -c 'sleep 30'`), so the normal exit listener below would
+        // only report completion when those children finish. Report the exit
+        // here so handles complete promptly; a later duplicate 'exit' message
+        // is ignored by [IsolateProcessRunner._handleMessage].
+        processes.remove(id);
+        host.send(<Object?>['exit', id, exitCode]);
       } catch (_) {}
-      // The exit listener at the end of 'start' reports the final code.
       return;
     }
     if (type != 'start' || message.length < 5) return;
