@@ -94,6 +94,8 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
   ref.read(downloadPathProvider.notifier).state = savedDlPath;
   final savedNavidromePath = config['navidromePath'] as String? ?? '';
   ref.read(navidromePathProvider.notifier).state = savedNavidromePath;
+  final savedCvAvatarPath = config['cvAvatarPath'] as String? ?? '';
+  ref.read(cvAvatarPathProvider.notifier).state = savedCvAvatarPath;
 
   // 媒体库默认沿用下载目录和整理目录；用户一旦在媒体库设置中保存过
   // 自定义列表，就只使用自定义列表。这样 NAS 可以直接作为第二个扫描根目录。
@@ -143,6 +145,8 @@ final _initProvider = FutureProvider.autoDispose((ref) async {
       config['autoOrganize'] as bool? ?? false;
   ref.read(onlyOrganizeUnorganizedProvider.notifier).state =
       config['onlyOrganizeUnorganized'] as bool? ?? true;
+  ref.read(keepOrganizeDirStructureProvider.notifier).state =
+      config['keepOrganizeDirStructure'] as bool? ?? false;
   ref.read(chickenRiceScriptPathProvider.notifier).state =
       config['chickenRiceExePath'] as String? ?? '';
   ref.read(chickenRiceDeviceProvider.notifier).state =

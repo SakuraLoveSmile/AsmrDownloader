@@ -153,6 +153,7 @@ class WorksLibraryService {
     final organized = await ref.read(organizeServiceProvider).isOrganized(
           src,
           targetRoot: targetRoot,
+          keepDirStructure: ref.read(keepOrganizeDirStructureProvider),
         );
 
     return WorksListItem(

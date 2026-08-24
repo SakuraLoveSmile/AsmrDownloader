@@ -22,11 +22,14 @@ final unorganizedCountProvider = FutureProvider<int>((ref) async {
   final targetRoot = ref.read(navidromePathProvider);
   final organizer = ref.read(organizeServiceProvider);
   var count = 0;
-  for (final e in entries) {
-    if (Directory(e.sourceDir).existsSync() &&
-        !await organizer.isOrganized(e, targetRoot: targetRoot)) {
-      count++;
+    for (final e in entries) {
+      if (Directory(e.sourceDir).existsSync() &&
+          !await organizer.isOrganized(e,
+              targetRoot: targetRoot,
+              keepDirStructure:
+                  ref.read(keepOrganizeDirStructureProvider))) {
+        count++;
+      }
     }
-  }
   return count;
 });

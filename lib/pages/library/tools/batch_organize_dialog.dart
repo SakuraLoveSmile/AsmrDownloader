@@ -89,6 +89,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
     final result = await ref.read(organizeServiceProvider).organizeAll(
           targetRoot: targetRoot,
           onlyUnorganized: ref.read(onlyOrganizeUnorganizedProvider),
+          keepDirStructure: ref.read(keepOrganizeDirStructureProvider),
           onProgress: (p) {
             if (mounted) setState(() => _progress = p);
           },
@@ -139,6 +140,19 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
           },
           title: const Text('仅整理未整理的'),
           subtitle: const Text('只处理注册表中尚未整理过的作品'),
+          contentPadding: EdgeInsets.zero,
+        ),
+        CheckboxListTile(
+          value: ref.watch(keepOrganizeDirStructureProvider),
+          onChanged: (v) {
+            ref.read(keepOrganizeDirStructureProvider.notifier).state =
+                v ?? false;
+            ref
+                .read(configFileProvider)
+                .addOrUpdate({'keepOrganizeDirStructure': v ?? false});
+          },
+          title: const Text('保留原目录结构'),
+          subtitle: const Text('作品内子目录原样复制，不扁平化'),
           contentPadding: EdgeInsets.zero,
         ),
         const SizedBox(height: 8),

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:asmr_downloader/pages/media_library/components/batch_cache_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/cache_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/complete_missing_dialog.dart';
+import 'package:asmr_downloader/pages/media_library/components/cv_stats_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/cached_work_card.dart';
 import 'package:asmr_downloader/pages/media_library/components/media_library_settings_dialog.dart';
 import 'package:asmr_downloader/pages/media_library/components/work_inspector_drawer.dart';
@@ -176,6 +177,12 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
               onPressed: _openCacheManagement,
               icon: const Icon(Icons.tune_rounded, size: 15),
               label: const Text('数据库管理'),
+            ),
+            OutlinedButton.icon(
+              key: const ValueKey('cv-stats'),
+              onPressed: _openCvStats,
+              icon: const Icon(Icons.person_search_rounded, size: 15),
+              label: const Text('CV 统计'),
             ),
             OutlinedButton.icon(
               key: const ValueKey('onboarding-media-library-settings'),
@@ -571,6 +578,13 @@ class _MediaLibraryPageState extends ConsumerState<MediaLibraryPage> {
     return showDialog<void>(
       context: context,
       builder: (_) => const MediaLibrarySettingsDialog(),
+    );
+  }
+
+  Future<void> _openCvStats() {
+    return showDialog<void>(
+      context: context,
+      builder: (_) => CvStatsDialog(onViewWorks: _applyFilter),
     );
   }
 }

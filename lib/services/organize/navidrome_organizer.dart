@@ -215,6 +215,21 @@ class NavidromeOrganizer {
   /// 只检查文件存在性，不比较大小：整理过程中音频可能被写入标签，
   /// 导致目标文件大小与源文件不同。下载器生成的本地封面不参与普通
   /// 文件列表；若该封面存在，则目标端的 `cover.jpg` 是确定的必需产物。
+  /// 计算源文件在整理目标目录内的相对路径。
+  ///
+  /// [keepDirStructure] 为 true 时保留作品内子目录（disc1/disc2 等），
+  /// 用 [sourceFile] 相对 [sourceDir] 的路径；为 false 时扁平化，只取 basename。
+  /// 整理执行与状态检查必须使用同一规则，否则「仅整理未整理的」判断会错位。
+  static String _targetSubPath(
+    File sourceFile,
+    String sourceDir,
+    bool keepDirStructure,
+  ) {
+    return keepDirStructure
+        ? p.relative(sourceFile.path, from: sourceDir)
+        : p.basename(sourceFile.path);
+  }
+
   static Future<bool> hasExpectedFiles({
     required String sourceDir,
     required String targetRoot,
@@ -222,6 +237,7 @@ class NavidromeOrganizer {
     required String sourceId,
     required String cvNames,
     required String title,
+    bool keepDirStructure = false,
   }) async {
     if (targetRoot.trim().isEmpty) return false;
 
@@ -242,7 +258,10 @@ class NavidromeOrganizer {
     if (sourceFiles.isEmpty) return false;
 
     for (final sourceFile in sourceFiles) {
-      final targetFile = File(p.join(targetDir, p.basename(sourceFile.path)));
+      final targetFile = File(p.join(
+        targetDir,
+        _targetSubPath(sourceFile, sourceDir, keepDirStructure),
+      ));
       if (!await targetFile.exists()) return false;
     }
 
@@ -276,6 +295,7 @@ class NavidromeOrganizer {
     String albumArtist = '',
     String releaseDate = '',
     List<String> genres = const [],
+    bool keepDirStructure = false,
   }) async {
     final source = Directory(sourceDir);
     if (!await source.exists()) {
@@ -354,9 +374,10 @@ class NavidromeOrganizer {
           vttMap[base];
     }
 
-    // 扁平化复制到目标目录
+    // 复制（keepDirStructure 为 true 时保留作品内子目录结构，否则扁平化）
     for (final file in files) {
-      final targetFile = File(p.join(targetDir, p.basename(file.path)));
+      final rel = _targetSubPath(file, sourceDir, keepDirStructure);
+      final targetFile = File(p.join(targetDir, rel));
       if (await targetFile.exists() &&
           await targetFile.length() == await file.length()) {
         skipped++;
@@ -374,17 +395,21 @@ class NavidromeOrganizer {
 
         // VTT 转换出的歌词额外生成为 .lrc 侧车文件
         // （供 mp3tag 等其他工具使用；已有真实 .lrc 时跳过，避免覆盖）
+        // 侧车文件跟随音频所在目录：扁平化时位于作品根，保留结构时位于
+        // 音频对应的子目录。
         final hasRealLrc =
             lrcMap.containsKey(audioName) || lrcMap.containsKey(base);
         if (lyrics != null &&
             !hasRealLrc &&
             (vttMap.containsKey(audioName) || vttMap.containsKey(base))) {
-          final lrcFile = File(p.join(targetDir, '$audioName.lrc'));
+          final lrcDir = p.dirname(rel);
+          final lrcFile = File(p.join(targetDir, lrcDir, '$audioName.lrc'));
           final existing =
               await lrcFile.exists() ? await lrcFile.readAsString() : null;
           if (existing == lyrics) {
             skipped++;
           } else {
+            await lrcFile.create(recursive: true);
             await lrcFile.writeAsString(lyrics);
             copied++;
             Log.info('organize lrc from vtt: ${lrcFile.path}');

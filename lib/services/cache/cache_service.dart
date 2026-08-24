@@ -144,6 +144,39 @@ class CacheService {
     }
   }
 
+  /// 统计每个作品音轨树中 `type == 'audio'` 的节点数（与 tracks.dart 判定一致）。
+  /// 用于 CV 统计里的「歌曲数」聚合，避免逐个作品联网或扫描目录。
+  /// key 为 sourceId，value 为 audio 节点总数（含嵌套 folder 内的）。
+  Future<Map<String, int>> getAudioTrackCounts() async {
+    try {
+      final rows = await _db.select(_db.tracksEntries).get();
+      final result = <String, int>{};
+      for (final row in rows) {
+        final decoded = jsonDecode(row.tracksJson);
+        if (decoded is! List) continue;
+        result[row.sourceId] = _countAudioNodes(decoded);
+      }
+      return result;
+    } catch (e) {
+      Log.warning('get audio track counts failed\n' 'error: $e');
+      return {};
+    }
+  }
+
+  /// 递归遍历音轨 JSON 树：folder 节点展开 children，其余按 type 判定。
+  static int _countAudioNodes(List<dynamic> nodes) {
+    var count = 0;
+    for (final node in nodes) {
+      if (node is! Map) continue;
+      if (node['type'] == 'audio') count++;
+      final children = node['children'];
+      if (children is List) {
+        count += _countAudioNodes(children);
+      }
+    }
+    return count;
+  }
+
   // ---------- covers (BLOB) ----------
 
   Future<Uint8List?> getCover(String sourceId) async {

@@ -15,6 +15,11 @@ final downloadPathProvider = StateProvider<String>((ref) => '');
 /// Navidrome 媒体库根目录（整理功能的目标路径）
 final navidromePathProvider = StateProvider<String>((ref) => '');
 
+/// CV（声优/艺术家）头像目录：即 Navidrome 的 `ArtistImageFolder`。
+/// 应用只负责 CV 统计与集中目录式头像的手动管理（复制/清除），
+/// 不自动抓取或填充任何头像；Navidrome 侧按提示改两行配置即可生效。
+final cvAvatarPathProvider = StateProvider<String>((ref) => '');
+
 /// 媒体库扫描根目录（可包含本机下载目录和已挂载的 SMB/NAS 目录）。
 ///
 /// 扫描器只读取目录名中的 RJ/VJ/BJ 号，不读取音频、字幕或封面明细。
@@ -57,6 +62,9 @@ final apiChannelProvider = StateProvider<String>((ref) => 'asmr-200');
 
 /// 批量整理时仅处理未整理过的作品
 final onlyOrganizeUnorganizedProvider = StateProvider<bool>((ref) => true);
+
+/// 批量整理时保留作品内子目录结构（disc1/disc2 等按相对路径原样复制，不扁平化）
+final keepOrganizeDirStructureProvider = StateProvider<bool>((ref) => false);
 
 // ---------- ChickenRice（AI 字幕翻译） ----------
 

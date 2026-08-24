@@ -143,6 +143,7 @@ class OrganizeService {
   Future<bool> isOrganized(
     WorkEntry entry, {
     required String targetRoot,
+    bool keepDirStructure = false,
   }) async {
     if (entry.organizedAt == null) return false;
     return NavidromeOrganizer.hasExpectedFiles(
@@ -152,6 +153,7 @@ class OrganizeService {
       sourceId: entry.sourceId,
       cvNames: entry.cvNames,
       title: entry.title,
+      keepDirStructure: keepDirStructure,
     );
   }
 
@@ -171,6 +173,7 @@ class OrganizeService {
     String fallbackCircle = '',
     String? resolvedCircleName,
     Uint8List? coverBytes,
+    bool keepDirStructure = false,
   }) async {
     if (!Directory(sourceDir).existsSync()) return null;
 
@@ -203,6 +206,7 @@ class OrganizeService {
       albumArtist: artistTag,
       releaseDate: resolveRelease(workInfo),
       genres: resolveTags(workInfo),
+      keepDirStructure: keepDirStructure,
     );
   }
 
@@ -211,8 +215,12 @@ class OrganizeService {
   /// 注册表可能由旧版本写入过汉化组名，因此即使 [entry.circleName] 非空，
   /// 也默认重新读取 workInfo（缓存优先），再解析原版社团名。这样单条整理、
   /// 批量整理和重新整理都不会被旧的中文社团字段短路。失败则降级到注册表/目录名。
-  Future<OrganizeEntryOutcome> organizeEntry(WorkEntry entry,
-      {required String targetRoot, bool fetchWorkInfo = true}) async {
+  Future<OrganizeEntryOutcome> organizeEntry(
+    WorkEntry entry, {
+    required String targetRoot,
+    bool fetchWorkInfo = true,
+    bool keepDirStructure = false,
+  }) async {
     Map<String, dynamic>? workInfo;
     String? metadataNote;
     if (fetchWorkInfo || entry.circleName.trim().isEmpty) {
@@ -287,6 +295,7 @@ class OrganizeService {
       fallbackCircle: entry.circleName,
       resolvedCircleName: resolvedCircleName,
       coverBytes: coverBytes,
+      keepDirStructure: keepDirStructure,
     );
 
     // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段）
@@ -406,6 +415,7 @@ class OrganizeService {
     required bool onlyUnorganized,
     required void Function(BatchProgress) onProgress,
     required bool Function() isCancelled,
+    bool keepDirStructure = false,
   }) async {
     final index = ref.read(worksIndexProvider);
     var entries = await index.list();
@@ -449,7 +459,8 @@ class OrganizeService {
     if (onlyUnorganized) {
       final unorganized = <WorkEntry>[];
       for (final entry in entries) {
-        if (!await isOrganized(entry, targetRoot: targetRoot)) {
+        if (!await isOrganized(entry,
+            targetRoot: targetRoot, keepDirStructure: keepDirStructure)) {
           unorganized.add(entry);
         }
       }
@@ -493,7 +504,8 @@ class OrganizeService {
             targetRoot: targetRoot,
             // 批量整理也必须刷新已有注册表条目的元数据；旧版本可能把
             // 汉化组名写进 circleName，不能只对新扫描到的作品联网。
-            fetchWorkInfo: true);
+            fetchWorkInfo: true,
+            keepDirStructure: keepDirStructure);
         final result = outcome.result;
         if (result == null) {
           failed++;
