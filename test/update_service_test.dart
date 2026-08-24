@@ -94,7 +94,8 @@ void main() {
   });
 
   group('checkForUpdate', () {
-    final suffix = UpdateService.platformAssetSuffix!;
+    // asset 后缀随平台；Linux CI 无该值，测试用 macOS 后缀保持自洽
+    final suffix = UpdateService.platformAssetSuffix ?? '-macOS.zip';
 
     UpdateService buildService(String releaseJson) {
       return UpdateService(
@@ -251,8 +252,8 @@ void main() {
   });
 
   group('evaluateRelease 缓存判定', () {
-    // asset 后缀随平台（Windows/macOS 测试环境均可运行）
-    final suffix = UpdateService.platformAssetSuffix!;
+    // asset 后缀随平台；Linux CI 无该值，测试用 macOS 后缀保持自洽
+    final suffix = UpdateService.platformAssetSuffix ?? '-macOS.zip';
 
     test('缓存响应体 → 判定新版本', () {
       final body = json.encode({

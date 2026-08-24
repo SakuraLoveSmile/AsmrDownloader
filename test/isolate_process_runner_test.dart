@@ -32,12 +32,13 @@ void main() {
 
   test('kill terminates the child process', () async {
     final command = Platform.isWindows
-        ? ['cmd.exe', '/c', 'timeout /t 10 /nobreak >nul']
-        : ['sh', '-c', 'sleep 10'];
+        ? ['cmd.exe', '/c', 'timeout /t 30 /nobreak >nul']
+        : ['sh', '-c', 'sleep 30'];
     final handle = await runner.start(command);
     handle.kill();
 
-    final code = await handle.exitCode.timeout(const Duration(seconds: 3));
+    // kill 必须真正终止子进程；正常运行需 30s，远超等待上限
+    final code = await handle.exitCode.timeout(const Duration(seconds: 10));
     expect(code, isNot(0));
   });
 

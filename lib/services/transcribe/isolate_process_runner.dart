@@ -223,9 +223,22 @@ void _processWorkerMain(List<Object?> args) {
       try {
         if (Platform.isWindows) {
           Process.run('taskkill', ['/pid', '${process.pid}', '/t', '/f']);
+          process.kill();
+        } else {
+          // POSIX shells defer SIGTERM while waiting on a child, so a plain
+          // kill may not terminate `sh -c 'sleep N'` until the child exits.
+          // Escalate to SIGKILL and wait for the final exit code so the
+          // handle always completes promptly.
+          process.kill();
+          try {
+            await process.exitCode.timeout(const Duration(seconds: 2));
+          } on TimeoutException {
+            process.kill(ProcessSignal.sigkill);
+            await process.exitCode;
+          }
         }
-        process.kill();
       } catch (_) {}
+      // The exit listener at the end of 'start' reports the final code.
       return;
     }
     if (type != 'start' || message.length < 5) return;
