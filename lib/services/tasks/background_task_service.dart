@@ -5,6 +5,7 @@ import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/cache/media_library_settings.dart';
+import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/ui/system_notifier.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum BackgroundTaskKind {
   completeMissing,
   completeMediaLibrary,
+  completeWorksLibrary,
   batchCache,
 }
 
@@ -156,6 +158,23 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
         createdAt: DateTime.now(),
       ),
       () => _runCompleteMediaLibrary(id, interval: requestInterval),
+    );
+    return id;
+  }
+
+  String startCompleteWorksLibrary({Duration? interval}) {
+    final id = _newId('works-complete');
+    final Duration requestInterval =
+        interval ?? ref.read(mediaLibraryRequestIntervalProvider);
+    _enqueue(
+      BackgroundTask(
+        id: id,
+        kind: BackgroundTaskKind.completeWorksLibrary,
+        title: '补全作品库数据',
+        description: '补全下载作品的元数据、tracks 和封面并回写注册表',
+        createdAt: DateTime.now(),
+      ),
+      () => _runCompleteWorksLibrary(id, interval: requestInterval),
     );
     return id;
   }
@@ -374,6 +393,66 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
       failed: result.failed,
       detail: '元数据 ${result.metadataFilled} · '
           '原版社团 ${result.originalCirclesFilled} · '
+          'tracks ${result.tracksFilled} · '
+          '封面 ${result.coversFilled}',
+      cancelRequested: canceled ? true : null,
+    );
+    _cancelRequests.remove(id);
+  }
+
+  Future<void> _runCompleteWorksLibrary(
+    String id, {
+    required Duration interval,
+  }) async {
+    var lastCoverCount = 0;
+    final result =
+        await ref.read(cacheCompleteServiceProvider).completeWorksLibrary(
+              runInterval: interval,
+              onProgress: (progress) {
+                if (progress.coversFilled > lastCoverCount &&
+                    progress.currentSourceId.isNotEmpty) {
+                  ref.invalidate(cachedCoverProvider(progress.currentSourceId));
+                }
+                lastCoverCount = progress.coversFilled;
+                final successfulWorks =
+                    progress.processed - progress.skipped - progress.failed;
+                _update(
+                  id,
+                  processed: progress.processed,
+                  total: progress.total,
+                  success: successfulWorks,
+                  skipped: progress.skipped,
+                  failed: progress.failed,
+                  currentSourceId: progress.currentSourceId,
+                  detail: '元数据 ${progress.metadataFilled} · '
+                      '注册表 ${progress.indexFilled} · '
+                      'tracks ${progress.tracksFilled} · '
+                      '封面 ${progress.coversFilled} · ${progress.phase}',
+                );
+              },
+              isCancelled: () => _cancelRequests.contains(id),
+            );
+
+    // 完成后刷新作品库与封面/媒体库缓存
+    if (!_disposed) {
+      ref.invalidate(cachedLibraryProvider);
+      ref.invalidate(worksLibraryProvider);
+    }
+    final canceled = result.cancelled || _cancelRequests.contains(id);
+    final successfulWorks = result.processed - result.skipped - result.failed;
+    _update(
+      id,
+      status: canceled
+          ? BackgroundTaskStatus.canceled
+          : BackgroundTaskStatus.completed,
+      finishedAt: DateTime.now(),
+      processed: result.processed,
+      total: result.total,
+      success: successfulWorks,
+      skipped: result.skipped,
+      failed: result.failed,
+      detail: '元数据 ${result.metadataFilled} · '
+          '注册表 ${result.indexFilled} · '
           'tracks ${result.tracksFilled} · '
           '封面 ${result.coversFilled}',
       cancelRequested: canceled ? true : null,

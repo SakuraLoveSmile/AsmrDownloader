@@ -136,14 +136,109 @@ class OrganizeService {
         .join('; ');
   }
 
-  /// 从目录名解析降级元数据：目录名形如 "cv1&cv2-title"
+  /// 从目录名解析降级元数据。
+  ///
+  /// 兼容外部导入的三段式与老式两段式命名：
+  /// - "RJ123456 - CV - 标题" / "RJ123456 - CV - 标题-副标题"：
+  ///   先移除可选 RJ/VJ/BJ + 数字前缀，再按第一个 " - " 分割 CV 与标题，
+  ///   标题内部的 "-" 保留在标题段；
+  /// - "cv1&cv2-title"：无 " - " 时回退第一个 "-" 分割。
   static ({String cvNames, String title}) parseDirName(String dirName) {
-    final idx = dirName.indexOf('-');
-    if (idx < 0) return (cvNames: '', title: dirName);
+    var name = dirName.trim();
+    // 移除可选 RJ/VJ/BJ + 数字前缀及紧随其后的分隔符
+    // （"RJ123456 - CV - 标题" → "CV - 标题"）
+    final prefix = RegExp(
+      r'^(?:RJ|VJ|BJ)\d+(?:\s*-\s*)?',
+      caseSensitive: false,
+    ).firstMatch(name);
+    if (prefix != null && prefix.end < name.length) {
+      name = name.substring(prefix.end).trim();
+    }
+    // 优先按第一个 " - " 分割（三段式命名中 CV 与标题以带空格连字符分隔）
+    final spaced = name.indexOf(' - ');
+    if (spaced >= 0) {
+      return (
+        cvNames: name.substring(0, spaced).trim(),
+        title: name.substring(spaced + 3).trim(),
+      );
+    }
+    // 没有 " - " 时回退第一个 "-" 分割
+    final idx = name.indexOf('-');
+    if (idx < 0) return (cvNames: '', title: name);
     return (
-      cvNames: dirName.substring(0, idx).trim(),
-      title: dirName.substring(idx + 1).trim(),
+      cvNames: name.substring(0, idx).trim(),
+      title: name.substring(idx + 1).trim(),
     );
+  }
+
+  /// 目录名解析 + 注册表字段兜底（元数据降级值；整理与作品库补全共用）。
+  ///
+  /// 自动识别出的作品元数据为空时按目录名解析（"cv&cv-标题"），
+  /// 注册表已有字段优先于目录名解析结果。
+  static ({String fallbackTitle, String fallbackCvNames}) entryFallbacks(
+      WorkEntry entry) {
+    final parsed = parseDirName(entry.dirName);
+    return (
+      fallbackTitle: entry.title.isNotEmpty ? entry.title : parsed.title,
+      fallbackCvNames:
+          entry.cvNames.isNotEmpty ? entry.cvNames : parsed.cvNames,
+    );
+  }
+
+  /// 组装整理/补全后回写注册表的解析后元数据（整理与作品库补全共用）。
+  ///
+  /// title/cvNames/releaseDate/tags 优先使用在线元数据（[workInfo]）；
+  /// circleName 取 [resolvedCircleName]（汉化跟踪后的原版社团名或在线社团名），
+  /// 缺省时保留注册表原值；手动编辑过的条目（[entry.manuallyEditedAt] 非 null）
+  /// 保留手动字段，不被在线值覆盖。
+  /// [dlPath]/[dirName]/[organizedAt] 始终原样保留。
+  static WorkEntry resolveResolvedEntry({
+    required WorkEntry entry,
+    required Map<String, dynamic>? workInfo,
+    required String fallbackTitle,
+    required String fallbackCvNames,
+    String? resolvedCircleName,
+  }) {
+    final manual = entry.manuallyEditedAt != null;
+    return WorkEntry(
+      sourceId: entry.sourceId,
+      dlPath: entry.dlPath,
+      dirName: entry.dirName,
+      title: manual && entry.title.isNotEmpty
+          ? entry.title
+          : (workInfo != null
+              ? resolveTitle(workInfo, fallbackTitle)
+              : fallbackTitle),
+      cvNames: manual && entry.cvNames.isNotEmpty
+          ? entry.cvNames
+          : (workInfo != null
+              ? resolveCvNames(workInfo, fallbackCvNames)
+              : fallbackCvNames),
+      circleName:
+          manual ? entry.circleName : (resolvedCircleName ?? entry.circleName),
+      releaseDate: manual && entry.releaseDate.isNotEmpty
+          ? entry.releaseDate
+          : (workInfo != null ? resolveRelease(workInfo) : entry.releaseDate),
+      tags: manual && entry.tags.isNotEmpty
+          ? entry.tags
+          : (workInfo != null ? resolveTags(workInfo) : entry.tags),
+      coverUrl: workInfo != null
+          ? (workInfo['mainCoverUrl']?.toString() ?? entry.coverUrl)
+          : entry.coverUrl,
+      organizedAt: entry.organizedAt,
+      manuallyEditedAt: entry.manuallyEditedAt,
+    );
+  }
+
+  /// 注册表回写（整理完成 / 作品库元数据补全后共用）。
+  /// [markOrganized] 为 true 时同时记录整理完成时间。
+  Future<void> upsertResolvedEntry(
+    WorkEntry resolved, {
+    bool markOrganized = false,
+  }) async {
+    await ref.read(worksIndexProvider).upsert(markOrganized
+        ? resolved.copyWith(organizedAt: DateTime.now().toIso8601String())
+        : resolved);
   }
 
   /// 判断注册表条目当前是否仍有完整的整理产物。
@@ -288,14 +383,12 @@ class OrganizeService {
       }
     }
 
-    // 降级：自动识别出的作品元数据为空时按目录名解析（"cv&cv-标题"）
-    final parsed = parseDirName(entry.dirName);
-    final fallbackTitle = entry.title.isNotEmpty ? entry.title : parsed.title;
-    final fallbackCvNames =
-        entry.cvNames.isNotEmpty ? entry.cvNames : parsed.cvNames;
-
+    // 降级：自动识别出的作品元数据为空时按目录名解析（"cv&cv-标题"）；
     // 只解析一次并把同一个结果传给整理和注册表回写；否则目录虽然已经用
     // 原版社团名创建，回写时又会把旧的汉化组名保存回去，下一次仍会复发。
+    final fallbacks = entryFallbacks(entry);
+    final fallbackTitle = fallbacks.fallbackTitle;
+    final fallbackCvNames = fallbacks.fallbackCvNames;
     // 手动编辑过的条目跳过汉化重解析，直接采用 entry.circleName。
     final String? resolvedCircleName;
     if (manual) {
@@ -363,34 +456,14 @@ class OrganizeService {
     );
 
     // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段；
-    // 手动编辑过的条目保留手动字段与手动标记，后续整理继续以手动值为准）
-    final resolved = WorkEntry(
-      sourceId: entry.sourceId,
-      dlPath: entry.dlPath,
-      dirName: entry.dirName,
-      title: manual && entry.title.isNotEmpty
-          ? entry.title
-          : (workInfo != null
-              ? resolveTitle(workInfo, fallbackTitle)
-              : fallbackTitle),
-      cvNames: manual && entry.cvNames.isNotEmpty
-          ? entry.cvNames
-          : (workInfo != null
-              ? resolveCvNames(workInfo, fallbackCvNames)
-              : fallbackCvNames),
-      circleName:
-          manual ? entry.circleName : (resolvedCircleName ?? entry.circleName),
-      releaseDate: manual && entry.releaseDate.isNotEmpty
-          ? entry.releaseDate
-          : (workInfo != null ? resolveRelease(workInfo) : entry.releaseDate),
-      tags: manual && entry.tags.isNotEmpty
-          ? entry.tags
-          : (workInfo != null ? resolveTags(workInfo) : entry.tags),
-      coverUrl: workInfo != null
-          ? (workInfo['mainCoverUrl']?.toString() ?? entry.coverUrl)
-          : entry.coverUrl,
-      organizedAt: entry.organizedAt,
-      manuallyEditedAt: entry.manuallyEditedAt,
+    // 手动编辑过的条目保留手动字段与手动标记，后续整理继续以手动值为准）。
+    // 与作品库「补全数据」共用同一套组装规则（见 [resolveResolvedEntry]）。
+    final resolved = resolveResolvedEntry(
+      entry: entry,
+      workInfo: workInfo,
+      fallbackTitle: fallbackTitle,
+      fallbackCvNames: fallbackCvNames,
+      resolvedCircleName: resolvedCircleName,
     );
 
     // 整理产物校验（缺歌词/封面等缺陷摘要，供批量消息与 snack 展示）。
@@ -483,7 +556,8 @@ class OrganizeService {
   /// 扫描下载根目录，识别带 RJ/VJ/BJ 号的子目录（不依赖注册表）。
   /// 返回合成 WorkEntry（title/cvNames/circleName 为空，整理时按目录名降级解析/在线拉取）。
   /// [excludeRoot] 整理目标根目录，位于其下的目录不作为源扫描（防止把整理产物再整理）。
-  /// 同一 sourceId 多处出现时取最浅路径；跳过隐藏目录。
+  /// 同一 sourceId 多处出现时优先更深的内层目录（父子命中），互不包含取最浅路径；
+  /// 跳过隐藏目录。
   /// 实现委托给公共 [scanDownloadRoot]（作品库列表复用同一扫描逻辑）。
   Future<List<WorkEntry>> discoverWorks({
     required String dlRoot,
@@ -619,8 +693,7 @@ class OrganizeService {
                           result.tagWriteFailures),
                       outcome.metadataNote),
                   outcome.verifyNote)));
-          await index.upsert(outcome.resolvedEntry
-              .copyWith(organizedAt: DateTime.now().toIso8601String()));
+          await upsertResolvedEntry(outcome.resolvedEntry, markOrganized: true);
         } else {
           success++;
           results.add(BatchItemResult(
@@ -632,8 +705,7 @@ class OrganizeService {
                           result.tagWriteFailures),
                       outcome.metadataNote),
                   outcome.verifyNote)));
-          await index.upsert(outcome.resolvedEntry
-              .copyWith(organizedAt: DateTime.now().toIso8601String()));
+          await upsertResolvedEntry(outcome.resolvedEntry, markOrganized: true);
         }
       } catch (e) {
         failed++;

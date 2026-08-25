@@ -12,8 +12,10 @@ class _FakeCompleteService extends CacheCompleteService {
   final Duration delay;
   int calls = 0;
   int mediaLibraryCalls = 0;
+  int worksLibraryCalls = 0;
   Duration? lastRunInterval;
   Duration? lastMediaLibraryRunInterval;
+  Duration? lastWorksLibraryRunInterval;
 
   @override
   Future<CompleteResult> completeMissing({
@@ -66,6 +68,40 @@ class _FakeCompleteService extends CacheCompleteService {
       total: 2,
       metadataFilled: 1,
       originalCirclesFilled: 1,
+      tracksFilled: 1,
+      coversFilled: 1,
+      skipped: 0,
+      failed: 0,
+      cancelled: isCancelled(),
+    );
+  }
+
+  @override
+  Future<WorksLibraryCompleteResult> completeWorksLibrary({
+    Duration? runInterval,
+    required void Function(WorksLibraryCompleteProgress) onProgress,
+    required bool Function() isCancelled,
+  }) async {
+    worksLibraryCalls++;
+    lastWorksLibraryRunInterval = runInterval;
+    onProgress(const WorksLibraryCompleteProgress(
+      processed: 1,
+      total: 2,
+      metadataFilled: 1,
+      indexFilled: 1,
+      tracksFilled: 1,
+      coversFilled: 1,
+      skipped: 0,
+      failed: 0,
+      currentSourceId: 'RJ00004',
+      phase: '补全封面',
+    ));
+    await Future<void>.delayed(delay);
+    return WorksLibraryCompleteResult(
+      processed: 1,
+      total: 2,
+      metadataFilled: 1,
+      indexFilled: 1,
       tracksFilled: 1,
       coversFilled: 1,
       skipped: 0,
@@ -278,6 +314,53 @@ void main() {
     expect(task.detail, contains('原版社团 1'));
     expect(complete!.mediaLibraryCalls, 1);
     expect(complete!.lastMediaLibraryRunInterval, const Duration(seconds: 3));
+    expect(batch?.calls ?? 0, 0);
+  });
+
+  test('补全作品库使用独立后台任务并同步明细', () async {
+    _FakeCompleteService? complete;
+    _FakeBatchService? batch;
+    final container = makeContainer(
+      onComplete: (service) => complete = service,
+      onBatch: (service) => batch = service,
+      mediaInterval: const Duration(seconds: 4),
+    );
+    final notifier = container.read(backgroundTaskProvider.notifier);
+    final id = notifier.startCompleteWorksLibrary();
+
+    await waitFor(() => taskById(container, id).isFinished);
+    final task = taskById(container, id);
+    expect(task.kind, BackgroundTaskKind.completeWorksLibrary);
+    expect(task.status, BackgroundTaskStatus.completed);
+    expect(task.total, 2);
+    expect(task.processed, 1);
+    expect(task.detail, contains('注册表 1'));
+    expect(task.detail, contains('tracks 1'));
+    expect(complete!.worksLibraryCalls, 1);
+    expect(complete!.lastWorksLibraryRunInterval, const Duration(seconds: 4));
+    expect(batch?.calls ?? 0, 0);
+  });
+
+  test('取消运行中的作品库补全任务', () async {
+    _FakeCompleteService? complete;
+    _FakeBatchService? batch;
+    final container = makeContainer(
+      completeDelay: const Duration(milliseconds: 20),
+      onComplete: (service) => complete = service,
+      onBatch: (service) => batch = service,
+    );
+    final notifier = container.read(backgroundTaskProvider.notifier);
+    final id = notifier.startCompleteWorksLibrary();
+
+    await waitFor(
+        () => taskById(container, id).status == BackgroundTaskStatus.running);
+    notifier.cancelTask(id);
+    await waitFor(() => taskById(container, id).isFinished);
+
+    final task = taskById(container, id);
+    expect(task.status, BackgroundTaskStatus.canceled);
+    expect(task.cancelRequested, true);
+    expect(complete!.worksLibraryCalls, 1);
     expect(batch?.calls ?? 0, 0);
   });
 }

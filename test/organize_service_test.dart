@@ -219,6 +219,46 @@ void main() {
       expect(r2.title, '无分隔符');
     });
 
+    test('目录名解析：外部导入三段式（RJ/VJ/BJ 前缀 + CV + 标题）', () {
+      final r1 = OrganizeService.parseDirName('RJ123456 - CV1 - 舔耳作品');
+      expect(r1.cvNames, 'CV1');
+      expect(r1.title, '舔耳作品');
+
+      // 多 CV 用 & 连接
+      final r2 = OrganizeService.parseDirName('RJ123456 - CV1&CV2 - 标题');
+      expect(r2.cvNames, 'CV1&CV2');
+      expect(r2.title, '标题');
+
+      // 标题内部继续包含 "-" 时保留在标题段
+      final r3 = OrganizeService.parseDirName('RJ123456 - CV1 - 标题-副标题');
+      expect(r3.cvNames, 'CV1');
+      expect(r3.title, '标题-副标题');
+
+      // VJ/BJ 前缀、小写前缀均可解析
+      final r4 = OrganizeService.parseDirName('vj123456 - CV - 标题');
+      expect(r4.cvNames, 'CV');
+      expect(r4.title, '标题');
+      final r5 = OrganizeService.parseDirName('BJ234567 - 声优 - 作品');
+      expect(r5.cvNames, '声优');
+      expect(r5.title, '作品');
+    });
+
+    test('目录名解析：无空格分隔时回退第一个 "-"（前缀移除不误伤）', () {
+      final r1 = OrganizeService.parseDirName('cv1&cv2-title');
+      expect(r1.cvNames, 'cv1&cv2');
+      expect(r1.title, 'title');
+
+      // 前缀后无空格分隔（"RJ123456-cv-标题"）仍先移除前缀再回退 "-"
+      final r2 = OrganizeService.parseDirName('RJ123456-cv-标题');
+      expect(r2.cvNames, 'cv');
+      expect(r2.title, '标题');
+
+      // 目录名整体就是 sourceId 时按原样兜底标题
+      final r3 = OrganizeService.parseDirName('RJ123456');
+      expect(r3.cvNames, '');
+      expect(r3.title, 'RJ123456');
+    });
+
     test('toArtistTagValue：多 CV 用 "; " 连接（Navidrome 拆分为多个艺术家）', () {
       expect(OrganizeService.toArtistTagValue('CV1&CV2'), 'CV1; CV2');
       // 单 CV 原样返回
