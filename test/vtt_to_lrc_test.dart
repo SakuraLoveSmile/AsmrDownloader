@@ -15,7 +15,9 @@ void main() {
       final lrc = vttToLrc(vtt);
 
       expect(lrc, isNotNull);
-      expect(lrc, '[00:00.90]深入舔耳特化型智能性爱人偶 即将启动\n'
+      expect(
+          lrc,
+          '[00:00.90]深入舔耳特化型智能性爱人偶 即将启动\n'
           '[00:09.10]初次见面您好 我是智能性爱人偶「001」');
     });
 

@@ -42,7 +42,11 @@ void main() {
           {'name': 'CV1'}
         ],
         'tags': [
-          {'i18n': {'zh-cn': {'name': '舔耳'}}}
+          {
+            'i18n': {
+              'zh-cn': {'name': '舔耳'}
+            }
+          }
         ],
         'mainCoverUrl': '',
         'release': '2026-06-09',
@@ -159,8 +163,7 @@ void main() {
       final cache = CacheService(cacheDb);
       await cache.saveWorkInfo('RJ01619789', fullWorkInfo());
 
-      final container =
-          makeCacheContainer(apiCalls: apiCalls, cache: cache);
+      final container = makeCacheContainer(apiCalls: apiCalls, cache: cache);
       addTearDown(container.dispose);
 
       final data = await container.read(workInfoProvider.future);
@@ -174,8 +177,7 @@ void main() {
       addTearDown(cacheDb.close);
       final cache = CacheService(cacheDb);
 
-      final container =
-          makeCacheContainer(apiCalls: apiCalls, cache: cache);
+      final container = makeCacheContainer(apiCalls: apiCalls, cache: cache);
       addTearDown(container.dispose);
 
       final data = await container.read(workInfoProvider.future);
@@ -211,8 +213,7 @@ void main() {
         {'title': '缓存音轨.wav'},
       ]);
 
-      final container =
-          makeCacheContainer(apiCalls: apiCalls, cache: cache);
+      final container = makeCacheContainer(apiCalls: apiCalls, cache: cache);
       addTearDown(container.dispose);
 
       final tracks = await container.read(rawTracksProvider.future);
@@ -232,9 +233,9 @@ void main() {
         idProvider.overrideWith((ref) => '1619789'),
         sourceIdProvider.overrideWith((ref) => 'RJ01619789'),
         workInfoProvider.overrideWith((ref) async => {
-          'title': 't',
-          'mainCoverUrl': 'https://example.com/cover.jpg',
-        }),
+              'title': 't',
+              'mainCoverUrl': 'https://example.com/cover.jpg',
+            }),
         asmrApiProvider.overrideWith((ref) => CountingApi(apiCalls)),
         cacheServiceProvider.overrideWith((ref) => cache),
       ]);
@@ -258,9 +259,9 @@ void main() {
         idProvider.overrideWith((ref) => '1619789'),
         sourceIdProvider.overrideWith((ref) => 'RJ01619789'),
         workInfoProvider.overrideWith((ref) async => {
-          'title': 't',
-          'mainCoverUrl': 'https://example.com/cover.jpg',
-        }),
+              'title': 't',
+              'mainCoverUrl': 'https://example.com/cover.jpg',
+            }),
         asmrApiProvider.overrideWith((ref) => CountingApi(apiCalls)),
         cacheServiceProvider.overrideWith((ref) => cache),
       ]);

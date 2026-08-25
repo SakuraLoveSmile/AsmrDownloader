@@ -25,7 +25,8 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          configFileProvider.overrideWithValue(_SyncJsonStorage(filePath: path)),
+          configFileProvider
+              .overrideWithValue(_SyncJsonStorage(filePath: path)),
         ],
       );
       addTearDown(container.dispose);
@@ -51,7 +52,8 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          configFileProvider.overrideWithValue(_SyncJsonStorage(filePath: path)),
+          configFileProvider
+              .overrideWithValue(_SyncJsonStorage(filePath: path)),
         ],
       );
       addTearDown(container.dispose);
@@ -76,7 +78,8 @@ void main() {
 
       final container = ProviderContainer(
         overrides: [
-          configFileProvider.overrideWithValue(_SyncJsonStorage(filePath: path)),
+          configFileProvider
+              .overrideWithValue(_SyncJsonStorage(filePath: path)),
         ],
       );
       addTearDown(container.dispose);

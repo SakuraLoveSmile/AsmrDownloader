@@ -124,8 +124,7 @@ class ChunkDownloader {
   Future<int> _probeSize(String url, CancelToken? cancelToken) async {
     try {
       final resp = await _dio.head(url,
-          cancelToken: cancelToken,
-          options: Options(followRedirects: true));
+          cancelToken: cancelToken, options: Options(followRedirects: true));
       final len = resp.headers.value(Headers.contentLengthHeader);
       return int.tryParse(len ?? '') ?? 0;
     } catch (e) {
@@ -204,8 +203,7 @@ class ChunkDownloader {
         Log.warning('chunk download canceled: $fileName');
         return false;
       }
-      var downloadedBytes =
-          await tmpFile.exists() ? await tmpFile.length() : 0;
+      var downloadedBytes = await tmpFile.exists() ? await tmpFile.length() : 0;
       if (downloadedBytes > fileSize) {
         await tmpFile.delete();
         downloadedBytes = 0;
@@ -416,8 +414,8 @@ class ChunkDownloader {
           cancelToken: token,
           deleteOnError: false,
           fileAccessMode: FileAccessMode.append,
-          options: Options(
-              headers: {'range': 'bytes=$rangeStart-${segment.end}'}),
+          options:
+              Options(headers: {'range': 'bytes=$rangeStart-${segment.end}'}),
           onReceiveProgress: (received, total) {
             segment.completedBytes = resumeFrom + received;
             notify();

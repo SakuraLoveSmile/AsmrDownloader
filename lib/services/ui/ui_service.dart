@@ -566,9 +566,7 @@ class UIService {
         ? '字幕翻译失败或已取消'
         : (result.filesProcessed == 0
             ? '未找到需要处理的文件（请检查音频格式配置）'
-            : (skipped > 0
-                ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）'
-                : '字幕翻译完成'));
+            : (skipped > 0 ? '字幕翻译完成（跳过 $skipped 个已有字幕/无效的作品）' : '字幕翻译完成'));
     showSnack(snackMsg);
     if (completed && (result.filesProcessed ?? 0) > 0) {
       ref.read(systemNotifierProvider).notify('AI 字幕完成', snackMsg);
@@ -766,8 +764,9 @@ class UIService {
     final targetRoot = ref.read(navidromePathProvider);
     if (targetRoot.isEmpty) return null;
     try {
-      final verify = await ref.read(verifyServiceProvider).verifyWork(entry,
-          targetRoot: targetRoot);
+      final verify = await ref
+          .read(verifyServiceProvider)
+          .verifyWork(entry, targetRoot: targetRoot);
       return verify.ok ? null : '校验：${verify.summary}';
     } catch (e) {
       Log.warning('verify work failed: ${entry.sourceId}\n' 'error: $e');
@@ -777,12 +776,14 @@ class UIService {
 
   /// 对作品库中的单个作品执行整理（离线优先：注册表元数据 → 目录名解析）。
   /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器。
+  /// [forceReorganize] 完全重新整理：删除媒体库既有整理产物后重建。
   /// 返回整理 outcome；未执行成功返回 null。
   Future<OrganizeEntryOutcome?> organizeWorkFor(
     WorksListItem item, {
     bool pickPathIfEmpty = false,
+    bool forceReorganize = false,
   }) async {
-    showSnack('正在整理 ${item.sourceId}…');
+    showSnack(forceReorganize ? '正在完全重新整理 …' : '正在整理 ${item.sourceId}…');
 
     var navidromePath = ref.read(navidromePathProvider);
     if (navidromePath.isEmpty) {
@@ -808,17 +809,23 @@ class UIService {
     );
     final organizer = ref.read(organizeServiceProvider);
     if (await organizer.needsWorkInfoNetwork(entry, fetchWorkInfo: true)) {
-      showSnack('正在整理 ${item.sourceId}…需联网获取元数据，最长约 17 秒…');
+      showSnack(forceReorganize
+          ? '正在完全重新整理 …'
+          : '正在整理 ${item.sourceId}…需联网获取元数据，最长约 17 秒…');
     }
     final outcome = await organizer.organizeEntry(
       entry,
       targetRoot: navidromePath,
       fetchWorkInfo: true,
+      forceReorganize: forceReorganize,
     );
     if (outcome.result != null) {
       // 补录整理时间（含解析后的元数据回写）
       await ref.read(worksIndexProvider).upsert(outcome.resolvedEntry
           .copyWith(organizedAt: DateTime.now().toIso8601String()));
+    } else if (forceReorganize) {
+      // 完全重新整理失败：旧整理产物可能已被清理，提示用户重试
+      showSnack('完全重新整理失败，旧整理产物可能已被清理，请重试。');
     }
     ref.invalidate(worksLibraryProvider);
     ref.invalidate(unorganizedCountProvider);

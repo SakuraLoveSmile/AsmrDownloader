@@ -18,16 +18,15 @@ void main() {
     testBase.deleteSync(recursive: true);
   });
 
-  void audio(String name) => File(p.join(workDir.path, name))
-      .writeAsBytesSync(List.filled(100, 1));
-  void sub(String name) => File(p.join(workDir.path, name))
-      .writeAsBytesSync(List.filled(10, 2));
+  void audio(String name) =>
+      File(p.join(workDir.path, name)).writeAsBytesSync(List.filled(100, 1));
+  void sub(String name) =>
+      File(p.join(workDir.path, name)).writeAsBytesSync(List.filled(10, 2));
 
   test('无字幕的音轨全部需要翻译', () {
     audio('e01.wav');
     audio('e02.flac');
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing.length, 2);
   });
 
@@ -35,8 +34,7 @@ void main() {
     audio('e01.wav');
     audio('e02.flac');
     sub('e01.lrc'); // e01 有字幕
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing.map((f) => p.basename(f.path)).toList(), ['e02.flac']);
   });
 
@@ -44,41 +42,37 @@ void main() {
     audio('e01.wav');
     audio('e02.flac');
     sub('e02.flac.vtt'); // 带音频扩展名的字幕
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing.map((f) => p.basename(f.path)).toList(), ['e01.wav']);
   });
 
   test('.srt 也被视为已有字幕', () {
     audio('e01.wav');
     sub('e01.srt');
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing, isEmpty);
   });
 
   test('视频音轨：foo.mp4.vtt 视为已有字幕（视频 stem 匹配）', () {
     audio('e01.mp4');
     sub('e01.mp4.vtt'); // 视频音轨带扩展名的字幕
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing, isEmpty);
   });
 
   test('视频音轨无字幕时列入缺口（flv/wmv 在支持列表内）', () {
     audio('e01.flv');
     audio('e02.wmv');
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
-    expect(missing.map((f) => p.basename(f.path)).toSet(),
-        {'e01.flv', 'e02.wmv'});
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    expect(
+        missing.map((f) => p.basename(f.path)).toSet(), {'e01.flv', 'e02.wmv'});
   });
 
   test('kAudioExtensions 覆盖官方 bat 的全部后缀', () {
     expect(
       kAudioExtensions,
-      containsAll(['.wma', '.mp4', '.mkv', '.avi', '.mov', '.webm',
-          '.flv', '.wmv']),
+      containsAll(
+          ['.wma', '.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.wmv']),
     );
   });
 
@@ -90,8 +84,7 @@ void main() {
     File(p.join(workDir.path, '特典', 'ex01.wav'))
       ..parent.createSync(recursive: true)
       ..writeAsBytesSync(List.filled(100, 1));
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing.length, 1); // 只有 ex01.wav 缺字幕
     expect(p.basename(missing.first.path), 'ex01.wav');
   });
@@ -107,8 +100,7 @@ void main() {
   test('扩展名大小写不敏感', () {
     audio('e01.WAV');
     sub('e01.lrc');
-    final missing =
-        SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+    final missing = SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
     expect(missing, isEmpty);
   });
 
@@ -118,22 +110,20 @@ void main() {
       audio('e02.flac');
       sub('e01.lrc');
       sub('e02.flac.vtt');
-      final subDir = Directory(p.join(workDir.path, '特典'))
-        ..createSync();
+      final subDir = Directory(p.join(workDir.path, '特典'))..createSync();
       File(p.join(subDir.path, 'ex01.wav'))
           .writeAsBytesSync(List.filled(100, 1));
 
-      final syncNames = SubtitleGapDetector.findMissingSubtitleTracks(
-              workDir.path)
-          .map((f) => p.basename(f.path))
-          .toList()
-        ..sort();
-      final asyncNames =
-          (await SubtitleGapDetector.findMissingSubtitleTracksAsync(
-                  workDir.path))
+      final syncNames =
+          SubtitleGapDetector.findMissingSubtitleTracks(workDir.path)
               .map((f) => p.basename(f.path))
               .toList()
             ..sort();
+      final asyncNames = (await SubtitleGapDetector
+              .findMissingSubtitleTracksAsync(workDir.path))
+          .map((f) => p.basename(f.path))
+          .toList()
+        ..sort();
       expect(asyncNames, syncNames);
       expect(asyncNames, ['ex01.wav']);
     });

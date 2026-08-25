@@ -151,8 +151,7 @@ void main() {
       await fileService.saveTracks('RJ01619789', [
         {'title': 'a.wav'}
       ]);
-      await fileService.saveCover(
-          'RJ01619789', Uint8List.fromList([1, 2, 3]));
+      await fileService.saveCover('RJ01619789', Uint8List.fromList([1, 2, 3]));
 
       await fileService.exportTo(exportPath);
       expect(File(exportPath).existsSync(), true);
@@ -166,8 +165,8 @@ void main() {
       final data = await service2.getWorkInfo('RJ01619789');
       expect(data?['title'], '原标题');
       expect(await service2.getTracks('RJ01619789'), hasLength(1));
-      expect(await service2.getCover('RJ01619789'),
-          Uint8List.fromList([1, 2, 3]));
+      expect(
+          await service2.getCover('RJ01619789'), Uint8List.fromList([1, 2, 3]));
       expect(File(importTarget).existsSync(), true);
     });
 

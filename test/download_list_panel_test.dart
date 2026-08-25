@@ -48,7 +48,11 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'track1.flac', size: 1024, fraction: 0, status: DownloadStatus.notStarted),
+        segment(
+            title: 'track1.flac',
+            size: 1024,
+            fraction: 0,
+            status: DownloadStatus.notStarted),
       ];
       container.read(totalTaskCntProvider.notifier).state = 1;
 
@@ -63,7 +67,11 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'track1.flac', size: 1024, fraction: 0, status: DownloadStatus.notStarted),
+        segment(
+            title: 'track1.flac',
+            size: 1024,
+            fraction: 0,
+            status: DownloadStatus.notStarted),
       ];
 
       await tester.pumpWidget(buildPanel(container));
@@ -76,13 +84,18 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'track1.flac', size: 1024, fraction: 0, status: DownloadStatus.notStarted),
+        segment(
+            title: 'track1.flac',
+            size: 1024,
+            fraction: 0,
+            status: DownloadStatus.notStarted),
       ];
 
       await tester.pumpWidget(buildPanel(container));
       expect(find.byIcon(Icons.expand_more), findsOneWidget);
 
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.expand_less), findsOneWidget);
@@ -93,11 +106,16 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'track1.flac', size: 1024, fraction: 0.5, status: DownloadStatus.downloading),
+        segment(
+            title: 'track1.flac',
+            size: 1024,
+            fraction: 0.5,
+            status: DownloadStatus.downloading),
       ];
 
       await tester.pumpWidget(buildPanel(container));
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.expand_less), findsOneWidget);
 
@@ -114,9 +132,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'done.flac', size: 1024, fraction: 1, status: DownloadStatus.completed),
+        segment(
+            title: 'done.flac',
+            size: 1024,
+            fraction: 1,
+            status: DownloadStatus.completed),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -128,9 +151,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'bad.flac', size: 1024, fraction: 0.3, status: DownloadStatus.failed),
+        segment(
+            title: 'bad.flac',
+            size: 1024,
+            fraction: 0.3,
+            status: DownloadStatus.failed),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -142,9 +170,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'queue.flac', size: 1024, fraction: 0, status: DownloadStatus.notStarted),
+        segment(
+            title: 'queue.flac',
+            size: 1024,
+            fraction: 0,
+            status: DownloadStatus.notStarted),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -156,9 +189,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'canceled.flac', size: 1024, fraction: 0, status: DownloadStatus.canceled),
+        segment(
+            title: 'canceled.flac',
+            size: 1024,
+            fraction: 0,
+            status: DownloadStatus.canceled),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -170,9 +208,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'active.flac', size: 1024, fraction: 0.4, status: DownloadStatus.downloading),
+        segment(
+            title: 'active.flac',
+            size: 1024,
+            fraction: 0.4,
+            status: DownloadStatus.downloading),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -186,9 +229,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'a.flac', size: 2048, fraction: 0.5, status: DownloadStatus.downloading),
+        segment(
+            title: 'a.flac',
+            size: 2048,
+            fraction: 0.5,
+            status: DownloadStatus.downloading),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -209,7 +257,8 @@ void main() {
           speed: 1024,
         ),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -222,9 +271,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'bad.flac', size: 1024, fraction: 0.3, status: DownloadStatus.failed),
+        segment(
+            title: 'bad.flac',
+            size: 1024,
+            fraction: 0.3,
+            status: DownloadStatus.failed),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();
@@ -232,17 +286,27 @@ void main() {
       final indicator = tester.widget<LinearProgressIndicator>(
         find.byType(LinearProgressIndicator),
       );
-      expect(indicator.color, Theme.of(tester.element(find.byType(LinearProgressIndicator)))
-          .colorScheme
-          .error);
+      expect(
+          indicator.color,
+          Theme.of(tester.element(find.byType(LinearProgressIndicator)))
+              .colorScheme
+              .error);
     });
 
     testWidgets('头部显示已完成数/总数', (tester) async {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'a.flac', size: 1024, fraction: 1, status: DownloadStatus.completed),
-        segment(title: 'b.flac', size: 1024, fraction: 0, status: DownloadStatus.notStarted),
+        segment(
+            title: 'a.flac',
+            size: 1024,
+            fraction: 1,
+            status: DownloadStatus.completed),
+        segment(
+            title: 'b.flac',
+            size: 1024,
+            fraction: 0,
+            status: DownloadStatus.notStarted),
       ];
       container.read(currentDlNoProvider.notifier).state = 1;
       container.read(totalTaskCntProvider.notifier).state = 2;
@@ -258,9 +322,14 @@ void main() {
       final container = ProviderContainer();
       addTearDown(container.dispose);
       container.read(downloadSegmentsProvider.notifier).state = [
-        segment(title: 'a.flac', size: 1024, fraction: 1, status: DownloadStatus.completed),
+        segment(
+            title: 'a.flac',
+            size: 1024,
+            fraction: 1,
+            status: DownloadStatus.completed),
       ];
-      container.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
+      container.read(dlStatusProvider.notifier).state =
+          DownloadStatus.downloading;
 
       await tester.pumpWidget(buildPanel(container));
       await tester.pumpAndSettle();

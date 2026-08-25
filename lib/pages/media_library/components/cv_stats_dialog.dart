@@ -246,20 +246,18 @@ class CvStatsDialog extends ConsumerWidget {
           leading: CircleAvatar(
             radius: 22,
             backgroundColor: scheme.surfaceContainerHighest,
-            backgroundImage:
-                hasAvatar ? FileImage(File(avatarPath)) : null,
+            backgroundImage: hasAvatar ? FileImage(File(avatarPath)) : null,
             child: hasAvatar
                 ? null
                 : Icon(Icons.star_rounded,
                     color: scheme.onSurfaceVariant, size: 22),
           ),
           title: Text(stat.name,
-              style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600)),
+              style:
+                  const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           subtitle: Text(
             '${stat.albumCount} 张专辑 · ${stat.trackCount} 首歌曲',
-            style:
-                TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+            style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
           ),
           trailing: Wrap(
             spacing: 4,

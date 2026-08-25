@@ -331,9 +331,7 @@ class DownloadManager {
         timeout: const Duration(milliseconds: 500),
       );
     }
-    await ref
-        .read(systemNotifierProvider)
-        .notify('下载完成', '$sourceId 下载已完成');
+    await ref.read(systemNotifierProvider).notify('下载完成', '$sourceId 下载已完成');
 
     ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
 

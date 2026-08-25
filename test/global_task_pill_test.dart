@@ -10,7 +10,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         currentDownloadingSourceIdProvider.overrideWith((ref) => null),
-        backgroundTaskProvider.overrideWith(() => _FakeBackgroundTaskNotifier([])),
+        backgroundTaskProvider
+            .overrideWith(() => _FakeBackgroundTaskNotifier([])),
       ],
     );
     addTearDown(container.dispose);
@@ -34,7 +35,8 @@ void main() {
     final container = ProviderContainer(
       overrides: [
         currentDownloadingSourceIdProvider.overrideWith((ref) => 'RJ123456'),
-        backgroundTaskProvider.overrideWith(() => _FakeBackgroundTaskNotifier([])),
+        backgroundTaskProvider
+            .overrideWith(() => _FakeBackgroundTaskNotifier([])),
       ],
     );
     addTearDown(container.dispose);

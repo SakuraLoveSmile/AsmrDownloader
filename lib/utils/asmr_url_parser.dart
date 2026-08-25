@@ -55,8 +55,7 @@ AsmrUrlInfo? parseAsmrWorkUrl(String input) {
     if (pathRaw != null && pathRaw.isNotEmpty) {
       final decoded = jsonDecode(pathRaw);
       if (decoded is List) {
-        treePath =
-            decoded.map((segment) => segment.toString().trim()).toList();
+        treePath = decoded.map((segment) => segment.toString().trim()).toList();
       }
     }
   } catch (_) {
@@ -72,8 +71,7 @@ AsmrUrlInfo? parseAsmrWorkUrl(String input) {
 String fallbackTitleFromTreePath(List<String> treePath, String sourceId) {
   final segments = treePath
       .where((segment) =>
-          segment.isNotEmpty &&
-          segment.toUpperCase() != sourceId.toUpperCase())
+          segment.isNotEmpty && segment.toUpperCase() != sourceId.toUpperCase())
       .toList();
   return segments.isEmpty ? sourceId : segments.join(' / ');
 }

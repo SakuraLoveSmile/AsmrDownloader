@@ -27,10 +27,12 @@ class AsmrTags extends ConsumerWidget {
                   fontSize: 11.5,
                   fontWeight: FontWeight.w500,
                 ),
-                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.6),
+                backgroundColor:
+                    scheme.surfaceContainerHigh.withValues(alpha: 0.6),
                 border: Border.all(color: scheme.outlineVariant, width: 0.8),
                 borderRadius: 100.0,
-                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
               ))
         ],
       ),

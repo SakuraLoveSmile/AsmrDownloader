@@ -59,8 +59,8 @@ void main() {
     });
 
     test('path 不是数组时容错', () {
-      final info =
-          parseAsmrWorkUrl('https://asmr-200.com/work/RJ01619789?path=%7B%22a%22%3A1%7D');
+      final info = parseAsmrWorkUrl(
+          'https://asmr-200.com/work/RJ01619789?path=%7B%22a%22%3A1%7D');
 
       expect(info!.sourceId, 'RJ01619789');
       expect(info.treePath, isEmpty);
@@ -97,7 +97,8 @@ void main() {
     });
 
     test('只有根节点时保底 sourceId', () {
-      expect(fallbackTitleFromTreePath(['RJ01619789'], 'RJ01619789'), 'RJ01619789');
+      expect(fallbackTitleFromTreePath(['RJ01619789'], 'RJ01619789'),
+          'RJ01619789');
     });
 
     test('空面包屑保底 sourceId', () {

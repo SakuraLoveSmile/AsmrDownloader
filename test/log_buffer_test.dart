@@ -27,10 +27,8 @@ void main() {
       final buffer = LogBuffer();
       var notified = 0;
       buffer.addListener(() => notified++);
-      buffer.add(LogEntry(
-          time: DateTime.now(), level: 'INFO', text: 'a'));
-      buffer.add(LogEntry(
-          time: DateTime.now(), level: 'WARN', text: 'b'));
+      buffer.add(LogEntry(time: DateTime.now(), level: 'INFO', text: 'a'));
+      buffer.add(LogEntry(time: DateTime.now(), level: 'WARN', text: 'b'));
       expect(buffer.entries.map((e) => e.text), ['a', 'b']);
       expect(notified, 2);
     });
@@ -38,13 +36,12 @@ void main() {
     test('超过上限时丢弃最旧条目', () {
       final buffer = LogBuffer();
       for (var i = 0; i < LogBuffer.maxEntries + 10; i++) {
-        buffer.add(LogEntry(
-            time: DateTime.now(), level: 'INFO', text: 'line $i'));
+        buffer.add(
+            LogEntry(time: DateTime.now(), level: 'INFO', text: 'line $i'));
       }
       expect(buffer.entries.length, LogBuffer.maxEntries);
       expect(buffer.entries.first.text, 'line 10');
-      expect(buffer.entries.last.text,
-          'line ${LogBuffer.maxEntries + 9}');
+      expect(buffer.entries.last.text, 'line ${LogBuffer.maxEntries + 9}');
     });
 
     test('clear 清空并通知；空缓冲清空不通知', () {
@@ -53,8 +50,7 @@ void main() {
       buffer.addListener(() => notified++);
       buffer.clear();
       expect(notified, 0);
-      buffer.add(LogEntry(
-          time: DateTime.now(), level: 'INFO', text: 'x'));
+      buffer.add(LogEntry(time: DateTime.now(), level: 'INFO', text: 'x'));
       buffer.clear();
       expect(buffer.entries, isEmpty);
       expect(notified, 2);

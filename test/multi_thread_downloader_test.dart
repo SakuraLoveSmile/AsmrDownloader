@@ -117,7 +117,8 @@ void main() {
   late MultiThreadDownloader downloader;
 
   setUp(() {
-    tempDir = Directory.systemTemp.createTempSync('multi_thread_downloader_test');
+    tempDir =
+        Directory.systemTemp.createTempSync('multi_thread_downloader_test');
     downloader = MultiThreadDownloader(
       AsmrApi(),
       retryDelay: Duration.zero,
@@ -156,15 +157,15 @@ void main() {
     expect(lastReceived, content.length);
 
     // 第一个请求是 Range 探测（bytes=0-0），随后应有 4 个分段请求
-    final rangeRequests = server.requests
-        .where((request) => request['range'] != null)
-        .toList();
+    final rangeRequests =
+        server.requests.where((request) => request['range'] != null).toList();
     expect(rangeRequests, hasLength(5));
     expect(rangeRequests.first['range'], 'bytes=0-0');
 
     final starts = <int>{
       for (final request in rangeRequests.skip(1))
-        int.parse(RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
+        int.parse(
+            RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
     };
     expect(starts, {0, partSize, partSize * 2, partSize * 3});
 
@@ -196,13 +197,13 @@ void main() {
     expect(await File(savePath).readAsBytes(), content);
 
     // 探测 1 次 + 只请求缺失的 part2/part3
-    final rangeRequests = server.requests
-        .where((request) => request['range'] != null)
-        .toList();
+    final rangeRequests =
+        server.requests.where((request) => request['range'] != null).toList();
     expect(rangeRequests, hasLength(3));
     final starts = <int>{
       for (final request in rangeRequests.skip(1))
-        int.parse(RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
+        int.parse(
+            RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
     };
     expect(starts, {partSize * 2, partSize * 3});
   });
@@ -251,9 +252,8 @@ void main() {
     expect(await File(savePath).readAsBytes(), content);
 
     // 探测 1 次 + 两个分段请求（都返回了完整文件）
-    final rangeRequests = server.requests
-        .where((request) => request['range'] != null)
-        .toList();
+    final rangeRequests =
+        server.requests.where((request) => request['range'] != null).toList();
     expect(rangeRequests, hasLength(3));
     expect(rangeRequests.first['range'], 'bytes=0-0');
   });
@@ -281,13 +281,13 @@ void main() {
     expect(await File(savePath).readAsBytes(), content);
 
     // 探测 1 次 + 4 个分段各 1 次；part0 从一半处续传而非从头重下
-    final rangeRequests = server.requests
-        .where((request) => request['range'] != null)
-        .toList();
+    final rangeRequests =
+        server.requests.where((request) => request['range'] != null).toList();
     expect(rangeRequests, hasLength(5));
     final starts = <int>{
       for (final request in rangeRequests.skip(1))
-        int.parse(RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
+        int.parse(
+            RegExp(r'^bytes=(\d+)-').firstMatch(request['range']!)!.group(1)!),
     };
     expect(starts, {partSize ~/ 2, partSize, partSize * 2, partSize * 3});
   });
@@ -313,9 +313,8 @@ void main() {
     expect(await File(savePath).readAsBytes(), content);
 
     // 探测 1 + 4 个分段 + 断连分段至少重试 1 次
-    final rangeRequestCnt = server.requests
-        .where((request) => request['range'] != null)
-        .length;
+    final rangeRequestCnt =
+        server.requests.where((request) => request['range'] != null).length;
     expect(rangeRequestCnt, greaterThan(5));
   });
 

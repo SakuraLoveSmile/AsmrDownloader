@@ -170,8 +170,7 @@ abstract final class AppTheme {
         isDense: true,
         filled: true,
         fillColor: scheme.surfaceContainerLow,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         hintStyle: TextStyle(
           color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
           fontSize: 13,
@@ -248,8 +247,7 @@ abstract final class AppTheme {
         ),
         textStyle: TextStyle(fontSize: 13, color: scheme.onSurface),
         menuStyle: MenuStyle(
-          backgroundColor:
-              WidgetStatePropertyAll(scheme.surfaceContainerHigh),
+          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerHigh),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -374,8 +372,7 @@ abstract final class AppTheme {
         isDense: true,
         filled: true,
         fillColor: scheme.surfaceContainerLow,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
         hintStyle: TextStyle(
           color: scheme.onSurfaceVariant.withValues(alpha: 0.75),
           fontSize: 13,
@@ -452,8 +449,7 @@ abstract final class AppTheme {
         ),
         textStyle: TextStyle(fontSize: 13, color: scheme.onSurface),
         menuStyle: MenuStyle(
-          backgroundColor:
-              WidgetStatePropertyAll(scheme.surfaceContainerLow),
+          backgroundColor: WidgetStatePropertyAll(scheme.surfaceContainerLow),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),

@@ -161,8 +161,8 @@ void main() {
       final body = releaseWithAsset('v9.9.9');
       final svc = UpdateService(
         apiDio: Dio()
-          ..httpClientAdapter = _FakeAdapter({'api.github.com': body},
-              statusOverride: 304),
+          ..httpClientAdapter =
+              _FakeAdapter({'api.github.com': body}, statusOverride: 304),
       );
       final result = await svc.checkForUpdate(
         '0.8.0',
@@ -185,8 +185,8 @@ void main() {
       );
       await expectLater(
         svc.checkForUpdate('0.8.0'),
-        throwsA(isA<UpdateCheckException>().having(
-            (e) => e.message, 'message', contains('速率限制'))),
+        throwsA(isA<UpdateCheckException>()
+            .having((e) => e.message, 'message', contains('速率限制'))),
       );
     });
 
@@ -199,8 +199,8 @@ void main() {
       );
       await expectLater(
         svc.checkForUpdate('0.8.0'),
-        throwsA(isA<UpdateCheckException>().having(
-            (e) => e.message, 'message', contains('403'))),
+        throwsA(isA<UpdateCheckException>()
+            .having((e) => e.message, 'message', contains('403'))),
       );
     });
 
@@ -412,8 +412,8 @@ void main() {
       final scriptPath = Platform.isWindows
           ? launched.single.$2.first // wscript.exe <script> <args>
           : launched.single.$2.single; // /bin/sh <script>
-      expect(launched.single.$1,
-          Platform.isWindows ? 'wscript.exe' : '/bin/sh');
+      expect(
+          launched.single.$1, Platform.isWindows ? 'wscript.exe' : '/bin/sh');
       final script = File(scriptPath).readAsStringSync();
       if (Platform.isMacOS) {
         // 旧 .app = 当前进程可执行文件上溯 3 级
@@ -477,8 +477,7 @@ void main() {
 
 /// 按 URL 关键字返回预置响应的假 Dio 适配器。
 class _FakeAdapter implements HttpClientAdapter {
-  _FakeAdapter(this.responses,
-      {this.statusOverride, this.responseHeaders});
+  _FakeAdapter(this.responses, {this.statusOverride, this.responseHeaders});
 
   /// key = URL 包含的子串，value = 响应体
   final Map<String, String> responses;

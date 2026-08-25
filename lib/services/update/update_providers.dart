@@ -94,9 +94,8 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
 
       if (silent) {
         final lastAt = cache['lastCheckAt'] as int? ?? 0;
-        final withinInterval =
-            DateTime.now().millisecondsSinceEpoch - lastAt <
-                _autoCheckInterval.inMilliseconds;
+        final withinInterval = DateTime.now().millisecondsSinceEpoch - lastAt <
+            _autoCheckInterval.inMilliseconds;
         if (withinInterval) {
           final info = UpdateService.evaluateRelease(
               cache['releaseBody'] as String?, current);
@@ -144,7 +143,8 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
   /// 每 [_periodicCheckInterval] 复查一次，发现新版弹更新对话框。
   void startPeriodicCheck() {
     if (_periodicTimer != null) return; // 已在运行，避免重复
-    _periodicTimer = Timer.periodic(_periodicCheckInterval, (_) => _onPeriodicCheck());
+    _periodicTimer =
+        Timer.periodic(_periodicCheckInterval, (_) => _onPeriodicCheck());
   }
 
   /// 停止周期复查。由自动检查开关为假时调用。
@@ -176,14 +176,12 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
     try {
       final cache = await _readCheckCache();
       final lastShownAt = cache['lastErrorShownAt'] as int? ?? 0;
-      final elapsed =
-          DateTime.now().millisecondsSinceEpoch - lastShownAt;
+      final elapsed = DateTime.now().millisecondsSinceEpoch - lastShownAt;
       if (elapsed < _autoCheckInterval.inMilliseconds) return;
       final ui = UIService(ref);
       ui.showSnack(
-        _describeCheckError((state is AsyncError)
-            ? (state as AsyncError).error
-            : null),
+        _describeCheckError(
+            (state is AsyncError) ? (state as AsyncError).error : null),
         action: SnackBarAction(
           label: '手动检查',
           onPressed: () => ui.manualCheckFromSnack(),
@@ -203,8 +201,7 @@ class LatestUpdateNotifier extends AsyncNotifier<UpdateInfo?> {
   Future<Map<String, dynamic>> _readCheckCache() async {
     try {
       final config = await ref.read(configFileProvider).read();
-      return (config['updateCheckCache'] as Map?)
-              ?.cast<String, dynamic>() ??
+      return (config['updateCheckCache'] as Map?)?.cast<String, dynamic>() ??
           const <String, dynamic>{};
     } catch (_) {
       return const <String, dynamic>{};

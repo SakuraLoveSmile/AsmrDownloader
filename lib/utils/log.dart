@@ -140,8 +140,7 @@ class Log {
   }
 
   /// 是否已开启文件日志输出。
-  static bool get fileOutputEnabled =>
-      _instance._appOutput._fileEnabled;
+  static bool get fileOutputEnabled => _instance._appOutput._fileEnabled;
 
   /// 运行时开关：开启/关闭把日志写入文件。
   /// 默认 debug 构建关闭、release 构建开启。

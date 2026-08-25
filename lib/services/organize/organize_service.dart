@@ -17,6 +17,7 @@ class BatchItemResult {
   final String sourceId;
   final bool success;
   final String message;
+
   /// 下载目录不存在（缺失），与「整理失败」分开统计与展示。
   final bool missing;
 
@@ -203,14 +204,15 @@ class OrganizeService {
         : resolveCvNames(workInfo, fallbackCvNames);
     // 汉化版作品的 circle 是汉化组名，跟踪到原版取真实社团名
     // （原版元数据缓存优先，避免重复请求 API）
-    final circleName = (overrideCircleName != null && overrideCircleName.isNotEmpty)
-        ? overrideCircleName
-        : (resolvedCircleName ??
-            await NavidromeOrganizer.resolveCircleName(
-              workInfo: workInfo,
-              fallbackCircle: resolveCircle(workInfo, fallbackCircle),
-              fetchWorkInfo: fetchWorkInfoCached,
-            ));
+    final circleName =
+        (overrideCircleName != null && overrideCircleName.isNotEmpty)
+            ? overrideCircleName
+            : (resolvedCircleName ??
+                await NavidromeOrganizer.resolveCircleName(
+                  workInfo: workInfo,
+                  fallbackCircle: resolveCircle(workInfo, fallbackCircle),
+                  fetchWorkInfo: fetchWorkInfoCached,
+                ));
     // circle 目录名（汉化跟踪后的社团名）保底：社团 → CV → sourceId
     final circleDirName =
         [circleName, cvNames, sourceId].firstWhere((s) => s.isNotEmpty);
@@ -228,9 +230,10 @@ class OrganizeService {
       coverBytes: coverBytes,
       artist: artistTag,
       albumArtist: artistTag,
-      releaseDate: (overrideReleaseDate != null && overrideReleaseDate.isNotEmpty)
-          ? overrideReleaseDate
-          : resolveRelease(workInfo),
+      releaseDate:
+          (overrideReleaseDate != null && overrideReleaseDate.isNotEmpty)
+              ? overrideReleaseDate
+              : resolveRelease(workInfo),
       genres: (overrideGenres != null && overrideGenres.isNotEmpty)
           ? overrideGenres
           : resolveTags(workInfo),
@@ -254,7 +257,18 @@ class OrganizeService {
     bool fetchWorkInfo = true,
     bool keepDirStructure = false,
     bool forceWavRewrite = false,
+    bool forceReorganize = false,
   }) async {
+    // 完全重新整理：先删除媒体库中的既有整理产物，再依据当前元数据完整重建。
+    if (forceReorganize) {
+      Log.info('完全重新整理：${entry.sourceId} 清理旧产物中…');
+      await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot,
+        sourceId: entry.sourceId,
+      );
+      Log.info('完全重新整理：${entry.sourceId} 正在重新整理…');
+    }
+
     final manual = entry.manuallyEditedAt != null;
     Map<String, dynamic>? workInfo;
     String? metadataNote;
@@ -337,7 +351,7 @@ class OrganizeService {
       resolvedCircleName: resolvedCircleName,
       coverBytes: coverBytes,
       keepDirStructure: keepDirStructure,
-      forceWavRewrite: forceWavRewrite,
+      forceWavRewrite: forceReorganize || forceWavRewrite,
       // 手动编辑优先：非空即用，不被在线元数据覆盖
       overrideTitle: manual && entry.title.isNotEmpty ? entry.title : null,
       overrideCvNames:
@@ -364,9 +378,8 @@ class OrganizeService {
           : (workInfo != null
               ? resolveCvNames(workInfo, fallbackCvNames)
               : fallbackCvNames),
-      circleName: manual
-          ? entry.circleName
-          : (resolvedCircleName ?? entry.circleName),
+      circleName:
+          manual ? entry.circleName : (resolvedCircleName ?? entry.circleName),
       releaseDate: manual && entry.releaseDate.isNotEmpty
           ? entry.releaseDate
           : (workInfo != null ? resolveRelease(workInfo) : entry.releaseDate),
@@ -495,6 +508,7 @@ class OrganizeService {
     required void Function(BatchProgress) onProgress,
     required bool Function() isCancelled,
     bool keepDirStructure = false,
+    bool forceReorganize = false,
   }) async {
     final index = ref.read(worksIndexProvider);
     var entries = await index.list();
@@ -535,7 +549,7 @@ class OrganizeService {
       }
     }
 
-    if (onlyUnorganized) {
+    if (onlyUnorganized && !forceReorganize) {
       final unorganized = <WorkEntry>[];
       for (final entry in entries) {
         if (!await isOrganized(entry,
@@ -587,7 +601,8 @@ class OrganizeService {
             // 批量整理也必须刷新已有注册表条目的元数据；旧版本可能把
             // 汉化组名写进 circleName，不能只对新扫描到的作品联网。
             fetchWorkInfo: true,
-            keepDirStructure: keepDirStructure);
+            keepDirStructure: keepDirStructure,
+            forceReorganize: forceReorganize);
         final result = outcome.result;
         if (result == null) {
           failed++;

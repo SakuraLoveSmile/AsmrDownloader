@@ -31,13 +31,14 @@ class UpdateBanner extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Row(
             children: [
-              Icon(Icons.system_update_alt,
-                  size: 18, color: scheme.primary),
+              Icon(Icons.system_update_alt, size: 18, color: scheme.primary),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '发现新版本 ${info.tagName}，点击查看更新内容',
-                  style: Theme.of(context).textTheme.bodyMedium!
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium!
                       .copyWith(fontWeight: FontWeight.w600),
                 ),
               ),

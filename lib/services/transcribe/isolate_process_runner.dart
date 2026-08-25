@@ -227,7 +227,8 @@ void _processWorkerMain(List<Object?> args) {
           await Process.run('taskkill', ['/pid', '${process.pid}', '/t', '/f']);
           await process.exitCode.catchError((_) => -1);
           try {
-            exitCode = await process.exitCode.timeout(const Duration(seconds: 3));
+            exitCode =
+                await process.exitCode.timeout(const Duration(seconds: 3));
           } catch (_) {
             exitCode = -1;
           }
@@ -237,12 +238,13 @@ void _processWorkerMain(List<Object?> args) {
           // Escalate to SIGKILL after a grace period.
           process.kill();
           try {
-            exitCode = await process.exitCode.timeout(const Duration(seconds: 2));
+            exitCode =
+                await process.exitCode.timeout(const Duration(seconds: 2));
           } on TimeoutException {
             process.kill(ProcessSignal.sigkill);
             try {
-              exitCode = await process.exitCode
-                  .timeout(const Duration(seconds: 2));
+              exitCode =
+                  await process.exitCode.timeout(const Duration(seconds: 2));
             } catch (_) {
               exitCode = -1;
             }

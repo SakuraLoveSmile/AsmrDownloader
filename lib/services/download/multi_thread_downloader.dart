@@ -324,8 +324,7 @@ class MultiThreadDownloader {
 
     // 旧版单线程续传 chunk：只在没有新分段残留时并回第 0 段
     final legacyTmp = File(_legacyTmpPath(savePath));
-    final hasModernParts =
-        await _hasModernPartFiles(savePath, segments.length);
+    final hasModernParts = await _hasModernPartFiles(savePath, segments.length);
     if (await legacyTmp.exists()) {
       if (!hasModernParts) {
         final part0 = File(_partPath(savePath, 0));
@@ -401,8 +400,7 @@ class MultiThreadDownloader {
     void notifyProgress({bool force = false}) {
       final now = DateTime.now();
       if (!force &&
-          now.difference(lastNotify) <
-              const Duration(milliseconds: 100)) {
+          now.difference(lastNotify) < const Duration(milliseconds: 100)) {
         return;
       }
       lastNotify = now;
@@ -446,8 +444,7 @@ class MultiThreadDownloader {
       // 服务器忽略了 Range：某个分段已经写入完整文件，直接采用它
       for (final segment in segments) {
         final partFile = File(_partPath(savePath, segment.index));
-        if (await partFile.exists() &&
-            await partFile.length() == fileSize) {
+        if (await partFile.exists() && await partFile.length() == fileSize) {
           await partFile.rename(savePath);
           await _cleanupWorkFiles(savePath);
           Log.info(
@@ -530,8 +527,8 @@ class MultiThreadDownloader {
             segment.completedBytes = resumeFrom + received;
             notify();
           },
-          options: Options(
-              headers: {'range': 'bytes=$rangeStart-${segment.end}'}),
+          options:
+              Options(headers: {'range': 'bytes=$rangeStart-${segment.end}'}),
         );
 
         final len = await partFile.length();

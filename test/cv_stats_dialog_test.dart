@@ -42,8 +42,7 @@ Future<void> _pumpDialog(WidgetTester tester, String dir) async {
 }
 
 void main() {
-  testWidgets('未设置目录：构建无异常并显示占位文案与标题',
-      (WidgetTester tester) async {
+  testWidgets('未设置目录：构建无异常并显示占位文案与标题', (WidgetTester tester) async {
     await _pumpDialog(tester, '');
 
     expect(tester.takeException(), isNull);
@@ -56,8 +55,7 @@ void main() {
     expect(openBtn.onPressed, isNull);
   });
 
-  testWidgets('已设置目录：构建无异常并显示目录路径',
-      (WidgetTester tester) async {
+  testWidgets('已设置目录：构建无异常并显示目录路径', (WidgetTester tester) async {
     const dirPath = '/Volumes/nas/asmr/ArtistImages';
     await _pumpDialog(tester, dirPath);
 

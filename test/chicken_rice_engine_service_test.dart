@@ -50,8 +50,7 @@ void main() {
     });
 
     test('HF 文件直链：主源与 hf-mirror 回退', () {
-      expect(
-          ChickenRiceEngineService.hfFileUrl('a/b', 'model.bin'),
+      expect(ChickenRiceEngineService.hfFileUrl('a/b', 'model.bin'),
           'https://huggingface.co/a/b/resolve/main/model.bin');
       expect(
           ChickenRiceEngineService.hfFileUrl('a/b', 'model.bin', mirror: true),
@@ -121,8 +120,7 @@ void main() {
     List<int> buildFakeZip() {
       final archive = Archive();
       final content = Uint8List.fromList(utf8.encode('fake exe'));
-      archive.addFile(
-          ArchiveFile('rt/infer.exe', content.length, content));
+      archive.addFile(ArchiveFile('rt/infer.exe', content.length, content));
       return ZipEncoder().encode(archive)!;
     }
 
@@ -193,22 +191,24 @@ void main() {
       expect(exe, p.join(tmp.path, 'rt', 'infer.exe'));
       // 状态机关键阶段都经过
       final phases = states.map((s) => s.phase).toSet();
-      expect(phases, containsAll([
-        EnginePhase.fetchingRelease,
-        EnginePhase.downloading,
-        EnginePhase.merging,
-        EnginePhase.extracting,
-        EnginePhase.downloadingModels,
-        EnginePhase.done,
-      ]));
+      expect(
+          phases,
+          containsAll([
+            EnginePhase.fetchingRelease,
+            EnginePhase.downloading,
+            EnginePhase.merging,
+            EnginePhase.extracting,
+            EnginePhase.downloadingModels,
+            EnginePhase.done,
+          ]));
       // 模型文件落到 exe 同级 models/（fake 下载器写入）
       final modelsDir = Directory(p.join(tmp.path, 'rt', 'models'));
       expect(File(p.join(modelsDir.path, 'whisper_vad.onnx')).existsSync(),
           isTrue);
       expect(File(p.join(modelsDir.path, 'model.bin')).existsSync(), isTrue);
       // 分卷临时目录已清理
-      expect(Directory(p.join(tmp.path, '.asmr_engine_dl')).existsSync(),
-          isFalse);
+      expect(
+          Directory(p.join(tmp.path, '.asmr_engine_dl')).existsSync(), isFalse);
       // probe 复核：已安装且模型完整
       final probe = await svc.probe(tmp.path);
       expect(probe.installed, isTrue);
@@ -314,8 +314,7 @@ void main() {
       // model.bin 被兜底合并进清单并实际下载
       expect(downloader.downloadedUrls.any((u) => u.endsWith('/model.bin')),
           isTrue);
-      expect(
-          File(p.join(tmp.path, 'rt', 'models', 'model.bin')).existsSync(),
+      expect(File(p.join(tmp.path, 'rt', 'models', 'model.bin')).existsSync(),
           isTrue);
       tmp.deleteSync(recursive: true);
     });
@@ -441,8 +440,8 @@ void main() {
     });
 
     test('获取 Release 阶段取消 → 判定为已取消而非「安装失败」', () async {
-      final svc = buildService(
-          zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
+      final svc =
+          buildService(zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
       final states = <EngineInstallState>[];
       final tmp = Directory.systemTemp.createTempSync('eng_cancel_fetch');
       final exe = await svc.install(
@@ -463,8 +462,8 @@ void main() {
     });
 
     test('解压阶段取消 → 终止 tar 并判定为已取消（不继续模型下载）', () async {
-      final svc = buildService(
-          zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
+      final svc =
+          buildService(zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
       final states = <EngineInstallState>[];
       final tmp = Directory.systemTemp.createTempSync('eng_cancel_extract');
       final exe = await svc.install(
@@ -480,15 +479,15 @@ void main() {
       expect(exe, isNull);
       expect(states.last.phase, EnginePhase.canceled);
       // 取消后不得继续走模型下载/伪完成
-      expect(states.any((s) => s.phase == EnginePhase.downloadingModels),
-          isFalse);
+      expect(
+          states.any((s) => s.phase == EnginePhase.downloadingModels), isFalse);
       expect(states.any((s) => s.phase == EnginePhase.done), isFalse);
       tmp.deleteSync(recursive: true);
     });
 
     test('模型下载阶段取消 → 判定为已取消', () async {
-      final svc = buildService(
-          zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
+      final svc =
+          buildService(zipBytes: buildFakeZip(), freeSpace: () => 1 << 62);
       final states = <EngineInstallState>[];
       final tmp = Directory.systemTemp.createTempSync('eng_cancel_models');
       final exe = await svc.install(
@@ -511,8 +510,7 @@ void main() {
 
 /// 按 URL 关键字返回预置响应的假 Dio 适配器。
 class _FakeAdapter implements HttpClientAdapter {
-  _FakeAdapter(this.responses,
-      {this.statusOverride, this.responseHeaders});
+  _FakeAdapter(this.responses, {this.statusOverride, this.responseHeaders});
 
   /// key = URL 包含的子串，value = 响应体
   final Map<String, String> responses;

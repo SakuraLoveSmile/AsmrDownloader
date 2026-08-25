@@ -134,8 +134,7 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
 
   /// 对可修复的缺陷作品重新整理（wav 强制重写），完成后自动重新校验。
   Future<void> _repair() async {
-    final defects =
-        (_results ?? const []).where((r) => r.repairable).toList();
+    final defects = (_results ?? const []).where((r) => r.repairable).toList();
     if (defects.isEmpty) return;
     final targetRoot = ref.read(navidromePathProvider);
 
@@ -215,11 +214,13 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('逐作品检查整理产物：内嵌歌词（mp3→USLT / flac→LYRICS / '
+        Text(
+            '逐作品检查整理产物：内嵌歌词（mp3→USLT / flac→LYRICS / '
             'wav→id3 USLT）与封面（APIC/PICTURE）。只读检查，不修改任何文件。',
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
-        Text('缺歌词/封面的作品可点击「修复缺失」重新整理补齐'
+        Text(
+            '缺歌词/封面的作品可点击「修复缺失」重新整理补齐'
             '（重新拉取封面、重写全部音频标签）。',
             style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 8),
@@ -244,8 +245,7 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
       children: [
         if (total > 0) LinearProgressIndicator(value: done / total),
         const SizedBox(height: 8),
-        Text('进度：$done / $total',
-            style: Theme.of(context).textTheme.bodySmall),
+        Text('进度：$done / $total', style: Theme.of(context).textTheme.bodySmall),
         if (_currentSourceId.isNotEmpty)
           Text('当前：$_currentSourceId',
               style: Theme.of(context).textTheme.bodyMedium),
@@ -254,8 +254,7 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
           style: Theme.of(context).textTheme.bodySmall,
         ),
         const SizedBox(height: 8),
-        Text('取消（当前作品完成后停止）',
-            style: Theme.of(context).textTheme.bodySmall),
+        Text('取消（当前作品完成后停止）', style: Theme.of(context).textTheme.bodySmall),
       ],
     );
   }
@@ -268,10 +267,8 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
     final repairable = results.where((r) => r.repairable).length;
     final missingLyrics =
         results.fold<int>(0, (sum, r) => sum + r.missingLyrics);
-    final missingCover =
-        results.fold<int>(0, (sum, r) => sum + r.missingCover);
-    final readErrors =
-        results.fold<int>(0, (sum, r) => sum + r.readErrors);
+    final missingCover = results.fold<int>(0, (sum, r) => sum + r.missingCover);
+    final readErrors = results.fold<int>(0, (sum, r) => sum + r.readErrors);
     final thirdParty =
         results.fold<int>(0, (sum, r) => sum + r.skippedThirdParty);
 
@@ -309,7 +306,8 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
         itemBuilder: (context, i) {
           final item = results[i];
           final icon = !item.targetFound
-              ? const Icon(Icons.folder_off, size: 16, color: AppColors.textFile)
+              ? const Icon(Icons.folder_off,
+                  size: 16, color: AppColors.textFile)
               : item.ok
                   ? const Icon(Icons.check_circle,
                       size: 16, color: AppColors.success)

@@ -103,8 +103,7 @@ class AppGlobalShortcuts extends ConsumerWidget {
               AppPageIndex.downloadList;
         },
         activator(LogicalKeyboardKey.digit3): () {
-          ref.read(currentPageProvider.notifier).state =
-              AppPageIndex.library;
+          ref.read(currentPageProvider.notifier).state = AppPageIndex.library;
         },
         activator(LogicalKeyboardKey.digit4): () {
           ref.read(currentPageProvider.notifier).state =
@@ -115,8 +114,7 @@ class AppGlobalShortcuts extends ConsumerWidget {
               AppPageIndex.backgroundTasks;
         },
         activator(LogicalKeyboardKey.digit6): () {
-          ref.read(currentPageProvider.notifier).state =
-              AppPageIndex.database;
+          ref.read(currentPageProvider.notifier).state = AppPageIndex.database;
         },
       },
       child: Focus(

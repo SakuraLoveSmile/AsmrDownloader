@@ -197,7 +197,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                               ? scheme.primary
                               : scheme.onSurfaceVariant.withValues(alpha: 0.7),
                     ),
-                    onPressed: canSubmit ? () => _searchInput(_inputText) : null,
+                    onPressed:
+                        canSubmit ? () => _searchInput(_inputText) : null,
                     tooltip: Platform.isMacOS ? '搜索 (⌘F)' : '搜索 (Ctrl+F)',
                     splashRadius: 14,
                     visualDensity: VisualDensity.compact,
@@ -207,7 +208,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
                           icon: Icon(
                             Icons.cancel_rounded,
                             size: 16,
-                            color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+                            color:
+                                scheme.onSurfaceVariant.withValues(alpha: 0.6),
                           ),
                           onPressed: () {
                             _controller.clear();
@@ -246,7 +248,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
               visualDensity: VisualDensity.compact,
               style: IconButton.styleFrom(
                 shape: const CircleBorder(),
-                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+                backgroundColor:
+                    scheme.surfaceContainerHigh.withValues(alpha: 0.4),
               ),
             ),
             const SizedBox(width: 2),
@@ -257,7 +260,8 @@ class SearchBoxState extends ConsumerState<SearchBox> {
               visualDensity: VisualDensity.compact,
               style: IconButton.styleFrom(
                 shape: const CircleBorder(),
-                backgroundColor: scheme.surfaceContainerHigh.withValues(alpha: 0.4),
+                backgroundColor:
+                    scheme.surfaceContainerHigh.withValues(alpha: 0.4),
               ),
             ),
           ],

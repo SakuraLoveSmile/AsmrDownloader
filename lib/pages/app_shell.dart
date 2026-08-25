@@ -170,4 +170,3 @@ class _GlobalTaskPill extends ConsumerWidget {
     );
   }
 }
-

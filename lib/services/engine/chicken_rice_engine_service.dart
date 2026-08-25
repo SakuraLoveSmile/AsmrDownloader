@@ -479,8 +479,7 @@ class ChickenRiceEngineService {
 
       // 5) 合并 + SHA-256 校验
       final zipPath = p.join(dlDir.path, manifest.name);
-      if (!await _mergeAndVerify(
-          manifest, dlDir.path, zipPath, token, emit)) {
+      if (!await _mergeAndVerify(manifest, dlDir.path, zipPath, token, emit)) {
         return _cancelRequested || token.isCancelled
             ? _emitCanceled(emit)
             : null;
@@ -602,7 +601,8 @@ class ChickenRiceEngineService {
   Future<EngineManifest?> _fetchManifest(String url, CancelToken token) async {
     try {
       final resp = await _apiDio.get<String>(url,
-          cancelToken: token, options: Options(responseType: ResponseType.plain));
+          cancelToken: token,
+          options: Options(responseType: ResponseType.plain));
       return EngineManifest.fromJson(
           json.decode(resp.data ?? '') as Map<String, dynamic>);
     } on DioException catch (e) {
@@ -633,8 +633,8 @@ class ChickenRiceEngineService {
 
     // crypto 包的增量摘要：startChunkedConversion 返回可逐块喂的 sink
     Digest? computed;
-    final digestSink = sha256.startChunkedConversion(
-        _DigestOutput((d) => computed = d));
+    final digestSink =
+        sha256.startChunkedConversion(_DigestOutput((d) => computed = d));
     final sink = zipFile.openWrite();
     var merged = 0;
     try {
@@ -769,14 +769,14 @@ class ChickenRiceEngineService {
     void Function(EngineInstallState) emit,
   ) async {
     final modelRepo = mainModelRepo(task);
-  
+
     // 主模型文件清单：HF API 获取（含大小），失败则用已知必备文件兜底
     final mainFiles = await _fetchMainModelFiles(modelRepo, token);
     final specs = <ModelFileSpec>[
       ...fixedModelSpecs,
       ...mainFiles,
     ];
-  
+
     for (var i = 0; i < specs.length; i++) {
       if (_cancelRequested || token.isCancelled) return false;
       final spec = specs[i];
@@ -786,7 +786,8 @@ class ChickenRiceEngineService {
 
       emit(EngineInstallState(
           phase: EnginePhase.downloadingModels,
-          message: '下载模型 ${i + 1}/${specs.length}：${p.basename(spec.destRelPath)}',
+          message:
+              '下载模型 ${i + 1}/${specs.length}：${p.basename(spec.destRelPath)}',
           stepIndex: i + 1,
           stepCount: specs.length));
 
@@ -863,11 +864,11 @@ class ChickenRiceEngineService {
     }
     return false;
   }
-  
+
   /// 主模型必备权重文件（清单兜底合并用）：即使 tree API 返回的清单
   /// 异常缺项，model.bin 也一定会进入下载清单。
   static const List<String> _essentialMainModelFiles = ['model.bin'];
-  
+
   /// 主模型仓库的文件清单（按扩展名过滤，含文件大小）：主源 API 失败
   /// 自动回退 hf-mirror.com（国内直连 huggingface.co 常不可达）；
   /// 两者都失败时用已知必备文件兜底。必备文件（model.bin）无论清单
@@ -883,7 +884,8 @@ class ChickenRiceEngineService {
           final m = item as Map<String, dynamic>;
           if (m['type'] != 'file') continue;
           final path = m['path'] as String? ?? '';
-          if (!_mainModelExtensions.any((e) => path.toLowerCase().endsWith(e))) {
+          if (!_mainModelExtensions
+              .any((e) => path.toLowerCase().endsWith(e))) {
             continue;
           }
           files.add(ModelFileSpec(
@@ -917,7 +919,7 @@ class ChickenRiceEngineService {
         ModelFileSpec(repo: repo, remoteName: f, destRelPath: f),
     ], repo);
   }
-  
+
   /// 确保必备权重文件在清单内（去重，以 API 返回的规格/大小为准）。
   static List<ModelFileSpec> _withEssentialFiles(
       List<ModelFileSpec> files, String repo) {

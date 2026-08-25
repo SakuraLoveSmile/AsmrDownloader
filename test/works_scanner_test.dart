@@ -39,15 +39,15 @@ void main() {
     expect(found.length, 1);
     expect(found.first.sourceId, 'RJ87654321');
     expect(found.first.dirName, 'cv1&cv2-标题');
-    expect(found.first.sourceDir, p.join(root.path, 'cv1&cv2-标题', 'RJ87654321'));
+    expect(
+        found.first.sourceDir, p.join(root.path, 'cv1&cv2-标题', 'RJ87654321'));
   });
 
   test('VJ/BJ 前缀识别、小写前缀规范化', () async {
     touch('vj123456/a.wav');
     touch('bj234567/b.wav');
     final found = await scanDownloadRoot(dlRoot: root.path);
-    expect(found.map((e) => e.sourceId).toSet(),
-        {'VJ123456', 'BJ234567'});
+    expect(found.map((e) => e.sourceId).toSet(), {'VJ123456', 'BJ234567'});
   });
 
   test('排除 excludeRoot（整理目标目录不被当作源）', () async {
