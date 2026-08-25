@@ -45,6 +45,22 @@ void main() {
         hits.every((hit) => Directory(hit.matchedPath).existsSync()), isTrue);
   });
 
+  test('放宽：RJ号 - CV - 标题 目录可识别，内部嵌套纯 RJ 目录不重复', () async {
+    Directory(p.join(root.path, 'RJ11111111 - CV - 标题'))
+        .createSync(recursive: true);
+    // 作品内部的纯编号子目录不应被当成另一个作品
+    Directory(p.join(root.path, 'RJ11111111 - CV - 标题', 'RJ22222222'))
+        .createSync(recursive: true);
+    // 更深的独立作品仍应被找到
+    Directory(p.join(root.path, '社团', 'RJ33333333')).createSync(recursive: true);
+
+    final hits = await scanMediaLibraryRoot(rootPath: root.path);
+
+    expect(hits.map((hit) => hit.sourceId), ['RJ11111111', 'RJ33333333']);
+    expect(hits.first.matchedPath,
+        p.join(root.path, 'RJ11111111 - CV - 标题'));
+  });
+
   test('扫描结果持久化，NAS 暂时不可用时保留上次 RJ 记录', () async {
     final workDir = Directory(p.join(root.path, 'RJ12345678'))
       ..createSync(recursive: true);

@@ -6,18 +6,17 @@ import 'package:path/path.dart' as p;
 bool isSourceIdValid(String sourceId) =>
     RegExp(r'^(RJ|VJ|BJ)?\d+$', caseSensitive: false).hasMatch(sourceId);
 
-/// 目录扫描：识别目录名中的 RJ/VJ/BJ 号（如 RJ01234567）。
+/// 目录扫描：识别作品目录名中的 RJ/VJ/BJ 号（如 RJ01234567）。
 /// 返回规范化大写 sourceId（如 RJ12345678），否则 null。
 ///
-/// 放宽规则：RJ/VJ/BJ 号可出现在目录名任意位置，数字后允许跟标题等后缀
-/// （如 "RJ12345678 标题"、"[RJ12345678]"、"作品RJ12345678"）；但
-/// - 前缀前不允许紧贴字母/数字，避免 "abcRJ12345678"、"ORJ1234567" 误匹配；
-/// - 数字后紧跟数字（11+ 位）不识别，避免截断误匹配；
-/// - 仍要求 6~10 位数字，避免把纯数字目录（如年份 "2024"）误识别成作品。
+/// 规则：
+/// - 目录名必须以 RJ / VJ / BJ 开头（如 "RJ01077805 - CV - 标题"）；
+/// - 编号长度必须为 6～10 位；
+/// - 编号后允许标题、CV 等非数字内容（如 "RJ12345678_cover"）；
+/// - `(?!\d)` 防止将超过 10 位的编号截断匹配；
+/// - 仍要求前缀紧贴 6~10 位数字，纯数字目录（如年份 "2024"）不误识别。
 String? matchSourceIdFromDirName(String dirName) {
-  final m = RegExp(
-          r'(?<![A-Za-z0-9])(RJ|VJ|BJ)(\d{6,10})(?![0-9])',
-          caseSensitive: false)
+  final m = RegExp(r'^(RJ|VJ|BJ)(\d{6,10})(?!\d)', caseSensitive: false)
       .firstMatch(dirName.trim());
   if (m == null) return null;
   return '${m.group(1)!.toUpperCase()}${m.group(2)}';
