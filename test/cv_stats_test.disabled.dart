@@ -34,11 +34,11 @@ void main() {
     });
     tearDown(() => db.close());
 
-    test('多 CV 作品分别计入各 CV；同作品内重复 CV 名只计一次；无 CV 不入统计',
-        () async {
+    test('多 CV 作品分别计入各 CV；同作品内重复 CV 名只计一次；无 CV 不入统计', () async {
       final container = ProviderContainer(overrides: [
         cacheServiceProvider.overrideWithValue(service),
-        cachedLibraryProvider.overrideWith((ref) async => const CachedLibrary([])),
+        cachedLibraryProvider
+            .overrideWith((ref) async => const CachedLibrary([])),
       ]);
       addTearDown(container.dispose);
 
@@ -87,7 +87,8 @@ void main() {
     test('排序：专辑数降序 → 歌曲数降序 → 名称小写', () async {
       final container = ProviderContainer(overrides: [
         cacheServiceProvider.overrideWithValue(service),
-        cachedLibraryProvider.overrideWith((ref) async => const CachedLibrary([])),
+        cachedLibraryProvider
+            .overrideWith((ref) async => const CachedLibrary([])),
       ]);
       addTearDown(container.dispose);
 

@@ -25,6 +25,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
   bool _running = false;
   bool _cancelled = false;
   bool _onlyFailed = false;
+  bool _forceReorganize = false;
   String? _error;
   BatchProgress? _progress;
   BatchOrganizeResult? _result;
@@ -79,6 +80,37 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
       }
     }
 
+    // 完全重新整理：先二次确认。确认后不修改用户原保存的 onlyUnorganized 值，
+    // 仅本次组织以 forceReorganize 模式处理全部作品。
+    if (_forceReorganize) {
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('完全重新整理？'),
+          content: const Text(
+            '将删除媒体库（Navidrome 整理路径）中待整理作品的现有整理产物，'
+            '并依据当前元数据重建目录、重新复制文件并重写全部标签。\n\n'
+            '此操作不会删除下载源文件。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('完全重新整理'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) {
+        setState(() => _error = null);
+        return;
+      }
+    }
+
     setState(() {
       _running = true;
       _cancelled = false;
@@ -92,6 +124,7 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
           targetRoot: targetRoot,
           onlyUnorganized: ref.read(onlyOrganizeUnorganizedProvider),
           keepDirStructure: ref.read(keepOrganizeDirStructureProvider),
+          forceReorganize: _forceReorganize,
           onProgress: (p) {
             if (mounted) setState(() => _progress = p);
           },
@@ -133,13 +166,15 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
       children: [
         CheckboxListTile(
           value: ref.watch(onlyOrganizeUnorganizedProvider),
-          onChanged: (v) {
-            ref.read(onlyOrganizeUnorganizedProvider.notifier).state =
-                v ?? true;
-            ref
-                .read(configFileProvider)
-                .addOrUpdate({'onlyOrganizeUnorganized': v ?? true});
-          },
+          onChanged: _forceReorganize
+              ? null
+              : (v) {
+                  ref.read(onlyOrganizeUnorganizedProvider.notifier).state =
+                      v ?? true;
+                  ref
+                      .read(configFileProvider)
+                      .addOrUpdate({'onlyOrganizeUnorganized': v ?? true});
+                },
           title: const Text('仅整理未整理的'),
           subtitle: const Text('只处理注册表中尚未整理过的作品'),
           contentPadding: EdgeInsets.zero,
@@ -155,6 +190,23 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
           },
           title: const Text('保留原目录结构'),
           subtitle: const Text('作品内子目录原样复制，不扁平化'),
+          contentPadding: EdgeInsets.zero,
+        ),
+        if (_forceReorganize) ...[
+          const SizedBox(height: 8),
+          Text(
+            '完全重新整理模式下将处理全部作品（忽略「仅整理未整理的」）',
+            style: Theme.of(context)
+                .textTheme
+                .bodySmall
+                ?.copyWith(color: Theme.of(context).colorScheme.primary),
+          ),
+        ],
+        CheckboxListTile(
+          value: _forceReorganize,
+          onChanged: (v) => setState(() => _forceReorganize = v ?? false),
+          title: const Text('完全重新整理'),
+          subtitle: const Text('删除媒体库中既有目标目录后重建，重新复制文件并重写全部标签'),
           contentPadding: EdgeInsets.zero,
         ),
         const SizedBox(height: 8),
@@ -277,7 +329,8 @@ class _BatchOrganizeDialogState extends ConsumerState<BatchOrganizeDialog> {
         itemBuilder: (context, i) {
           final item = visible[i];
           final icon = item.missing
-              ? const Icon(Icons.folder_off, size: 16, color: AppColors.textFile)
+              ? const Icon(Icons.folder_off,
+                  size: 16, color: AppColors.textFile)
               : item.success
                   ? const Icon(Icons.check_circle,
                       size: 16, color: AppColors.success)

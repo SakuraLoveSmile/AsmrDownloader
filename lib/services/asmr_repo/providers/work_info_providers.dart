@@ -93,7 +93,8 @@ String? findWorkTitleInTracks(List<dynamic>? tracks) {
 /// 原版作品或解析失败时 fallback 到当前 circle 名。
 final circleNameProvider = FutureProvider<String>((ref) async {
   // workInfo 加载失败（网络错误等）时降级为空，与原同步版 maybeWhen 行为一致
-  final workInfo = await ref.watch(workInfoProvider.future).catchError((_) => null);
+  final workInfo =
+      await ref.watch(workInfoProvider.future).catchError((_) => null);
   final rawCircle = (workInfo?['circle']?['name']?.toString()) ?? '';
   if (rawCircle.isEmpty) return '';
   return NavidromeOrganizer.resolveCircleName(

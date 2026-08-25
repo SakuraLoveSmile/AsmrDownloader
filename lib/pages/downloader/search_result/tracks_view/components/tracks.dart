@@ -54,7 +54,8 @@ class TracksState extends ConsumerState<Tracks> {
           child: ExpansionTile(
             shape: roundedShape,
             collapsedShape: roundedShape,
-            leading: const Icon(Icons.folder_rounded, color: AppColors.folder, size: 20),
+            leading: const Icon(Icons.folder_rounded,
+                color: AppColors.folder, size: 20),
             trailing: Checkbox(
                 value: track.selected,
                 onChanged: (bool? newValue) {
@@ -84,7 +85,8 @@ class TracksState extends ConsumerState<Tracks> {
             value: track.selected,
             shape: roundedShape,
             hoverColor: scheme.surfaceContainerHigh.withValues(alpha: 0.5),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
             visualDensity: VisualDensity.compact,
             onChanged: (bool? newValue) {
               if (newValue == null) return;
@@ -116,13 +118,17 @@ class TracksState extends ConsumerState<Tracks> {
   Icon getIconFromType(String type) {
     switch (type) {
       case 'audio':
-        return const Icon(Icons.music_note_rounded, color: AppColors.audio, size: 17);
+        return const Icon(Icons.music_note_rounded,
+            color: AppColors.audio, size: 17);
       case 'image':
-        return const Icon(Icons.image_outlined, color: AppColors.image, size: 17);
+        return const Icon(Icons.image_outlined,
+            color: AppColors.image, size: 17);
       case 'text':
-        return const Icon(Icons.description_outlined, color: AppColors.textFile, size: 17);
+        return const Icon(Icons.description_outlined,
+            color: AppColors.textFile, size: 17);
       default:
-        return Icon(Icons.insert_drive_file_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant, size: 17);
+        return Icon(Icons.insert_drive_file_outlined,
+            color: Theme.of(context).colorScheme.onSurfaceVariant, size: 17);
     }
   }
 }

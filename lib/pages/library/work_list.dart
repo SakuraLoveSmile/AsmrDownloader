@@ -109,6 +109,12 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
             ),
             const SizedBox(width: 6),
             OutlinedButton(
+              onPressed:
+                  batchBusy ? null : () => _organizeSelected(force: true),
+              child: const Text('重新整理所选'),
+            ),
+            const SizedBox(width: 6),
+            OutlinedButton(
               onPressed: batchBusy ? null : _transcribeSelected,
               child: const Text('字幕所选'),
             ),
@@ -197,10 +203,35 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
 
   // ---------- 批量操作 ----------
 
-  Future<void> _organizeSelected() async {
+  Future<void> _organizeSelected({bool force = false}) async {
     final works = ref.read(worksLibraryProvider).value ?? const [];
     final items = works.where((w) => _selected.contains(w.sourceId)).toList();
     if (items.isEmpty) return;
+
+    if (force) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('完全重新整理所选？'),
+          content: const Text(
+            '将删除媒体库（Navidrome 整理路径）中这些作品的现有整理产物，'
+            '并依据当前元数据重建目录、重新复制文件并重写全部标签。\n\n'
+            '此操作不会删除下载源文件。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('完全重新整理'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
 
     final ui = ref.read(uiServiceProvider);
     var ok = 0;
@@ -209,7 +240,11 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     final verifyNotes = <String>{};
     var tagFailures = 0;
     for (final item in items) {
-      final outcome = await ui.organizeWorkFor(item, pickPathIfEmpty: true);
+      final outcome = await ui.organizeWorkFor(
+        item,
+        pickPathIfEmpty: true,
+        forceReorganize: force,
+      );
       if (outcome?.result != null) {
         ok++;
         final note = outcome?.metadataNote;
@@ -228,7 +263,12 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     if (tagFailures > 0) {
       noteSuffix += '；$tagFailures 个文件标签写入失败';
     }
-    ui.showSnack('整理所选完成：成功 $ok，失败 $fail$noteSuffix');
+    if (force) {
+      final failSuffix = fail > 0 ? '，失败 $fail（旧产物可能已被清理，请重试）' : '';
+      ui.showSnack('完全重新整理所选完成：成功 $ok$failSuffix$noteSuffix');
+    } else {
+      ui.showSnack('整理所选完成：成功 $ok，失败 $fail$noteSuffix');
+    }
     if (mounted) setState(_selected.clear);
   }
 
@@ -528,6 +568,39 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
                 } else {
                   ui.showSnack('整理未执行（未设置整理路径或目录缺失）');
                 }
+              },
+            ),
+            _RowIconBtn(
+              icon: Icons.cached_rounded,
+              tooltip: '完全重新整理',
+              onTap: () async {
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('完全重新整理？'),
+                    content: Text(
+                      '将删除媒体库（Navidrome 整理路径）中 ${item.sourceId} 的现有整理产物，'
+                      '并依据当前元数据重建目录、重新复制文件并重写全部标签。\n\n'
+                      '此操作不会删除下载源文件。',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(false),
+                        child: const Text('取消'),
+                      ),
+                      FilledButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(true),
+                        child: const Text('完全重新整理'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true || !mounted) return;
+                await ui.organizeWorkFor(
+                  item,
+                  pickPathIfEmpty: true,
+                  forceReorganize: true,
+                );
               },
             ),
             _RowIconBtn(

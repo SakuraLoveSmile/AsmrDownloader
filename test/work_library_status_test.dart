@@ -43,8 +43,7 @@ void main() {
   }) {
     final container = ProviderContainer(overrides: [
       sourceIdProvider.overrideWith((ref) => sourceId),
-      voiceWorkPathProvider.overrideWith(
-          (ref) => voiceWorkPath ?? dlRoot.path),
+      voiceWorkPathProvider.overrideWith((ref) => voiceWorkPath ?? dlRoot.path),
       downloadPathProvider.overrideWith((ref) => dlRoot.path),
       mediaLibraryRootsProvider.overrideWith((ref) => roots),
       libraryDatabaseProvider.overrideWithValue(database),
@@ -70,8 +69,8 @@ void main() {
 
   test('注册表条目且目录存在时识别为本机副本', () async {
     const sourceId = 'RJ1000002';
-    final sourceDir =
-        Directory(p.join(dlRoot.path, 'CV-标题', sourceId))..createSync(recursive: true);
+    final sourceDir = Directory(p.join(dlRoot.path, 'CV-标题', sourceId))
+      ..createSync(recursive: true);
     await index.upsert(WorkEntry(
       sourceId: sourceId,
       dlPath: dlRoot.path,
@@ -89,8 +88,8 @@ void main() {
 
   test('注册表目录被手动删除后不再视为本机副本', () async {
     const sourceId = 'RJ1000003';
-    final sourceDir =
-        Directory(p.join(dlRoot.path, 'CV-标题', sourceId))..createSync(recursive: true);
+    final sourceDir = Directory(p.join(dlRoot.path, 'CV-标题', sourceId))
+      ..createSync(recursive: true);
     await index.upsert(WorkEntry(
       sourceId: sourceId,
       dlPath: dlRoot.path,
@@ -100,14 +99,12 @@ void main() {
     ));
 
     final container = makeContainer(sourceId: sourceId);
-    expect(
-        (await container.read(workLibraryStatusProvider.future))!.inLibrary,
+    expect((await container.read(workLibraryStatusProvider.future))!.inLibrary,
         isTrue);
 
     sourceDir.deleteSync(recursive: true);
     container.invalidate(workLibraryStatusProvider);
-    expect(
-        (await container.read(workLibraryStatusProvider.future))!.inLibrary,
+    expect((await container.read(workLibraryStatusProvider.future))!.inLibrary,
         isFalse);
   });
 

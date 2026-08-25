@@ -222,8 +222,7 @@ class _EngineSetupDialogState extends ConsumerState<EngineSetupDialog> {
                   Navigator.of(context).pop();
                 } else if (context.mounted) {
                   ref.read(uiServiceProvider).showSnack(
-                      context: context,
-                      '引擎不完整（缺少 exe 或模型），无法启用，请先安装');
+                      context: context, '引擎不完整（缺少 exe 或模型），无法启用，请先安装');
                 }
               },
               child: const Text('使用已安装的引擎'),

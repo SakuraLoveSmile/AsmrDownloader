@@ -17,8 +17,8 @@ Future<List<WorkEntry>> scanDownloadRoot({
 }) async {
   if (dlRoot.isEmpty) return const [];
 
-  final found = <String,
-      ({String sourceId, String dlPath, String dirName, int depth})>{};
+  final found =
+      <String, ({String sourceId, String dlPath, String dirName, int depth})>{};
 
   Future<void> walk(Directory dir, int depth) async {
     if (depth > maxDepth) return;

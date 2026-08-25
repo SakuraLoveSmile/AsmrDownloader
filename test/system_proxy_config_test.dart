@@ -20,8 +20,7 @@ void main() {
       if (stdout.contains('HTTPEnable : 1') ||
           stdout.contains('HTTPSEnable : 1')) {
         final proxy = SystemProxyConfig.getMacOSSystemProxy();
-        expect(proxy, isNot('DIRECT'),
-            reason: '系统代理已开启，应解析出代理而非 DIRECT');
+        expect(proxy, isNot('DIRECT'), reason: '系统代理已开启，应解析出代理而非 DIRECT');
         expect(proxy, matches(r'^PROXY .+:\d+; DIRECT$'),
             reason: '代理格式应为 "PROXY host:port; DIRECT"');
       } else {

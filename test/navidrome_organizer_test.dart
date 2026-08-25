@@ -465,8 +465,7 @@ void main() {
       expect(result2.skipped, 4);
     });
 
-    test('hasExpectedFiles: 保留结构模式返回 true，默认模式对其产物返回 false',
-        () async {
+    test('hasExpectedFiles: 保留结构模式返回 true，默认模式对其产物返回 false', () async {
       createMockDownload();
       final args = {
         'sourceDir': sourceDir.path,
@@ -717,6 +716,227 @@ void main() {
 
       expect(result.copied, 0);
       expect(result.skipped, 3);
+    });
+  });
+
+  group('findWorkTargetDirs / deleteWorkTargetDirs（完全重新整理）', () {
+    test('精确匹配 sourceId，不误匹配 RJ1234/XRJ123/RJ123 - title', () async {
+      final exact = Directory(
+          p.join(targetRoot.path, '社团A', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      // 相邻但 basename 不同的目录不应被误匹配
+      Directory(p.join(targetRoot.path, '社团A', 'RJ1234'))
+          .createSync(recursive: true);
+      Directory(p.join(targetRoot.path, '社团A', 'XRJ123'))
+          .createSync(recursive: true);
+      Directory(p.join(targetRoot.path, '社团A', 'RJ123 - title'))
+          .createSync(recursive: true);
+
+      final dirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(dirs.length, 1);
+      expect(dirs.first, p.absolute(p.normalize(exact.path)));
+    });
+
+    test('多个旧 Circle/Album 下的相同 sourceId 全部找到并删除', () async {
+      final d1 = Directory(p.join(
+          targetRoot.path, '旧社团A', 'RJ12345678 - 旧CV - 旧标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      final d2 = Directory(p.join(
+          targetRoot.path, '旧社团B', 'RJ12345678 - 旧CV - 旧标题2', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(d1.path, 'a.wav')).writeAsBytesSync(Uint8List(10));
+      File(p.join(d2.path, 'b.wav')).writeAsBytesSync(Uint8List(10));
+
+      final dirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(dirs.length, 2);
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 2);
+      expect(d1.existsSync(), false);
+      expect(d2.existsSync(), false);
+      // 旧社团目录应为空被正确清理
+      expect(Directory(p.join(targetRoot.path, '旧社团A')).existsSync(), false);
+      expect(Directory(p.join(targetRoot.path, '旧社团B')).existsSync(), false);
+    });
+
+    test('空 Album/Circle 正确清理', () async {
+      final d = Directory(
+          p.join(targetRoot.path, '社团', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(d.path, 'x.wav')).writeAsBytesSync(Uint8List(5));
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 1);
+      expect(
+          Directory(p.join(
+                  targetRoot.path, '社团', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+              .existsSync(),
+          false);
+      expect(
+          Directory(p.join(targetRoot.path, '社团', 'RJ12345678 - CV - 标题'))
+              .existsSync(),
+          false);
+      expect(Directory(p.join(targetRoot.path, '社团')).existsSync(), false);
+    });
+
+    test('非空父目录不删除', () async {
+      final d = Directory(
+          p.join(targetRoot.path, '社团', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(d.path, 'x.wav')).writeAsBytesSync(Uint8List(5));
+      // 同一社团下存在另一作品
+      final other = Directory(
+          p.join(targetRoot.path, '社团', 'RJ999999 - CV - 标题', 'RJ999999'))
+        ..createSync(recursive: true);
+      File(p.join(other.path, 'y.wav')).writeAsBytesSync(Uint8List(5));
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 1);
+      expect(d.existsSync(), false);
+      // album 目录清理后，社团目录因含 RJ999999 而保留
+      expect(Directory(p.join(targetRoot.path, '社团')).existsSync(), true);
+      expect(other.existsSync(), true);
+    });
+
+    test('隐藏目录不扫描（其下的 sourceId 不被发现/删除）', () async {
+      final hidden = Directory(p.join(targetRoot.path, '.hidden', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(hidden.path, 'a.wav')).writeAsBytesSync(Uint8List(5));
+
+      final dirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(dirs, isEmpty);
+      // 确认未被误删
+      expect(hidden.existsSync(), true);
+    });
+
+    test('symlink 不跟随：指向含 sourceId 的目录也不遍历', () async {
+      final real = Directory(
+          p.join(targetRoot.path, '社团', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(real.path, 'a.wav')).writeAsBytesSync(Uint8List(5));
+
+      // 目录外构造一个同名 sourceId，symlink 指向它
+      final outside = Directory(p.join(testBase.path, 'outside', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(outside.path, 'z.wav')).writeAsBytesSync(Uint8List(5));
+      final sym = Link(p.join(targetRoot.path, 'symlinkCircle'));
+      sym.createSync(outside.path);
+
+      final dirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      // 不跟随 symlink：仍只找到真实的 1 个
+      expect(dirs.length, 1);
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 1);
+      expect(real.existsSync(), false);
+      // 外部目录不受影响
+      expect(outside.existsSync(), true);
+    });
+
+    test('symlink 本身 basename 等于 sourceId 时不匹配不删除', () async {
+      final real = Directory(
+          p.join(targetRoot.path, '社团', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(real.path, 'a.wav')).writeAsBytesSync(Uint8List(5));
+
+      final linkDir = Directory(p.join(targetRoot.path, '社团', 'linkRJ'))
+        ..createSync(recursive: true);
+      final sym = Link(p.join(linkDir.path, 'RJ12345678'));
+      sym.createSync(real.path);
+
+      final dirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(dirs.length, 1);
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 1);
+      expect(real.existsSync(), false);
+      // symlink 仍在（未被当作作品目录删除）
+      expect(sym.existsSync(), true);
+    });
+
+    test('最大扫描深度正确（depth 5 发现，depth 6 忽略）', () async {
+      // 深度 5：root/a/b/c/d/RJ12345678（root=0, a=1, b=2, c=3, d=4, RJ=5）
+      final deep5 =
+          Directory(p.join(targetRoot.path, 'a', 'b', 'c', 'd', 'RJ12345678'))
+            ..createSync(recursive: true);
+      File(p.join(deep5.path, 'a.wav')).writeAsBytesSync(Uint8List(5));
+      // 深度 6：root/a/b/c/d/e/RJ12345678 应被忽略
+      final deep6 = Directory(
+          p.join(targetRoot.path, 'a', 'b', 'c', 'd', 'e', 'RJ12345678'))
+        ..createSync(recursive: true);
+
+      final dirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(dirs.length, 1);
+      expect(dirs.first, p.absolute(p.normalize(deep5.path)));
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 1);
+      expect(deep5.existsSync(), false);
+      // 深度 6 目录保持完好（未被扫描到，也未删除）
+      expect(deep6.existsSync(), true);
+    });
+
+    test('targetRoot 本身及其外部路径绝不删除', () async {
+      final real = Directory(
+          p.join(targetRoot.path, '社团', 'RJ12345678 - CV - 标题', 'RJ12345678'))
+        ..createSync(recursive: true);
+      File(p.join(real.path, 'a.wav')).writeAsBytesSync(Uint8List(5));
+      final external = Directory(p.join(testBase.path, 'outside', 'RJ12345678'))
+        ..createSync(recursive: true);
+
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ12345678',
+      );
+      expect(deleted, 1);
+      // 外部目录不受影响
+      expect(external.existsSync(), true);
+      // targetRoot 本身完好
+      expect(targetRoot.existsSync(), true);
+    });
+
+    test('无匹配时删除返回 0', () async {
+      final deleted = await NavidromeOrganizer.deleteWorkTargetDirs(
+        targetRoot: targetRoot.path,
+        sourceId: 'RJ00000000',
+      );
+      expect(deleted, 0);
     });
   });
 }

@@ -209,8 +209,9 @@ class BatchCacheService {
     final target = name.toLowerCase();
 
     if (dim == BatchCacheDimension.circle) {
-      final circleName =
-          (work['circle'] is Map) ? (work['circle'] as Map)['name']?.toString() : null;
+      final circleName = (work['circle'] is Map)
+          ? (work['circle'] as Map)['name']?.toString()
+          : null;
       final name2 = work['name']?.toString(); // 部分响应用顶层 name 表示社团名
       return circleName?.toLowerCase().contains(target) == true ||
           name2?.toLowerCase().contains(target) == true;
@@ -220,9 +221,10 @@ class BatchCacheService {
     final vas = work['vas'];
     if (vas is List) {
       for (final va in vas) {
-        final vaName =
-            (va is Map) ? va['name']?.toString() : va?.toString();
-        if (vaName != null && vaName.toLowerCase().contains(target)) return true;
+        final vaName = (va is Map) ? va['name']?.toString() : va?.toString();
+        if (vaName != null && vaName.toLowerCase().contains(target)) {
+          return true;
+        }
       }
     }
     return false;

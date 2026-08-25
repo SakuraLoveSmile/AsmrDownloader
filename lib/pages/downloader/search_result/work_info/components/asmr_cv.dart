@@ -35,7 +35,8 @@ class AsmrCv extends ConsumerWidget {
                   width: 0.8,
                 ),
                 borderRadius: 100.0,
-                padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10.0, vertical: 3.0),
               ))
         ],
       ),

@@ -82,7 +82,8 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          workLibraryStatusProvider.overrideWith((ref) => Completer<WorkLibraryStatus?>().future),
+          workLibraryStatusProvider
+              .overrideWith((ref) => Completer<WorkLibraryStatus?>().future),
         ],
         child: const MaterialApp(
           home: Scaffold(body: AsmrLibraryStatus()),

@@ -16,8 +16,20 @@ void main() {
       expect(cfg.device, 'auto');
       // 与 SubtitleGapDetector.kAudioExtensions 一致（含视频格式）
       for (final ext in const [
-        'wav', 'flac', 'mp3', 'm4a', 'aac', 'ogg', 'wma',
-        'mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'wmv',
+        'wav',
+        'flac',
+        'mp3',
+        'm4a',
+        'aac',
+        'ogg',
+        'wma',
+        'mp4',
+        'mkv',
+        'avi',
+        'mov',
+        'webm',
+        'flv',
+        'wmv',
       ]) {
         expect(cfg.audioSuffixes.split(','), contains(ext));
       }
@@ -32,10 +44,10 @@ void main() {
     test('isBat 按扩展名识别 bat/cmd', () {
       expect(const ChickenRiceConfig(scriptPath: 'C:\\t\\run.bat').isBat, true);
       expect(const ChickenRiceConfig(scriptPath: 'C:\\t\\run.cmd').isBat, true);
-      expect(const ChickenRiceConfig(scriptPath: 'C:\\t\\infer.exe').isBat,
-          false);
-      expect(const ChickenRiceConfig(scriptPath: 'C:\\t\\infer.EXE').isBat,
-          false);
+      expect(
+          const ChickenRiceConfig(scriptPath: 'C:\\t\\infer.exe').isBat, false);
+      expect(
+          const ChickenRiceConfig(scriptPath: 'C:\\t\\infer.EXE').isBat, false);
     });
   });
 
@@ -95,8 +107,10 @@ void main() {
       expect(cmd, contains('--device=auto'));
       expect(cmd, contains('--task=translate'));
       expect(cmd, contains('--sub_formats=lrc'));
-      expect(cmd, contains(
-          '--audio_suffixes=wav,flac,mp3,m4a,aac,ogg,wma,mp4,mkv,avi,mov,webm,flv,wmv'));
+      expect(
+          cmd,
+          contains(
+              '--audio_suffixes=wav,flac,mp3,m4a,aac,ogg,wma,mp4,mkv,avi,mov,webm,flv,wmv'));
       expect(cmd.last, 'D:\\asmr\\RJ1');
     });
 
@@ -181,9 +195,8 @@ void main() {
       final cmd = ChickenRiceService(cfg).buildCommand(['D:\\a', 'D:\\b']);
       final content = File(cmd.last).readAsStringSync();
       // --overwrite 在目录前，否则会被 base_dirs(REMAINDER) 吞掉
-      final callLine = content
-          .split('\n')
-          .firstWhere((l) => l.startsWith('call '));
+      final callLine =
+          content.split('\n').firstWhere((l) => l.startsWith('call '));
       expect(callLine, contains(' --overwrite "D:\\a" "D:\\b"'));
       File(cmd.last).deleteSync();
       bat.deleteSync();
@@ -191,14 +204,13 @@ void main() {
 
     test('bat 模式：wrapper 中转义 %（避免 cmd 变量展开）', () {
       final dir = Directory.systemTemp.createTempSync('cr_pct');
-      final bat = File(p.join(dir.path, 'run(100%).bat'))..writeAsStringSync('x');
+      final bat = File(p.join(dir.path, 'run(100%).bat'))
+        ..writeAsStringSync('x');
       final cfg = ChickenRiceConfig(scriptPath: bat.path);
       final cmd = ChickenRiceService(cfg).buildCommand(['D:\\50% 目录']);
       final content = File(cmd.last).readAsStringSync();
-      expect(content,
-          contains('call "${bat.path.replaceAll('%', '%%')}"'));
-      expect(content,
-          contains('"${'D:\\50% 目录'.replaceAll('%', '%%')}"'));
+      expect(content, contains('call "${bat.path.replaceAll('%', '%%')}"'));
+      expect(content, contains('"${'D:\\50% 目录'.replaceAll('%', '%%')}"'));
       File(cmd.last).deleteSync();
       dir.deleteSync(recursive: true);
     });
@@ -521,8 +533,8 @@ ProcessHandle _completedHandle() =>
     _FakeHandle(stdoutLines: const [], exitCode: 0);
 
 class _FakeRunner implements ProcessRunner {
-  final ProcessHandle Function(List<String> command,
-      Map<String, String>? environment) onStart;
+  final ProcessHandle Function(
+      List<String> command, Map<String, String>? environment) onStart;
 
   _FakeRunner(this.onStart);
 

@@ -75,7 +75,8 @@ class OnboardingOverlay extends StatelessWidget {
 
     // 气泡水平居中于目标，超出窗口时夹紧
     double bubbleLeft = hole.centerLeft.dx - _bubbleWidth / 2;
-    bubbleLeft = bubbleLeft.clamp(_margin, screen.width - _bubbleWidth - _margin);
+    bubbleLeft =
+        bubbleLeft.clamp(_margin, screen.width - _bubbleWidth - _margin);
 
     // 垂直位置：上方优先，空间不够则下方
     double bubbleTop;
@@ -119,7 +120,8 @@ class OnboardingOverlay extends StatelessWidget {
               children: [
                 // 步骤胶囊徽标
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
                     color: scheme.primary.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(100),
@@ -177,18 +179,21 @@ class OnboardingOverlay extends StatelessWidget {
                             style: TextButton.styleFrom(
                               visualDensity: VisualDensity.compact,
                             ),
-                            child: const Text('上一步', style: TextStyle(fontSize: 12)),
+                            child: const Text('上一步',
+                                style: TextStyle(fontSize: 12)),
                           ),
                         if (step > 0) const SizedBox(width: 4),
                         FilledButton(
                           onPressed: onNext,
                           style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 6),
                             visualDensity: VisualDensity.compact,
                           ),
                           child: Text(
                             _isLast ? '开始使用' : '下一步',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                            style: const TextStyle(
+                                fontSize: 12, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],

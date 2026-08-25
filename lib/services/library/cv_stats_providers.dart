@@ -39,8 +39,8 @@ final cvStatsProvider = FutureProvider<List<CvStat>>((ref) async {
         .where((name) => name.isNotEmpty)
         .toSet();
     for (final name in cvNames) {
-      final current = statByName[name] ??
-          CvStat(name: name, albumCount: 0, trackCount: 0);
+      final current =
+          statByName[name] ?? CvStat(name: name, albumCount: 0, trackCount: 0);
       statByName[name] = CvStat(
         name: name,
         albumCount: current.albumCount + 1,

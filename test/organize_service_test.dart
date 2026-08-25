@@ -419,14 +419,12 @@ void main() {
       expect(result.skipped, 1);
     });
 
-    test('保留原目录结构：organizeAll 产物保留子目录，仅未整理二次跳过',
-        () async {
+    test('保留原目录结构：organizeAll 产物保留子目录，仅未整理二次跳过', () async {
       final container = makeContainer();
       addTearDown(container.dispose);
 
       // 构造带子目录的源：音声/ 与 音声/disc2/
-      final workDir = Directory(
-          p.join(dlPath.path, '社团-标题RJ00001', 'RJ00001'))
+      final workDir = Directory(p.join(dlPath.path, '社团-标题RJ00001', 'RJ00001'))
         ..createSync(recursive: true);
       final audioDir = Directory(p.join(workDir.path, '音声'))..createSync();
       File(p.join(audioDir.path, 'e01_舔耳.wav'))
@@ -1077,13 +1075,12 @@ void main() {
         manuallyEditedAt: DateTime.parse('2026-08-13T00:00:00.000'),
       ));
 
-      final outcome = await container
-          .read(organizeServiceProvider)
-          .organizeEntry(
-            (await index.get('RJ200001'))!,
-            targetRoot: targetRoot.path,
-            fetchWorkInfo: true,
-          );
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                (await index.get('RJ200001'))!,
+                targetRoot: targetRoot.path,
+                fetchWorkInfo: true,
+              );
 
       expect(outcome.result, isNotNull);
       final resolved = outcome.resolvedEntry;
@@ -1136,13 +1133,12 @@ void main() {
         tags: const ['旧标签'],
       ));
 
-      final outcome = await container
-          .read(organizeServiceProvider)
-          .organizeEntry(
-            (await index.get('RJ200002'))!,
-            targetRoot: targetRoot.path,
-            fetchWorkInfo: true,
-          );
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                (await index.get('RJ200002'))!,
+                targetRoot: targetRoot.path,
+                fetchWorkInfo: true,
+              );
 
       // 未手动编辑：与既有行为一致，在线元数据覆盖注册表旧值
       expect(outcome.resolvedEntry.title, '在线标题');
@@ -1164,19 +1160,19 @@ void main() {
       addTearDown(container.dispose);
 
       final result = await container.read(organizeServiceProvider).organizeWork(
-            sourceId: 'RJ300001',
-            sourceDir: srcDir.path,
-            targetRoot: targetRoot.path,
-            workInfo: null,
-            fallbackTitle: '旧标题',
-            fallbackCvNames: '旧CV',
-            fallbackCircle: '旧社团',
-            overrideTitle: '手动标题',
-            overrideCvNames: '手动CV',
-            overrideCircleName: '手动社团',
-            overrideReleaseDate: '2024-02-02',
-            overrideGenres: ['手动标签', 'ASMR'],
-          );
+        sourceId: 'RJ300001',
+        sourceDir: srcDir.path,
+        targetRoot: targetRoot.path,
+        workInfo: null,
+        fallbackTitle: '旧标题',
+        fallbackCvNames: '旧CV',
+        fallbackCircle: '旧社团',
+        overrideTitle: '手动标题',
+        overrideCvNames: '手动CV',
+        overrideCircleName: '手动社团',
+        overrideReleaseDate: '2024-02-02',
+        overrideGenres: ['手动标签', 'ASMR'],
+      );
       expect(result, isNotNull);
 
       final outDir = p.join(
@@ -1204,14 +1200,15 @@ void main() {
       final audioDir2 = Directory(p.join(srcDir2.path, '音声'))..createSync();
       File(p.join(audioDir2.path, 'e01_舔耳.wav'))
           .writeAsBytesSync(_buildMinimalWav());
-      final result2 = await container.read(organizeServiceProvider).organizeWork(
-            sourceId: 'RJ300002',
-            sourceDir: srcDir2.path,
-            targetRoot: targetRoot.path,
-            workInfo: null,
-            fallbackTitle: '标题',
-            fallbackCvNames: 'CV_A',
-          );
+      final result2 =
+          await container.read(organizeServiceProvider).organizeWork(
+                sourceId: 'RJ300002',
+                sourceDir: srcDir2.path,
+                targetRoot: targetRoot.path,
+                workInfo: null,
+                fallbackTitle: '标题',
+                fallbackCvNames: 'CV_A',
+              );
       expect(result2, isNotNull);
       final outWav2 = File(p.join(
         targetRoot.path,
@@ -1223,6 +1220,280 @@ void main() {
       expect(outWav2.existsSync(), isTrue);
       expect(String.fromCharCodes(outWav2.readAsBytesSync()).contains('TCON'),
           isFalse);
+    });
+  });
+
+  group('完全重新整理 forceReorganize', () {
+    test('普通整理幂等行为不回归（force 不影响普通路径）', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final e = entry('RJ00001');
+
+      final r1 = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e, targetRoot: targetRoot.path);
+      expect(r1.result, isNotNull);
+      expect(r1.result!.copied, greaterThan(0));
+
+      final r2 = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e, targetRoot: targetRoot.path);
+      expect(r2.result, isNotNull);
+      expect(r2.result!.copied, 0);
+      expect(r2.result!.skipped, greaterThan(0));
+    });
+
+    test('已整理作品 Force 后 copied > 0，旧命名残留被全部清理', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      // 第一次正常整理：circle=社团
+      final e = entry('RJ00001');
+      await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e, targetRoot: targetRoot.path);
+      final oldDir = Directory(p.join(
+          targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      expect(oldDir.existsSync(), true);
+
+      // 元数据变更：社团名改（模拟汉化组→原版社团），Force 重新整理
+      final changed = WorkEntry(
+        sourceId: e.sourceId,
+        dlPath: e.dlPath,
+        dirName: e.dirName,
+        title: e.title,
+        cvNames: e.cvNames,
+        circleName: '新社团',
+      );
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                changed,
+                targetRoot: targetRoot.path,
+                forceReorganize: true,
+              );
+      expect(outcome.result, isNotNull);
+      expect(outcome.result!.copied, greaterThan(0));
+
+      // 旧社团目录被清理，只剩新社团目录
+      expect(Directory(p.join(targetRoot.path, '社团')).existsSync(), false);
+      final newDir = Directory(p.join(
+          targetRoot.path, '新社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      expect(newDir.existsSync(), true);
+    });
+
+    test('Force 成功时 organizedAt 更新（旧命名残留被清理）', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      final e = entry('RJ00001');
+      await index.upsert(e);
+      // 第一次正常整理（写入 organizedAt，建立旧命名目录）
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      final oldDir = Directory(p.join(
+          targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      expect(oldDir.existsSync(), true);
+      expect((await index.get('RJ00001'))!.organizedAt, isNotNull);
+
+      // 元数据变更：社团名改为新社团，Force 重新整理
+      await index.upsert(WorkEntry(
+        sourceId: e.sourceId,
+        dlPath: e.dlPath,
+        dirName: e.dirName,
+        title: e.title,
+        cvNames: e.cvNames,
+        circleName: '新社团',
+        organizedAt: (await index.get('RJ00001'))!.organizedAt,
+      ));
+      final result = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            forceReorganize: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      expect(result.success, 1);
+
+      // 旧社团目录被清理，新目录存在
+      expect(Directory(p.join(targetRoot.path, '社团')).existsSync(), false);
+      expect(
+        Directory(p.join(targetRoot.path, '新社团',
+                'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'))
+            .existsSync(),
+        true,
+      );
+      // organizedAt 在完整成功后更新
+      expect((await index.get('RJ00001'))!.organizedAt, isNotNull);
+    });
+
+    test('相似 sourceId 不受影响（精确匹配）', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final e1 = entry('RJ00001');
+      // 另一个相似作品 RJ000010
+      final e2dir = Directory(p.join(dlPath.path, '社团-标题RJ000010', 'RJ000010'))
+        ..createSync(recursive: true);
+      File(p.join(e2dir.path, 'e01_舔耳.wav')).writeAsBytesSync(Uint8List(100));
+      await index.upsert(WorkEntry(
+        sourceId: 'RJ000010',
+        dlPath: dlPath.path,
+        dirName: '社团-标题RJ000010',
+        title: '标题RJ000010',
+        cvNames: 'CV1&CV2',
+        circleName: '社团',
+      ));
+
+      await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e1, targetRoot: targetRoot.path);
+      await container.read(organizeServiceProvider).organizeEntry(
+            (await index.get('RJ000010'))!,
+            targetRoot: targetRoot.path,
+          );
+
+      final d1 = Directory(p.join(
+          targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      final d2 = Directory(p.join(targetRoot.path, '社团',
+          'RJ000010 - CV1&CV2 - 标题RJ000010', 'RJ000010'));
+      expect(d1.existsSync(), true);
+      expect(d2.existsSync(), true);
+
+      // Force 重新整理 RJ00001：RJ000010 目录应保持完好
+      await container.read(organizeServiceProvider).organizeEntry(
+            e1,
+            targetRoot: targetRoot.path,
+            forceReorganize: true,
+          );
+      expect(d1.existsSync(), true);
+      expect(d2.existsSync(), true);
+    });
+
+    test('Force 失败不更新 organizedAt（旧产物已被清理）', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      await index.upsert(entry('RJ00001'));
+
+      // 正常整理（organizeAll 写入 organizedAt）
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      final before = (await index.get('RJ00001'))!.organizedAt;
+      expect(before, isNotNull);
+
+      // 删除下载源目录，使 Force 重建时 organizeWork 返回 null
+      final srcDir = (await index.get('RJ00001'))!.sourceDir;
+      Directory(srcDir).deleteSync(recursive: true);
+
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                (await index.get('RJ00001'))!,
+                targetRoot: targetRoot.path,
+                forceReorganize: true,
+              );
+      expect(outcome.result, isNull);
+
+      final after = (await index.get('RJ00001'))!.organizedAt;
+      // 失败路径不更新 organizedAt
+      expect(after, before);
+      // 旧整理产物已被删除
+      final oldDir = Directory(p.join(
+          targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      expect(oldDir.existsSync(), false);
+    });
+
+    test('Force + onlyUnorganized 仍处理全部条目', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      await index.upsert(entry('RJ00001'));
+      await index.upsert(entry('RJ00002'));
+
+      // 先全部正常整理（标记为已整理）
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+
+      // 即使 onlyUnorganized=true，Force 仍处理全部
+      final result = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            forceReorganize: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      expect(result.success, 2);
+      expect(
+        Directory(p.join(targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001',
+                'RJ00001'))
+            .existsSync(),
+        true,
+      );
+      expect(
+        Directory(p.join(targetRoot.path, '社团', 'RJ00002 - CV1&CV2 - 标题RJ00002',
+                'RJ00002'))
+            .existsSync(),
+        true,
+      );
+    });
+
+    test('Force 模式手动 metadata 优先规则不变', () async {
+      final container = makeContainer(works: {
+        '000001': {
+          'title': '在线标题',
+          'circle': {'name': '在线社团'},
+          'vas': [
+            {'name': '在线CV'},
+          ],
+        },
+      });
+      addTearDown(container.dispose);
+
+      // 构造下载源目录（手动条目不会自动创建）
+      final srcDir = Directory(p.join(dlPath.path, '手工-手工标题', 'RJ00001'))
+        ..createSync(recursive: true);
+      File(p.join(srcDir.path, 'e01_舔耳.wav')).writeAsBytesSync(Uint8List(100));
+
+      final manualEntry = WorkEntry(
+        sourceId: 'RJ00001',
+        dlPath: dlPath.path,
+        dirName: '手工-手工标题',
+        title: '手动标题',
+        cvNames: '手动CV',
+        circleName: '手动社团',
+        manuallyEditedAt: DateTime.parse('2026-08-13T00:00:00.000'),
+      );
+      await index.upsert(manualEntry);
+
+      // 先正常整理（手动优先）
+      await container
+          .read(organizeServiceProvider)
+          .organizeEntry(manualEntry, targetRoot: targetRoot.path);
+
+      // Force 重新整理：仍应使用手动值，而非在线元数据
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                manualEntry,
+                targetRoot: targetRoot.path,
+                forceReorganize: true,
+              );
+      expect(outcome.result, isNotNull);
+      final newDir = Directory(
+          p.join(targetRoot.path, '手动社团', 'RJ00001 - 手动CV - 手动标题', 'RJ00001'));
+      expect(newDir.existsSync(), true);
+      // 在线社团目录不应出现
+      expect(
+        Directory(p.join(targetRoot.path, '在线社团')).existsSync(),
+        false,
+      );
     });
   });
 }

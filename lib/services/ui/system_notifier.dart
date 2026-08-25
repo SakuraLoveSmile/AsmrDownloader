@@ -25,7 +25,8 @@ class SystemNotifier {
     try {
       if (Platform.isMacOS) {
         // AppleScript 转义：反斜杠与双引号
-        final escapedTitle = title.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+        final escapedTitle =
+            title.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
         final escapedBody = body.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
         final script =
             'display notification "$escapedBody" with title "$escapedTitle"';

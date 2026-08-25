@@ -28,7 +28,8 @@ void main() {
     if (Platform.isMacOS) {
       expect(calls, hasLength(1));
       expect(calls.first.first, 'osascript');
-      expect(calls.first.last, contains('display notification "测试内容" with title "测试标题"'));
+      expect(calls.first.last,
+          contains('display notification "测试内容" with title "测试标题"'));
     } else if (Platform.isWindows) {
       expect(calls, hasLength(1));
       expect(calls.first.first, 'powershell');

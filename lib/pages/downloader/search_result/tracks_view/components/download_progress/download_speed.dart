@@ -31,8 +31,7 @@ class DownloadSpeed extends ConsumerWidget {
     return Text(
       text,
       style: TextStyle(
-          fontSize: 12,
-          color: Theme.of(context).colorScheme.onSurfaceVariant),
+          fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
     );
   }
 }

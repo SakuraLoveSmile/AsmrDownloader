@@ -126,8 +126,7 @@ void main() {
     );
   }
 
-  Future<VerifyWorkResult> verify(
-      ProviderContainer container, WorkEntry e) {
+  Future<VerifyWorkResult> verify(ProviderContainer container, WorkEntry e) {
     return container
         .read(verifyServiceProvider)
         .verifyWork(e, targetRoot: targetRoot.path);
@@ -166,33 +165,32 @@ void main() {
     expect(result.problems, contains('1 首缺内嵌歌词'));
   });
 
-  test('有封面源但目标无 APIC/cover.jpg → 检出 missingCover/coverJpgMissing',
-        () async {
-      // 源有本地封面，但整理时封面拉取失败（未提供 coverBytes）
-      File(p.join(sourceDir.path, '01_track.mp3'))
-          .writeAsBytesSync(buildMinimalMp3());
-      File(p.join(sourceDir.path, '${sourceId}_cover.jpg'))
-          .writeAsBytesSync(cover);
-      await NavidromeOrganizer.organize(
-        sourceDir: sourceDir.path,
-        targetRoot: targetRoot.path,
-        circleName: '社团',
-        sourceId: sourceId,
-        cvNames: 'CV1',
-        title: '标题',
-        coverBytes: null, // 模拟封面拉取失败
-      );
+  test('有封面源但目标无 APIC/cover.jpg → 检出 missingCover/coverJpgMissing', () async {
+    // 源有本地封面，但整理时封面拉取失败（未提供 coverBytes）
+    File(p.join(sourceDir.path, '01_track.mp3'))
+        .writeAsBytesSync(buildMinimalMp3());
+    File(p.join(sourceDir.path, '${sourceId}_cover.jpg'))
+        .writeAsBytesSync(cover);
+    await NavidromeOrganizer.organize(
+      sourceDir: sourceDir.path,
+      targetRoot: targetRoot.path,
+      circleName: '社团',
+      sourceId: sourceId,
+      cvNames: 'CV1',
+      title: '标题',
+      coverBytes: null, // 模拟封面拉取失败
+    );
 
-      final result = await verify(makeContainer(), entry());
+    final result = await verify(makeContainer(), entry());
 
-      expect(result.hasCoverSource, true);
-      expect(result.missingCover, 1);
-      expect(result.coverJpgMissing, true);
-      expect(result.ok, false);
-      expect(result.repairable, true);
-      expect(result.problems, contains('1 首未嵌入封面'));
-      expect(result.problems, contains('封面 cover.jpg 缺失'));
-    });
+    expect(result.hasCoverSource, true);
+    expect(result.missingCover, 1);
+    expect(result.coverJpgMissing, true);
+    expect(result.ok, false);
+    expect(result.repairable, true);
+    expect(result.problems, contains('1 首未嵌入封面'));
+    expect(result.problems, contains('封面 cover.jpg 缺失'));
+  });
 
   test('无歌词源时缺嵌入不算缺陷（hasLyricsSource=false）', () async {
     await organize(withLrc: false);
@@ -335,7 +333,11 @@ void main() {
 /// 构造带 LIST/INFO INAM 的 wav（第三方标签场景）
 Uint8List buildListChunkWav() {
   const value = '他人标题';
-  final data = [...'INAM'.codeUnits, ..._u32le(value.length), ...value.codeUnits];
+  final data = [
+    ...'INAM'.codeUnits,
+    ..._u32le(value.length),
+    ...value.codeUnits
+  ];
   final listData = [...'INFO'.codeUnits, ...data];
   return Uint8List.fromList([
     ...'LIST'.codeUnits,
@@ -347,11 +349,9 @@ Uint8List buildListChunkWav() {
 /// 在最小合法 wav 末尾追加 chunk 并重建 RIFF size
 Uint8List appendChunkWav(Uint8List chunk) {
   final base = _buildMinimalWav();
-  final oldSize = (base[4] |
-          (base[5] << 8) |
-          (base[6] << 16) |
-          (base[7] << 24)) &
-      0x7FFFFFFF;
+  final oldSize =
+      (base[4] | (base[5] << 8) | (base[6] << 16) | (base[7] << 24)) &
+          0x7FFFFFFF;
   return Uint8List.fromList([
     ...base.sublist(0, 4),
     ..._u32le(oldSize + chunk.length),

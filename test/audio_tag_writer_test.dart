@@ -65,11 +65,9 @@ Uint8List buildListChunk(String listType, Map<String, String> subs) {
 /// 在最小合法 wav 末尾追加自定义 chunk 并重建 RIFF size
 Uint8List appendChunkToWav(Uint8List chunk) {
   final base = buildMinimalWav();
-  final oldSize = (base[4] |
-          (base[5] << 8) |
-          (base[6] << 16) |
-          (base[7] << 24)) &
-      0x7FFFFFFF;
+  final oldSize =
+      (base[4] | (base[5] << 8) | (base[6] << 16) | (base[7] << 24)) &
+          0x7FFFFFFF;
   return Uint8List.fromList([
     ...base.sublist(0, 4),
     ..._u32le(oldSize + chunk.length),
@@ -186,11 +184,9 @@ void main() {
 
     // RIFF size = 文件长度 - 8
     final bytes = wavFile.readAsBytesSync();
-    final riffSize = (bytes[4] |
-            (bytes[5] << 8) |
-            (bytes[6] << 16) |
-            (bytes[7] << 24)) &
-        0x7FFFFFFF;
+    final riffSize =
+        (bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) &
+            0x7FFFFFFF;
     expect(riffSize + 8, bytes.length);
     expect(bytes.length, greaterThan(origLen));
 
@@ -328,11 +324,9 @@ void main() {
     expect(info.containsKey('INAM'), false);
     // RIFF size = 文件长 - 8
     final bytes = wavFile.readAsBytesSync();
-    final riffSize = (bytes[4] |
-            (bytes[5] << 8) |
-            (bytes[6] << 16) |
-            (bytes[7] << 24)) &
-        0x7FFFFFFF;
+    final riffSize =
+        (bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) &
+            0x7FFFFFFF;
     expect(riffSize + 8, bytes.length);
   });
 
@@ -387,7 +381,8 @@ void main() {
 
   test('LIST 类型非 INFO（adtl）：正常写入 id3 与 LIST INFO', () async {
     final wavFile = File('${tmpDir.path}/adtl.wav')
-      ..writeAsBytesSync(appendChunkToWav(buildListChunk('adtl', {'labl': 'cue1'})));
+      ..writeAsBytesSync(
+          appendChunkToWav(buildListChunk('adtl', {'labl': 'cue1'})));
 
     final ok = await AudioTagWriter.writeTags(
       wavFile.path,
@@ -475,8 +470,8 @@ void main() {
         lyrics: '[00:01.00]测试歌词',
         coverBytes: Uint8List.fromList(List.filled(20, 1)),
       );
-      expect(
-          await AudioTagWriter.readWavEmbed(both.path), (lyrics: true, cover: true));
+      expect(await AudioTagWriter.readWavEmbed(both.path),
+          (lyrics: true, cover: true));
     });
 
     test('第三方 LIST/INFO INAM（无 id3）→ 无内嵌标签且判定为第三方', () async {
@@ -502,8 +497,7 @@ void main() {
   });
 
   group('forceWavRewrite', () {
-    test('已有 id3 chunk 剥离后重写：新歌词/封面生效且仅一个 id3 chunk、RIFF size 正确',
-        () async {
+    test('已有 id3 chunk 剥离后重写：新歌词/封面生效且仅一个 id3 chunk、RIFF size 正确', () async {
       final wavFile = File('${tmpDir.path}/rewrite.wav')
         ..writeAsBytesSync(buildMinimalWav());
       await AudioTagWriter.writeTags(
@@ -544,11 +538,9 @@ void main() {
       ];
       expect(bytes, containsAllInOrder(lyricsUtf16));
       // RIFF size = 文件长 - 8
-      final riffSize = (bytes[4] |
-              (bytes[5] << 8) |
-              (bytes[6] << 16) |
-              (bytes[7] << 24)) &
-          0x7FFFFFFF;
+      final riffSize =
+          (bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24)) &
+              0x7FFFFFFF;
       expect(riffSize + 8, bytes.length);
     });
 

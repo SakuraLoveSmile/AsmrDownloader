@@ -22,6 +22,7 @@ class LibraryWorks extends Table {
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   TextColumn get coverUrl => text().withDefault(const Constant(''))();
   TextColumn get organizedAt => text().nullable()();
+
   /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
   ///
   /// 非 null 时整理以注册表手动值为准（标题/CV/社团/发行日期/标签），

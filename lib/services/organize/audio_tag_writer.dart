@@ -533,19 +533,18 @@ class AudioTagWriter {
         hasId3 = true;
       } else if (chunkId == 'LIST') {
         await raf.setPosition(offset + 8);
-        final listType = String.fromCharCodes(
-            Uint8List.fromList(await raf.read(4)));
+        final listType =
+            String.fromCharCodes(Uint8List.fromList(await raf.read(4)));
         if (listType == 'INFO') {
           hasListInfo = true;
           hasListInam =
               await _listInfoHasInam(raf, offset + 12, chunkSize - 4) ||
-              hasListInam;
+                  hasListInam;
         }
       }
       offset += 8 + chunkSize + (chunkSize.isOdd ? 1 : 0);
     }
-    return (
-        hasId3: hasId3, hasListInfo: hasListInfo, hasListInam: hasListInam);
+    return (hasId3: hasId3, hasListInfo: hasListInfo, hasListInam: hasListInam);
   }
 
   /// 检查 LIST/INFO chunk 数据区（offset+12 起、长度 [length]）是否含 INAM 子 chunk。
@@ -577,8 +576,7 @@ class AudioTagWriter {
   static int _leUint32(Uint8List bytes) =>
       bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24);
 
-  static Uint8List _uint32Le(int value) =>
-      Uint8List.fromList([
+  static Uint8List _uint32Le(int value) => Uint8List.fromList([
         value & 0xFF,
         (value >> 8) & 0xFF,
         (value >> 16) & 0xFF,

@@ -80,9 +80,11 @@ void main() {
         'id': '$n',
         'source_id': 'RJ$n',
         if (circle != null) 'name': circle,
-        if (circle != null)
-          'circle': {'name': circle},
-        if (vas != null) 'vas': [for (final v in vas) {'name': v}],
+        if (circle != null) 'circle': {'name': circle},
+        if (vas != null)
+          'vas': [
+            for (final v in vas) {'name': v}
+          ],
       };
 
   ProviderContainer makeContainer(CacheService cache, AsmrApi api) {
@@ -235,7 +237,10 @@ void main() {
 
   test('circle / va 维度所有作品均不命中时缓存 0', () async {
     final api = FakeAsmrApi(searchPages: {
-      1: [workWith(1, circle: '无关社团'), workWith(2, vas: ['无关CV'])],
+      1: [
+        workWith(1, circle: '无关社团'),
+        workWith(2, vas: ['无关CV'])
+      ],
     });
     final (_, _, service) = setup(api);
 
@@ -311,7 +316,8 @@ void main() {
   test('进度带 pagination.totalCount，tag 标记为精确', () async {
     final api = FakeAsmrApi(searchPages: {
       1: [work(1), work(2)],
-    })..totalCount = 42;
+    })
+      ..totalCount = 42;
     final (_, _, service) = setup(api);
     final progresses = <BatchCacheProgress>[];
 
@@ -330,7 +336,8 @@ void main() {
   test('circle 维度 total 标记为近似值', () async {
     final api = FakeAsmrApi(searchPages: {
       1: [workWith(1, circle: '糖果屋')],
-    })..totalCount = 99;
+    })
+      ..totalCount = 99;
     final (_, _, service) = setup(api);
     BatchCacheProgress? last;
 

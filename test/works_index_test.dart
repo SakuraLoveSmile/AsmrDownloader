@@ -8,7 +8,8 @@ void main() {
   late Directory testBase;
   late WorksIndex index;
 
-  WorkEntry entry(String sourceId, {bool dirExists = true, String? organizedAt}) {
+  WorkEntry entry(String sourceId,
+      {bool dirExists = true, String? organizedAt}) {
     final dlPath = p.join(testBase.path, 'dl');
     final dirName = '社团-标题$sourceId';
     if (dirExists) {
@@ -49,7 +50,8 @@ void main() {
     expect(got.cvNames, 'CV1&CV2');
     expect(got.circleName, '社团');
     expect(got.tags, ['舔耳', 'ASMR']);
-    expect(got.sourceDir, p.join(testBase.path, 'dl', '社团-标题RJ00001', 'RJ00001'));
+    expect(
+        got.sourceDir, p.join(testBase.path, 'dl', '社团-标题RJ00001', 'RJ00001'));
 
     final all = await index.list();
     expect(all.length, 2);
@@ -61,8 +63,8 @@ void main() {
 
   test('upsert 同 sourceId 覆盖更新', () async {
     await index.upsert(entry('RJ00001'));
-    await index.upsert(entry('RJ00001').copyWith(
-        organizedAt: '2026-08-13T00:00:00.000'));
+    await index.upsert(
+        entry('RJ00001').copyWith(organizedAt: '2026-08-13T00:00:00.000'));
 
     final got = await index.get('RJ00001');
     expect(got!.organizedAt, '2026-08-13T00:00:00.000');
@@ -109,8 +111,8 @@ void main() {
     await index.markOrganized('RJ00001',
         time: DateTime.parse('2026-08-13T01:02:03.000'));
 
-    expect((await index.get('RJ00001'))!.organizedAt,
-        '2026-08-13T01:02:03.000');
+    expect(
+        (await index.get('RJ00001'))!.organizedAt, '2026-08-13T01:02:03.000');
   });
 
   test('listMissing / cleanMissing 清理目录不存在的条目', () async {

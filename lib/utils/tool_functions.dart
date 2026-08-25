@@ -51,8 +51,7 @@ String getAppDataDir() {
   if (Platform.isMacOS) {
     final home = Platform.environment['HOME'];
     if (home != null) {
-      return p.join(
-          home, 'Library', 'Application Support', 'AsmrDownloader');
+      return p.join(home, 'Library', 'Application Support', 'AsmrDownloader');
     }
   }
   return '.';

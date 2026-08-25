@@ -428,16 +428,16 @@ class NavidromeOrganizer {
           albumArtist: albumArtist,
           track: track,
 // 内嵌歌词：同名 LRC 或 VTT 转换结果（mp3→USLT / flac→LYRICS / wav→id3 USLT）
-        lyrics: lyrics,
-        // 专辑封面嵌入每首歌（mp3→APIC / flac→PICTURE / wav→id3 APIC）
-        coverBytes: coverBytes,
-        // 发行年份（releaseDate 取前 4 位）
-        year: releaseDate.length >= 4 ? releaseDate.substring(0, 4) : null,
-        // 流派（前 3 个，防止字段过长）
-        genre: genres.take(3).join('; '),
-        // 校验修复路径：剥离 wav 旧标签后重写，补齐缺失歌词/封面
-        forceWavRewrite: forceWavRewrite,
-      );
+          lyrics: lyrics,
+          // 专辑封面嵌入每首歌（mp3→APIC / flac→PICTURE / wav→id3 APIC）
+          coverBytes: coverBytes,
+          // 发行年份（releaseDate 取前 4 位）
+          year: releaseDate.length >= 4 ? releaseDate.substring(0, 4) : null,
+          // 流派（前 3 个，防止字段过长）
+          genre: genres.take(3).join('; '),
+          // 校验修复路径：剥离 wav 旧标签后重写，补齐缺失歌词/封面
+          forceWavRewrite: forceWavRewrite,
+        );
         if (!tagOk) tagWriteFailures++;
       }
     }
@@ -470,6 +470,128 @@ class NavidromeOrganizer {
           continue;
         }
         result.add(entity);
+      }
+    }
+  }
+
+  /// 递归扫描 [targetRoot]，找出所有 basename **精确等于** [sourceId] 的目录。
+  ///
+  /// 整理目标结构为：
+  /// `<targetRoot>/<circle>/<sourceId> - <cv> - <title>/<sourceId>`
+  /// 只需匹配最内层 `<sourceId>/` 即可定位该作品在任意旧 Circle / Album
+  /// 命名下的历史整理产物。
+  ///
+  /// - 最大扫描深度（默认 5）防止异常嵌套目录导致的失控遍历；
+  /// - 跳过隐藏目录（basename 以 `.` 开头）与 symlink（不跟随）；
+  /// - 只做精确匹配，不使用前缀或模糊匹配，避免误删 `RJ1234` /
+  ///   `XRJ123` / `RJ123 - title` 等相邻目录；
+  /// - 返回路径统一执行 `absolute + normalize`。
+  static Future<List<String>> findWorkTargetDirs({
+    required String targetRoot,
+    required String sourceId,
+  }) async {
+    final root = Directory(p.absolute(p.normalize(targetRoot)));
+    if (!await root.exists()) return const [];
+    final matches = <String>[];
+    await _scanForSourceIdDir(root, sourceId, 0, 5, matches);
+    return matches;
+  }
+
+  static Future<void> _scanForSourceIdDir(
+    Directory dir,
+    String sourceId,
+    int depth,
+    int maxDepth,
+    List<String> matches,
+  ) async {
+    if (depth >= maxDepth) return;
+    await for (final entity in dir.list()) {
+      // 跳过文件与非目录实体
+      if (entity is! Directory) continue;
+      // 不跟随 symlink（部分平台 list 会把指向目录的 symlink 报告为 Directory，
+      // 因此显式用 isLink 兜底拦截，避免误删/误扫软链目标）
+      if (await FileSystemEntity.isLink(entity.path)) continue;
+      final name = p.basename(entity.path);
+      // 跳过隐藏目录（其下的产物也不应被扫描到）
+      if (name.startsWith('.')) continue;
+      if (name == sourceId) {
+        // 命中作品目录：路径规范化后记录，不再深入（内部仅文件）
+        matches.add(p.absolute(p.normalize(entity.path)));
+        continue;
+      }
+      await _scanForSourceIdDir(entity, sourceId, depth + 1, maxDepth, matches);
+    }
+  }
+
+  /// 删除 [targetRoot] 内 [sourceId] 的全部既有整理产物（最内层 `<sourceId>/`）。
+  ///
+  /// 删除前会再次确认目标路径严格位于 [targetRoot] 内，且绝不删除
+  /// [targetRoot] 本身；对匹配目录执行 `delete(recursive: true)` 后，向上
+  /// 清理空父目录直到 [targetRoot] 为止，遇到非空父目录立即停止。
+  /// 每个删除操作记录日志，返回实际删除的作品目录数量。
+  static Future<int> deleteWorkTargetDirs({
+    required String targetRoot,
+    required String sourceId,
+  }) async {
+    final root = Directory(p.absolute(p.normalize(targetRoot)));
+    final dirs = await findWorkTargetDirs(
+      targetRoot: targetRoot,
+      sourceId: sourceId,
+    );
+
+    var deleted = 0;
+    for (final dir in dirs) {
+      final normalized = p.absolute(p.normalize(dir));
+      // 再次确认：路径位于 targetRoot 内，且不是 targetRoot 本身
+      if (p.equals(root.path, normalized)) {
+        Log.warning('deleteWorkTargetDirs: refuse to delete targetRoot itself '
+            '($dir)');
+        continue;
+      }
+      if (!p.isWithin(root.path, normalized)) {
+        Log.warning('deleteWorkTargetDirs: skip unsafe path $dir '
+            '(not within $targetRoot)');
+        continue;
+      }
+
+      final target = Directory(normalized);
+      try {
+        await target.delete(recursive: true);
+        deleted++;
+        Log.info('deleteWorkTargetDirs: deleted $normalized');
+        // 向上清理空父目录到 targetRoot 为止
+        await _cleanupEmptyParents(target, root);
+      } catch (e) {
+        Log.warning('deleteWorkTargetDirs: failed to delete $normalized\n'
+            'error: $e');
+      }
+    }
+    return deleted;
+  }
+
+  /// 删除 [dir] 后向上清理空父目录，直到 [root]（含）为止。
+  /// 遇到非空父目录或父目录超出 [root] 范围立即停止。
+  static Future<void> _cleanupEmptyParents(
+    Directory dir,
+    Directory root,
+  ) async {
+    final rootPath = p.absolute(p.normalize(root.path));
+    var parent = dir.parent;
+    while (true) {
+      final parentPath = p.absolute(p.normalize(parent.path));
+      // 到达 root 为止：绝不删除 root 本身
+      if (p.equals(parentPath, rootPath)) break;
+      // 安全边界：父目录不再位于 root 内时立即停止
+      if (!p.isWithin(rootPath, parentPath)) break;
+
+      final children = await parent.list().toList();
+      if (children.isEmpty) {
+        Log.info('deleteWorkTargetDirs: cleanup empty parent ${parent.path}');
+        await parent.delete();
+        parent = parent.parent;
+      } else {
+        // 遇到非空父目录立即停止（可能含其他作品/目录）
+        break;
       }
     }
   }
