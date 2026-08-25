@@ -1035,4 +1035,194 @@ void main() {
       );
     });
   });
+
+  group('手动编辑优先', () {
+    void createWork(String rj, {String dirName = 'CV1&CV2-测试标题'}) {
+      final workDir = Directory(p.join(dlPath.path, dirName, rj))
+        ..createSync(recursive: true);
+      File(p.join(workDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+    }
+
+    test('手动编辑过的条目在 workInfo 存在时保留手动元数据（不回写在线值）', () async {
+      final container = makeContainer(works: {
+        '200001': {
+          'title': '在线标题',
+          'circle': {'name': '在线社团'},
+          'vas': [
+            {'name': '在线CV'},
+          ],
+          'release': '2026-06-09',
+          'tags': [
+            {
+              'i18n': {
+                'zh-cn': {'name': '在线标签'}
+              }
+            },
+          ],
+          'mainCoverUrl': '',
+        },
+      });
+      addTearDown(container.dispose);
+      createWork('RJ200001', dirName: '社团-标题RJ200001');
+      await index.upsert(WorkEntry(
+        sourceId: 'RJ200001',
+        dlPath: dlPath.path,
+        dirName: '社团-标题RJ200001',
+        title: '手动标题',
+        cvNames: '手动CV1&手动CV2',
+        circleName: '手动社团',
+        releaseDate: '2024-01-01',
+        tags: ['手动标签'],
+        manuallyEditedAt: DateTime.parse('2026-08-13T00:00:00.000'),
+      ));
+
+      final outcome = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(
+            (await index.get('RJ200001'))!,
+            targetRoot: targetRoot.path,
+            fetchWorkInfo: true,
+          );
+
+      expect(outcome.result, isNotNull);
+      final resolved = outcome.resolvedEntry;
+      // workInfo 在线值存在也不覆盖手动值
+      expect(resolved.title, '手动标题');
+      expect(resolved.cvNames, '手动CV1&手动CV2');
+      expect(resolved.circleName, '手动社团');
+      expect(resolved.releaseDate, '2024-01-01');
+      expect(resolved.tags, ['手动标签']);
+      // 手动标记保留，后续整理继续以手动值为准
+      expect(resolved.manuallyEditedAt, isNotNull);
+      // 目标目录使用手动值而非在线值
+      final workDir = p.join(
+        targetRoot.path,
+        '手动社团',
+        'RJ200001 - 手动CV1&手动CV2 - 手动标题',
+        'RJ200001',
+      );
+      expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), isTrue);
+    });
+
+    test('未手动编辑的条目仍走在线元数据覆盖（不回归）', () async {
+      final container = makeContainer(works: {
+        '200002': {
+          'title': '在线标题',
+          'circle': {'name': '在线社团'},
+          'vas': [
+            {'name': '在线CV'},
+          ],
+          'release': '2026-06-09',
+          'tags': [
+            {
+              'i18n': {
+                'zh-cn': {'name': '在线标签'}
+              }
+            },
+          ],
+        },
+      });
+      addTearDown(container.dispose);
+      createWork('RJ200002', dirName: '社团-标题RJ200002');
+      await index.upsert(WorkEntry(
+        sourceId: 'RJ200002',
+        dlPath: dlPath.path,
+        dirName: '社团-标题RJ200002',
+        title: '旧标题',
+        cvNames: '旧CV',
+        circleName: '旧社团',
+        releaseDate: '',
+        tags: const ['旧标签'],
+      ));
+
+      final outcome = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(
+            (await index.get('RJ200002'))!,
+            targetRoot: targetRoot.path,
+            fetchWorkInfo: true,
+          );
+
+      // 未手动编辑：与既有行为一致，在线元数据覆盖注册表旧值
+      expect(outcome.resolvedEntry.title, '在线标题');
+      expect(outcome.resolvedEntry.cvNames, '在线CV');
+      expect(outcome.resolvedEntry.circleName, '在线社团');
+      expect(outcome.resolvedEntry.releaseDate, '2026-06-09');
+      expect(outcome.resolvedEntry.tags, ['在线标签']);
+      expect(outcome.resolvedEntry.manuallyEditedAt, isNull);
+    });
+
+    test('离线场景手动 tags 通过 overrideGenres 写入音频标签', () async {
+      final srcDir = Directory(p.join(dlPath.path, '社团-手动标签', 'RJ300001'))
+        ..createSync(recursive: true);
+      final audioDir = Directory(p.join(srcDir.path, '音声'))..createSync();
+      File(p.join(audioDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(_buildMinimalWav());
+
+      final container = makeContainer();
+      addTearDown(container.dispose);
+
+      final result = await container.read(organizeServiceProvider).organizeWork(
+            sourceId: 'RJ300001',
+            sourceDir: srcDir.path,
+            targetRoot: targetRoot.path,
+            workInfo: null,
+            fallbackTitle: '旧标题',
+            fallbackCvNames: '旧CV',
+            fallbackCircle: '旧社团',
+            overrideTitle: '手动标题',
+            overrideCvNames: '手动CV',
+            overrideCircleName: '手动社团',
+            overrideReleaseDate: '2024-02-02',
+            overrideGenres: ['手动标签', 'ASMR'],
+          );
+      expect(result, isNotNull);
+
+      final outDir = p.join(
+        targetRoot.path,
+        '手动社团',
+        'RJ300001 - 手动CV - 手动标题',
+        'RJ300001',
+      );
+      final outWav = File(p.join(outDir, 'e01_舔耳.wav'));
+      expect(outWav.existsSync(), isTrue);
+
+      // 流派（TCON 帧）被写入：帧 ID 与 UTF-16 LE 内容都在文件字节中
+      final bytes = outWav.readAsBytesSync();
+      expect(String.fromCharCodes(bytes).contains('TCON'), isTrue);
+      final genreUtf16 = [
+        0xFF,
+        0xFE,
+        ...'手动标签; ASMR'.codeUnits.expand((u) => [u & 0xFF, u >> 8]),
+      ];
+      expect(bytes, containsAllInOrder(genreUtf16));
+
+      // 对照：无手动覆盖且无 workInfo 时流派为空（不写 TCON）
+      final srcDir2 = Directory(p.join(dlPath.path, '社团-对照', 'RJ300002'))
+        ..createSync(recursive: true);
+      final audioDir2 = Directory(p.join(srcDir2.path, '音声'))..createSync();
+      File(p.join(audioDir2.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(_buildMinimalWav());
+      final result2 = await container.read(organizeServiceProvider).organizeWork(
+            sourceId: 'RJ300002',
+            sourceDir: srcDir2.path,
+            targetRoot: targetRoot.path,
+            workInfo: null,
+            fallbackTitle: '标题',
+            fallbackCvNames: 'CV_A',
+          );
+      expect(result2, isNotNull);
+      final outWav2 = File(p.join(
+        targetRoot.path,
+        'CV_A',
+        'RJ300002 - CV_A - 标题',
+        'RJ300002',
+        'e01_舔耳.wav',
+      ));
+      expect(outWav2.existsSync(), isTrue);
+      expect(String.fromCharCodes(outWav2.readAsBytesSync()).contains('TCON'),
+          isFalse);
+    });
+  });
 }

@@ -795,7 +795,10 @@ class UIService {
       if (navidromePath.isEmpty) return null;
     }
 
-    final entry = WorkEntry(
+    // 优先读取注册表完整条目（含 tags/releaseDate/manuallyEditedAt），
+    // 缺失时才降级用列表项字段构造（扫描识别但未入库的条目）。
+    var entry = await ref.read(worksIndexProvider).get(item.sourceId);
+    entry ??= WorkEntry(
       sourceId: item.sourceId,
       dlPath: item.dlPath,
       dirName: item.dirName,

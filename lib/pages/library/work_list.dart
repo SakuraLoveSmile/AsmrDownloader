@@ -1,3 +1,4 @@
+import 'package:asmr_downloader/pages/library/tools/work_edit_dialog.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
@@ -496,6 +497,14 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
               icon: Icons.folder_open_rounded,
               tooltip: '打开目录',
               onTap: () => ui.openFolderForDir(item.sourceDir),
+            ),
+            _RowIconBtn(
+              icon: Icons.edit_outlined,
+              tooltip: '编辑元数据',
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (_) => WorkEditDialog(sourceId: item.sourceId),
+              ),
             ),
             _RowIconBtn(
               icon: Icons.library_music_rounded,

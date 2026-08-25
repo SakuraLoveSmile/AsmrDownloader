@@ -41,6 +41,11 @@ class WorkEntry {
   /// 最近一次整理完成时间（ISO 8601），null = 未整理过
   final String? organizedAt;
 
+  /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
+  ///
+  /// 非 null 时整理以本条目（手动）值为准，不被在线 workInfo 覆盖。
+  final DateTime? manuallyEditedAt;
+
   const WorkEntry({
     required this.sourceId,
     required this.dlPath,
@@ -52,6 +57,7 @@ class WorkEntry {
     this.tags = const [],
     this.coverUrl = '',
     this.organizedAt,
+    this.manuallyEditedAt,
   });
 
   /// 下载目录：{dlPath}/{dirName}/{sourceId}
@@ -62,6 +68,7 @@ class WorkEntry {
     String? dirName,
     String? organizedAt,
     bool clearOrganizedAt = false,
+    DateTime? manuallyEditedAt,
   }) {
     return WorkEntry(
       sourceId: sourceId,
@@ -74,6 +81,7 @@ class WorkEntry {
       tags: tags,
       coverUrl: coverUrl,
       organizedAt: clearOrganizedAt ? null : (organizedAt ?? this.organizedAt),
+      manuallyEditedAt: manuallyEditedAt ?? this.manuallyEditedAt,
     );
   }
 
@@ -88,6 +96,7 @@ class WorkEntry {
         'tags': tags,
         'coverUrl': coverUrl,
         'organizedAt': organizedAt,
+        'manuallyEditedAt': manuallyEditedAt?.toIso8601String(),
       };
 
   factory WorkEntry.fromJson(Map<String, dynamic> json) => WorkEntry(
@@ -102,6 +111,9 @@ class WorkEntry {
             const [],
         coverUrl: json['coverUrl']?.toString() ?? '',
         organizedAt: json['organizedAt']?.toString(),
+        manuallyEditedAt: json['manuallyEditedAt'] == null
+            ? null
+            : DateTime.tryParse(json['manuallyEditedAt'].toString()),
       );
 }
 
@@ -190,6 +202,7 @@ class WorksIndex {
       tagsJson: Value(jsonEncode(entry.tags)),
       coverUrl: Value(entry.coverUrl),
       organizedAt: Value(entry.organizedAt),
+      manuallyEditedAt: Value(entry.manuallyEditedAt),
       updatedAt: Value(DateTime.now()),
     );
   }
@@ -215,6 +228,7 @@ class WorksIndex {
       tags: tags,
       coverUrl: row.coverUrl,
       organizedAt: row.organizedAt,
+      manuallyEditedAt: row.manuallyEditedAt,
     );
   }
 
@@ -240,6 +254,27 @@ class WorksIndex {
     await database.into(database.libraryWorks).insertOnConflictUpdate(
           _toCompanion(entry),
         );
+  }
+
+  /// 手动编辑元数据后落库：与 [upsert] 等价，但显式把
+  /// [WorkEntry.manuallyEditedAt] 置为当前时间。
+  ///
+  /// 编辑对话框使用；此后整理（单条/批量）以手动值为准，不被在线
+  /// workInfo 覆盖。
+  Future<void> updateMetadata(WorkEntry entry) async {
+    await upsert(WorkEntry(
+      sourceId: entry.sourceId,
+      dlPath: entry.dlPath,
+      dirName: entry.dirName,
+      title: entry.title,
+      cvNames: entry.cvNames,
+      circleName: entry.circleName,
+      releaseDate: entry.releaseDate,
+      tags: entry.tags,
+      coverUrl: entry.coverUrl,
+      organizedAt: entry.organizedAt,
+      manuallyEditedAt: DateTime.now(),
+    ));
   }
 
   /// 删除条目。不会删除媒体库扫描位置，也不会删除实际文件。

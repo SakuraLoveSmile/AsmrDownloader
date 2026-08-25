@@ -83,6 +83,12 @@ class $LibraryWorksTable extends LibraryWorks
   late final GeneratedColumn<String> organizedAt = GeneratedColumn<String>(
       'organized_at', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _manuallyEditedAtMeta =
+      const VerificationMeta('manuallyEditedAt');
+  @override
+  late final GeneratedColumn<DateTime> manuallyEditedAt =
+      GeneratedColumn<DateTime>('manually_edited_at', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _updatedAtMeta =
       const VerificationMeta('updatedAt');
   @override
@@ -103,6 +109,7 @@ class $LibraryWorksTable extends LibraryWorks
         tagsJson,
         coverUrl,
         organizedAt,
+        manuallyEditedAt,
         updatedAt
       ];
   @override
@@ -163,6 +170,12 @@ class $LibraryWorksTable extends LibraryWorks
           organizedAt.isAcceptableOrUnknown(
               data['organized_at']!, _organizedAtMeta));
     }
+    if (data.containsKey('manually_edited_at')) {
+      context.handle(
+          _manuallyEditedAtMeta,
+          manuallyEditedAt.isAcceptableOrUnknown(
+              data['manually_edited_at']!, _manuallyEditedAtMeta));
+    }
     if (data.containsKey('updated_at')) {
       context.handle(_updatedAtMeta,
           updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
@@ -196,6 +209,8 @@ class $LibraryWorksTable extends LibraryWorks
           .read(DriftSqlType.string, data['${effectivePrefix}cover_url'])!,
       organizedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}organized_at']),
+      manuallyEditedAt: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}manually_edited_at']),
       updatedAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
     );
@@ -218,6 +233,12 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
   final String tagsJson;
   final String coverUrl;
   final String? organizedAt;
+
+  /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
+  ///
+  /// 非 null 时整理以注册表手动值为准（标题/CV/社团/发行日期/标签），
+  /// 不再被在线 workInfo 覆盖。
+  final DateTime? manuallyEditedAt;
   final DateTime updatedAt;
   const LibraryWork(
       {required this.sourceId,
@@ -230,6 +251,7 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       required this.tagsJson,
       required this.coverUrl,
       this.organizedAt,
+      this.manuallyEditedAt,
       required this.updatedAt});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -245,6 +267,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
     map['cover_url'] = Variable<String>(coverUrl);
     if (!nullToAbsent || organizedAt != null) {
       map['organized_at'] = Variable<String>(organizedAt);
+    }
+    if (!nullToAbsent || manuallyEditedAt != null) {
+      map['manually_edited_at'] = Variable<DateTime>(manuallyEditedAt);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -264,6 +289,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       organizedAt: organizedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(organizedAt),
+      manuallyEditedAt: manuallyEditedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(manuallyEditedAt),
       updatedAt: Value(updatedAt),
     );
   }
@@ -282,6 +310,8 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       tagsJson: serializer.fromJson<String>(json['tagsJson']),
       coverUrl: serializer.fromJson<String>(json['coverUrl']),
       organizedAt: serializer.fromJson<String?>(json['organizedAt']),
+      manuallyEditedAt:
+          serializer.fromJson<DateTime?>(json['manuallyEditedAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -299,6 +329,7 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       'tagsJson': serializer.toJson<String>(tagsJson),
       'coverUrl': serializer.toJson<String>(coverUrl),
       'organizedAt': serializer.toJson<String?>(organizedAt),
+      'manuallyEditedAt': serializer.toJson<DateTime?>(manuallyEditedAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -314,6 +345,7 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
           String? tagsJson,
           String? coverUrl,
           Value<String?> organizedAt = const Value.absent(),
+          Value<DateTime?> manuallyEditedAt = const Value.absent(),
           DateTime? updatedAt}) =>
       LibraryWork(
         sourceId: sourceId ?? this.sourceId,
@@ -326,6 +358,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
         tagsJson: tagsJson ?? this.tagsJson,
         coverUrl: coverUrl ?? this.coverUrl,
         organizedAt: organizedAt.present ? organizedAt.value : this.organizedAt,
+        manuallyEditedAt: manuallyEditedAt.present
+            ? manuallyEditedAt.value
+            : this.manuallyEditedAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );
   LibraryWork copyWithCompanion(LibraryWorksCompanion data) {
@@ -343,6 +378,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       coverUrl: data.coverUrl.present ? data.coverUrl.value : this.coverUrl,
       organizedAt:
           data.organizedAt.present ? data.organizedAt.value : this.organizedAt,
+      manuallyEditedAt: data.manuallyEditedAt.present
+          ? data.manuallyEditedAt.value
+          : this.manuallyEditedAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -360,14 +398,26 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
           ..write('tagsJson: $tagsJson, ')
           ..write('coverUrl: $coverUrl, ')
           ..write('organizedAt: $organizedAt, ')
+          ..write('manuallyEditedAt: $manuallyEditedAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(sourceId, dlPath, dirName, title, cvNames,
-      circleName, releaseDate, tagsJson, coverUrl, organizedAt, updatedAt);
+  int get hashCode => Object.hash(
+      sourceId,
+      dlPath,
+      dirName,
+      title,
+      cvNames,
+      circleName,
+      releaseDate,
+      tagsJson,
+      coverUrl,
+      organizedAt,
+      manuallyEditedAt,
+      updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -382,6 +432,7 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
           other.tagsJson == this.tagsJson &&
           other.coverUrl == this.coverUrl &&
           other.organizedAt == this.organizedAt &&
+          other.manuallyEditedAt == this.manuallyEditedAt &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -396,6 +447,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
   final Value<String> tagsJson;
   final Value<String> coverUrl;
   final Value<String?> organizedAt;
+  final Value<DateTime?> manuallyEditedAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const LibraryWorksCompanion({
@@ -409,6 +461,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     this.tagsJson = const Value.absent(),
     this.coverUrl = const Value.absent(),
     this.organizedAt = const Value.absent(),
+    this.manuallyEditedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -423,6 +476,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     this.tagsJson = const Value.absent(),
     this.coverUrl = const Value.absent(),
     this.organizedAt = const Value.absent(),
+    this.manuallyEditedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sourceId = Value(sourceId);
@@ -437,6 +491,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     Expression<String>? tagsJson,
     Expression<String>? coverUrl,
     Expression<String>? organizedAt,
+    Expression<DateTime>? manuallyEditedAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -451,6 +506,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
       if (tagsJson != null) 'tags_json': tagsJson,
       if (coverUrl != null) 'cover_url': coverUrl,
       if (organizedAt != null) 'organized_at': organizedAt,
+      if (manuallyEditedAt != null) 'manually_edited_at': manuallyEditedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -467,6 +523,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
       Value<String>? tagsJson,
       Value<String>? coverUrl,
       Value<String?>? organizedAt,
+      Value<DateTime?>? manuallyEditedAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
     return LibraryWorksCompanion(
@@ -480,6 +537,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
       tagsJson: tagsJson ?? this.tagsJson,
       coverUrl: coverUrl ?? this.coverUrl,
       organizedAt: organizedAt ?? this.organizedAt,
+      manuallyEditedAt: manuallyEditedAt ?? this.manuallyEditedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -518,6 +576,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     if (organizedAt.present) {
       map['organized_at'] = Variable<String>(organizedAt.value);
     }
+    if (manuallyEditedAt.present) {
+      map['manually_edited_at'] = Variable<DateTime>(manuallyEditedAt.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -540,6 +601,7 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
           ..write('tagsJson: $tagsJson, ')
           ..write('coverUrl: $coverUrl, ')
           ..write('organizedAt: $organizedAt, ')
+          ..write('manuallyEditedAt: $manuallyEditedAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1323,6 +1385,7 @@ typedef $$LibraryWorksTableCreateCompanionBuilder = LibraryWorksCompanion
   Value<String> tagsJson,
   Value<String> coverUrl,
   Value<String?> organizedAt,
+  Value<DateTime?> manuallyEditedAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
@@ -1338,6 +1401,7 @@ typedef $$LibraryWorksTableUpdateCompanionBuilder = LibraryWorksCompanion
   Value<String> tagsJson,
   Value<String> coverUrl,
   Value<String?> organizedAt,
+  Value<DateTime?> manuallyEditedAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
@@ -1380,6 +1444,10 @@ class $$LibraryWorksTableFilterComposer
 
   ColumnFilters<String> get organizedAt => $composableBuilder(
       column: $table.organizedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get manuallyEditedAt => $composableBuilder(
+      column: $table.manuallyEditedAt,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnFilters(column));
@@ -1424,6 +1492,10 @@ class $$LibraryWorksTableOrderingComposer
   ColumnOrderings<String> get organizedAt => $composableBuilder(
       column: $table.organizedAt, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<DateTime> get manuallyEditedAt => $composableBuilder(
+      column: $table.manuallyEditedAt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
       column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
 }
@@ -1467,6 +1539,9 @@ class $$LibraryWorksTableAnnotationComposer
   GeneratedColumn<String> get organizedAt => $composableBuilder(
       column: $table.organizedAt, builder: (column) => column);
 
+  GeneratedColumn<DateTime> get manuallyEditedAt => $composableBuilder(
+      column: $table.manuallyEditedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -1508,6 +1583,7 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             Value<String> tagsJson = const Value.absent(),
             Value<String> coverUrl = const Value.absent(),
             Value<String?> organizedAt = const Value.absent(),
+            Value<DateTime?> manuallyEditedAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -1522,6 +1598,7 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             tagsJson: tagsJson,
             coverUrl: coverUrl,
             organizedAt: organizedAt,
+            manuallyEditedAt: manuallyEditedAt,
             updatedAt: updatedAt,
             rowid: rowid,
           ),
@@ -1536,6 +1613,7 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             Value<String> tagsJson = const Value.absent(),
             Value<String> coverUrl = const Value.absent(),
             Value<String?> organizedAt = const Value.absent(),
+            Value<DateTime?> manuallyEditedAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
@@ -1550,6 +1628,7 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             tagsJson: tagsJson,
             coverUrl: coverUrl,
             organizedAt: organizedAt,
+            manuallyEditedAt: manuallyEditedAt,
             updatedAt: updatedAt,
             rowid: rowid,
           ),

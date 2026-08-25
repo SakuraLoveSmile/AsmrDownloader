@@ -171,6 +171,10 @@ class OrganizeService {
   /// [workInfo] 原始 work info（可为 null，此时全部字段走降级值）；
   /// [fallbackTitle]/[fallbackCvNames]/[fallbackCircle] 为降级值
   /// （注册表缓存 / 目录名解析 / sourceId）。
+  /// [overrideTitle]/[overrideCvNames]/[overrideCircleName]/
+  /// [overrideReleaseDate]/[overrideGenres] 为手动编辑覆盖值：
+  /// 非空时直接采用，不再被 workInfo 的 resolveXxx 覆盖
+  /// （离线场景下手动 tags 也能写入音频标签）。
   Future<OrganizeResult?> organizeWork({
     required String sourceId,
     required String sourceDir,
@@ -183,19 +187,30 @@ class OrganizeService {
     Uint8List? coverBytes,
     bool keepDirStructure = false,
     bool forceWavRewrite = false,
+    String? overrideTitle,
+    String? overrideCvNames,
+    String? overrideCircleName,
+    String? overrideReleaseDate,
+    List<String>? overrideGenres,
   }) async {
     if (!Directory(sourceDir).existsSync()) return null;
 
-    final title = resolveTitle(workInfo, fallbackTitle);
-    final cvNames = resolveCvNames(workInfo, fallbackCvNames);
+    final title = (overrideTitle != null && overrideTitle.isNotEmpty)
+        ? overrideTitle
+        : resolveTitle(workInfo, fallbackTitle);
+    final cvNames = (overrideCvNames != null && overrideCvNames.isNotEmpty)
+        ? overrideCvNames
+        : resolveCvNames(workInfo, fallbackCvNames);
     // 汉化版作品的 circle 是汉化组名，跟踪到原版取真实社团名
     // （原版元数据缓存优先，避免重复请求 API）
-    final circleName = resolvedCircleName ??
-        await NavidromeOrganizer.resolveCircleName(
-          workInfo: workInfo,
-          fallbackCircle: resolveCircle(workInfo, fallbackCircle),
-          fetchWorkInfo: fetchWorkInfoCached,
-        );
+    final circleName = (overrideCircleName != null && overrideCircleName.isNotEmpty)
+        ? overrideCircleName
+        : (resolvedCircleName ??
+            await NavidromeOrganizer.resolveCircleName(
+              workInfo: workInfo,
+              fallbackCircle: resolveCircle(workInfo, fallbackCircle),
+              fetchWorkInfo: fetchWorkInfoCached,
+            ));
     // circle 目录名（汉化跟踪后的社团名）保底：社团 → CV → sourceId
     final circleDirName =
         [circleName, cvNames, sourceId].firstWhere((s) => s.isNotEmpty);
@@ -213,8 +228,12 @@ class OrganizeService {
       coverBytes: coverBytes,
       artist: artistTag,
       albumArtist: artistTag,
-      releaseDate: resolveRelease(workInfo),
-      genres: resolveTags(workInfo),
+      releaseDate: (overrideReleaseDate != null && overrideReleaseDate.isNotEmpty)
+          ? overrideReleaseDate
+          : resolveRelease(workInfo),
+      genres: (overrideGenres != null && overrideGenres.isNotEmpty)
+          ? overrideGenres
+          : resolveTags(workInfo),
       keepDirStructure: keepDirStructure,
       forceWavRewrite: forceWavRewrite,
     );
@@ -225,6 +244,10 @@ class OrganizeService {
   /// 注册表可能由旧版本写入过汉化组名，因此即使 [entry.circleName] 非空，
   /// 也默认重新读取 workInfo（缓存优先），再解析原版社团名。这样单条整理、
   /// 批量整理和重新整理都不会被旧的中文社团字段短路。失败则降级到注册表/目录名。
+  ///
+  /// 手动编辑过的条目（[entry.manuallyEditedAt] 非 null）优先使用手动值：
+  /// title / cvNames / releaseDate / tags 非空即用，社团名直接采用且跳过
+  /// 汉化重解析；workInfo 仅继续用于封面拉取。
   Future<OrganizeEntryOutcome> organizeEntry(
     WorkEntry entry, {
     required String targetRoot,
@@ -232,6 +255,7 @@ class OrganizeService {
     bool keepDirStructure = false,
     bool forceWavRewrite = false,
   }) async {
+    final manual = entry.manuallyEditedAt != null;
     Map<String, dynamic>? workInfo;
     String? metadataNote;
     if (fetchWorkInfo || entry.circleName.trim().isEmpty) {
@@ -258,13 +282,19 @@ class OrganizeService {
 
     // 只解析一次并把同一个结果传给整理和注册表回写；否则目录虽然已经用
     // 原版社团名创建，回写时又会把旧的汉化组名保存回去，下一次仍会复发。
-    final resolvedCircleName = workInfo == null
-        ? entry.circleName
-        : await NavidromeOrganizer.resolveCircleName(
-            workInfo: workInfo,
-            fallbackCircle: resolveCircle(workInfo, entry.circleName),
-            fetchWorkInfo: fetchWorkInfoCached,
-          );
+    // 手动编辑过的条目跳过汉化重解析，直接采用 entry.circleName。
+    final String? resolvedCircleName;
+    if (manual) {
+      resolvedCircleName = null;
+    } else if (workInfo == null) {
+      resolvedCircleName = entry.circleName;
+    } else {
+      resolvedCircleName = await NavidromeOrganizer.resolveCircleName(
+        workInfo: workInfo,
+        fallbackCircle: resolveCircle(workInfo, entry.circleName),
+        fetchWorkInfo: fetchWorkInfoCached,
+      );
+    }
 
     Uint8List? coverBytes;
     var coverNote = '';
@@ -308,27 +338,46 @@ class OrganizeService {
       coverBytes: coverBytes,
       keepDirStructure: keepDirStructure,
       forceWavRewrite: forceWavRewrite,
+      // 手动编辑优先：非空即用，不被在线元数据覆盖
+      overrideTitle: manual && entry.title.isNotEmpty ? entry.title : null,
+      overrideCvNames:
+          manual && entry.cvNames.isNotEmpty ? entry.cvNames : null,
+      overrideCircleName: manual ? entry.circleName : null,
+      overrideReleaseDate:
+          manual && entry.releaseDate.isNotEmpty ? entry.releaseDate : null,
+      overrideGenres: manual && entry.tags.isNotEmpty ? entry.tags : null,
     );
 
-    // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段）
+    // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段；
+    // 手动编辑过的条目保留手动字段与手动标记，后续整理继续以手动值为准）
     final resolved = WorkEntry(
       sourceId: entry.sourceId,
       dlPath: entry.dlPath,
       dirName: entry.dirName,
-      title: workInfo != null
-          ? resolveTitle(workInfo, fallbackTitle)
-          : fallbackTitle,
-      cvNames: workInfo != null
-          ? resolveCvNames(workInfo, fallbackCvNames)
-          : fallbackCvNames,
-      circleName: resolvedCircleName,
-      releaseDate:
-          workInfo != null ? resolveRelease(workInfo) : entry.releaseDate,
-      tags: workInfo != null ? resolveTags(workInfo) : entry.tags,
+      title: manual && entry.title.isNotEmpty
+          ? entry.title
+          : (workInfo != null
+              ? resolveTitle(workInfo, fallbackTitle)
+              : fallbackTitle),
+      cvNames: manual && entry.cvNames.isNotEmpty
+          ? entry.cvNames
+          : (workInfo != null
+              ? resolveCvNames(workInfo, fallbackCvNames)
+              : fallbackCvNames),
+      circleName: manual
+          ? entry.circleName
+          : (resolvedCircleName ?? entry.circleName),
+      releaseDate: manual && entry.releaseDate.isNotEmpty
+          ? entry.releaseDate
+          : (workInfo != null ? resolveRelease(workInfo) : entry.releaseDate),
+      tags: manual && entry.tags.isNotEmpty
+          ? entry.tags
+          : (workInfo != null ? resolveTags(workInfo) : entry.tags),
       coverUrl: workInfo != null
           ? (workInfo['mainCoverUrl']?.toString() ?? entry.coverUrl)
           : entry.coverUrl,
       organizedAt: entry.organizedAt,
+      manuallyEditedAt: entry.manuallyEditedAt,
     );
 
     // 整理产物校验（缺歌词/封面等缺陷摘要，供批量消息与 snack 展示）。
