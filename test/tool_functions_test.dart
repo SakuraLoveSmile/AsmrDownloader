@@ -13,15 +13,13 @@ void main() {
       expect(matchSourceIdFromDirName(' RJ12345678 '), 'RJ12345678');
     });
 
-    test('放宽：识别带标题后缀/包裹符的作品目录名', () {
-      expect(matchSourceIdFromDirName('RJ12345678 标题'), 'RJ12345678');
+    test('放宽：编号后允许标题/CV 等后缀', () {
       expect(matchSourceIdFromDirName('RJ12345678_cover'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('RJ12345678 标题'), 'RJ12345678');
       expect(matchSourceIdFromDirName('RJ12345678-标题'), 'RJ12345678');
-      expect(matchSourceIdFromDirName('[RJ12345678]'), 'RJ12345678');
-      expect(matchSourceIdFromDirName('[RJ12345678] 标题'), 'RJ12345678');
-      expect(matchSourceIdFromDirName('作品RJ12345678'), 'RJ12345678');
-      expect(matchSourceIdFromDirName('社团-标题 RJ87654321 全年龄'),
-          'RJ87654321');
+      expect(matchSourceIdFromDirName('RJ01077805 - 阳向葵优花 - 舔耳魅魔8'),
+          'RJ01077805');
+      expect(matchSourceIdFromDirName('rj12345678 - 标题'), 'RJ12345678');
     });
 
     test('非作品目录不识别（避免误判）', () {
@@ -30,9 +28,13 @@ void main() {
       expect(matchSourceIdFromDirName('音声资料'), isNull);
       expect(matchSourceIdFromDirName('RJ12345'), isNull); // 位数不足
       expect(matchSourceIdFromDirName('RJ12345678901'), isNull); // 超过 10 位
-      expect(matchSourceIdFromDirName('12RJ12345678'), isNull); // 前缀紧贴数字
-      expect(matchSourceIdFromDirName('abcRJ12345678'), isNull); // 前缀紧贴字母
-      expect(matchSourceIdFromDirName('ORJ1234567'), isNull); // 字母误拼
+      expect(matchSourceIdFromDirName('abcRJ12345678'), isNull); // 必须 RJ 开头
+      expect(matchSourceIdFromDirName('12RJ12345678'), isNull); // 必须 RJ 开头
+      expect(matchSourceIdFromDirName('ORJ1234567'), isNull); // 必须 RJ 开头
+      expect(matchSourceIdFromDirName('[RJ12345678]'), isNull); // 包裹符不识别
+      expect(matchSourceIdFromDirName('[RJ12345678] 标题'), isNull);
+      expect(matchSourceIdFromDirName('作品RJ12345678'), isNull);
+      expect(matchSourceIdFromDirName('社团-标题 RJ87654321 全年龄'), isNull);
       expect(matchSourceIdFromDirName(''), isNull);
     });
   });
