@@ -102,6 +102,7 @@ class _WorkEditDialogState extends ConsumerState<WorkEditDialog> {
             tags: parseTags(_tagsCtrl.text),
             coverUrl: entry.coverUrl,
             organizedAt: entry.organizedAt,
+            sourceDirOverride: entry.sourceDirOverride,
           ));
       if (!mounted) return;
       ref

@@ -23,6 +23,10 @@ class LibraryWorks extends Table {
   TextColumn get coverUrl => text().withDefault(const Constant(''))();
   TextColumn get organizedAt => text().nullable()();
 
+  /// 显式作品目录路径（扁平外部导入等无法按 {dlPath}/{dirName}/{sourceId}
+  /// 重建的目录），null = 空串（按标准结构重建）。
+  TextColumn get sourceDirOverride => text().nullable()();
+
   /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
   ///
   /// 非 null 时整理以注册表手动值为准（标题/CV/社团/发行日期/标签），
@@ -91,7 +95,7 @@ class LibraryDatabase extends _$LibraryDatabase {
       p.join(getAppDataDir(), 'library', 'asmr_library.db');
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -99,6 +103,9 @@ class LibraryDatabase extends _$LibraryDatabase {
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             await m.addColumn(libraryWorks, libraryWorks.manuallyEditedAt);
+          }
+          if (from < 3) {
+            await m.addColumn(libraryWorks, libraryWorks.sourceDirOverride);
           }
         },
       );

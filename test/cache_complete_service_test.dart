@@ -486,5 +486,54 @@ void main() {
       expect(container.read(rateLimiterProvider).minInterval,
           const Duration(milliseconds: 41));
     });
+
+    test('扁平作品补全后 sourceDirOverride / sourceDir 保持不变', () async {
+      // 扁平结构：<root>/RJ777777 - CV7 - 标题7/a.wav（无内层 RJ 目录）
+      final flatDir = Directory(p.join(root.path, 'RJ777777 - CV7 - 标题7'))
+        ..createSync(recursive: true);
+      File(p.join(flatDir.path, 'a.wav')).writeAsStringSync('x');
+
+      final api = FakeCompleteApi(
+        workInfoById: {
+          '777777': {
+            'source_id': 'RJ777777',
+            'id': '777777',
+            'title': '在线标题7',
+            'circle': {'name': '社团7'},
+            'vas': [
+              {'name': 'CV7'},
+            ],
+            'mainCoverUrl': 'https://example.com/777777.jpg',
+          },
+        },
+        coversByUrl: {
+          'https://example.com/777777.jpg': Uint8List.fromList([7]),
+        },
+      );
+      final container = await makeWorksContainer(api: api);
+      final service = container.read(cacheCompleteServiceProvider);
+      final index = container.read(worksIndexProvider);
+
+      final result = await service.completeWorksLibrary(
+        onProgress: (_) {},
+        isCancelled: () => false,
+      );
+
+      expect(result.processed, 1);
+      expect(result.metadataFilled, 1);
+      expect(result.indexFilled, 1);
+      // 在线元数据回写，同时保留 override 与路径字段
+      final entry = (await index.get('RJ777777'))!;
+      expect(entry.sourceDirOverride, flatDir.path);
+      expect(entry.sourceDir, flatDir.path);
+      expect(entry.dirName, 'RJ777777 - CV7 - 标题7');
+      expect(entry.dlPath, root.path);
+      expect(entry.title, '在线标题7');
+      // 缓存照常补全
+      final cache = container.read(cacheServiceProvider);
+      expect(await cache.getWorkInfo('RJ777777'), isNotNull);
+      expect(await cache.getTracks('RJ777777'), isNotNull);
+      expect(await cache.getCover('RJ777777'), isNotNull);
+    });
   });
 }

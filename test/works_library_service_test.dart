@@ -144,6 +144,7 @@ void main() {
           dirName: 'CV-标题',
           dlPath: dlRoot.path,
           sourceDir: sourceDir,
+          sourceDirOverride: '',
           organizedAt: null,
           trackCount: 0,
           missingSubtitleCount: 0,
@@ -167,5 +168,58 @@ void main() {
     expect(nestedTarget.existsSync(), isTrue);
     expect(externalDir.existsSync(), isTrue);
     expect(localDir.existsSync(), isTrue);
+  });
+
+  test('扁平作品（RJ号 - CV - 标题/）：音轨数与三段式目录名解析正确', () async {
+    // 扁平结构：<dlRoot>/RJ111111 - CV - 标题/audio.wav（无内层 RJ 目录）
+    final flatDir = Directory(p.join(dlRoot.path, 'RJ111111 - CV1&CV2 - 扁平标题'))
+      ..createSync(recursive: true);
+    File(p.join(flatDir.path, 'e01_舔耳.wav')).writeAsStringSync('a');
+    File(p.join(flatDir.path, 'e02_口笛.wav')).writeAsStringSync('b');
+
+    final container = ProviderContainer(overrides: [
+      downloadPathProvider.overrideWith((ref) => dlRoot.path),
+      navidromePathProvider.overrideWith((ref) => targetRoot.path),
+      worksIndexProvider.overrideWith((ref) => index),
+    ]);
+    addTearDown(container.dispose);
+
+    final items = await container.read(worksLibraryServiceProvider).listWorks();
+    expect(items, hasLength(1));
+    final item = items.single;
+    expect(item.sourceId, 'RJ111111');
+    // sourceDirOverride 指向真实作品目录（不再多拼一层 RJ 目录）
+    expect(item.sourceDirOverride, flatDir.path);
+    expect(item.sourceDir, flatDir.path);
+    // 音轨数正常（修复前为 0）
+    expect(item.trackCount, 2);
+    // 三段式目录名解析：CV / 标题
+    expect(item.title, '扁平标题');
+    expect(item.cvNames, 'CV1&CV2');
+  });
+
+  test('circle 下的扁平作品同样识别（dirName 保留三段式名称）', () async {
+    final flatDir =
+        Directory(p.join(dlRoot.path, '社团X', 'RJ222222 - CV_A - 标题2'))
+          ..createSync(recursive: true);
+    File(p.join(flatDir.path, 'e01.a.wav')).writeAsStringSync('a');
+
+    final container = ProviderContainer(overrides: [
+      downloadPathProvider.overrideWith((ref) => dlRoot.path),
+      navidromePathProvider.overrideWith((ref) => targetRoot.path),
+      worksIndexProvider.overrideWith((ref) => index),
+    ]);
+    addTearDown(container.dispose);
+
+    final items = await container.read(worksLibraryServiceProvider).listWorks();
+    expect(items, hasLength(1));
+    final item = items.single;
+    expect(item.sourceId, 'RJ222222');
+    expect(item.sourceDir, flatDir.path);
+    expect(item.dlPath, p.join(dlRoot.path, '社团X'));
+    expect(item.dirName, 'RJ222222 - CV_A - 标题2');
+    expect(item.title, '标题2');
+    expect(item.cvNames, 'CV_A');
+    expect(item.trackCount, 1);
   });
 }

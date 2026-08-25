@@ -51,12 +51,19 @@ void main() {
   });
 
   test('放宽：带 CV/标题后缀的 RJ 目录也被识别', () async {
-    // NAS/手工整理的目录名可能是 "RJ111111 - CV - 标题" 等
+    // NAS/手工整理的目录名可能是 "RJ111111 - CV - 标题" 等，
+    // 扁平目录识别为 sourceDirOverride（dirName = 完整目录名）
     touch('RJ111111 - CV - 标题/a.wav');
     touch('RJ222222 精选/b.wav');
     final found = await scanDownloadRoot(dlRoot: root.path);
     expect(found.map((e) => e.sourceId).toSet(), {'RJ111111', 'RJ222222'});
-    expect(found.firstWhere((e) => e.sourceId == 'RJ111111').dirName, '');
+    final wrapped = found.firstWhere((e) => e.sourceId == 'RJ111111');
+    expect(wrapped.dirName, 'RJ111111 - CV - 标题');
+    expect(
+      wrapped.sourceDirOverride,
+      p.join(root.path, 'RJ111111 - CV - 标题'),
+    );
+    expect(wrapped.sourceDir, p.join(root.path, 'RJ111111 - CV - 标题'));
   });
 
   test('排除 excludeRoot（整理目标目录不被当作源）', () async {
@@ -108,6 +115,70 @@ void main() {
     expect(found.first.sourceId, 'RJ987654');
     expect(found.first.dirName, 'RJ987654 - CV - 标题');
     expect(found.first.dlPath, p.join(root.path, '表现2'));
+  });
+
+  test('根目录下扁平作品目录（RJ号 - CV - 标题/）设置 sourceDirOverride', () async {
+    touch('RJ111111 - CV1 - 标题/a.wav');
+    final found = await scanDownloadRoot(dlRoot: root.path);
+    expect(found.length, 1);
+    final w = found.first;
+    expect(w.sourceId, 'RJ111111');
+    expect(w.dirName, 'RJ111111 - CV1 - 标题');
+    expect(w.dlPath, root.path);
+    // override 指向真实作品目录，sourceDir 不再多拼一层 RJ 目录
+    expect(w.sourceDirOverride, p.join(root.path, 'RJ111111 - CV1 - 标题'));
+    expect(w.sourceDir, p.join(root.path, 'RJ111111 - CV1 - 标题'));
+  });
+
+  test('circle 下扁平作品目录同样设置 override（dlPath = circle 目录）', () async {
+    touch('circle/RJ222222 - CV2 - 标题/b.wav');
+    final w = (await scanDownloadRoot(dlRoot: root.path)).single;
+    expect(w.dirName, 'RJ222222 - CV2 - 标题');
+    expect(w.dlPath, p.join(root.path, 'circle'));
+    expect(
+      w.sourceDirOverride,
+      p.join(root.path, 'circle', 'RJ222222 - CV2 - 标题'),
+    );
+    expect(w.sourceDir, p.join(root.path, 'circle', 'RJ222222 - CV2 - 标题'));
+  });
+
+  test('标准目录（CV-标题/RJ123456/）不设置 override', () async {
+    touch('cv-标题/RJ123456/x.wav');
+    final w = (await scanDownloadRoot(dlRoot: root.path)).single;
+    expect(w.sourceDirOverride, '');
+    expect(w.dlPath, root.path);
+    expect(w.dirName, 'cv-标题');
+    expect(w.sourceDir, p.join(root.path, 'cv-标题', 'RJ123456'));
+    // 平铺 RJ 目录同样不设置 override
+    touch('RJ123457/y.wav');
+    final flat = (await scanDownloadRoot(dlRoot: root.path))
+        .firstWhere((e) => e.sourceId == 'RJ123457');
+    expect(flat.sourceDirOverride, '');
+    expect(flat.sourceDir, p.join(root.path, 'RJ123457'));
+  });
+
+  test('嵌套结构（扁平包装目录 + 内层 RJ）仍选内层，不设置 override', () async {
+    touch('RJ333333 - CV - 标题/RJ333333/a.wav');
+    final w = (await scanDownloadRoot(dlRoot: root.path)).single;
+    expect(w.sourceDirOverride, '');
+    expect(w.dirName, 'RJ333333 - CV - 标题');
+    expect(w.dlPath, root.path);
+    expect(
+      w.sourceDir,
+      p.join(root.path, 'RJ333333 - CV - 标题', 'RJ333333'),
+    );
+  });
+
+  test('扁平目录平铺 + 深层副本互不包含：仍取最浅（override 胜出）', () async {
+    touch('RJ444444 - CV - 标题/a.wav');
+    touch('deep/N5/RJ444444 - CV - 标题/RJ444444/b.wav');
+    final found = await scanDownloadRoot(dlRoot: root.path);
+    expect(found.length, 1);
+    expect(
+      found.first.sourceDirOverride,
+      p.join(root.path, 'RJ444444 - CV - 标题'),
+    );
+    expect(found.first.sourceDir, p.join(root.path, 'RJ444444 - CV - 标题'));
   });
 
   test('纯数字目录（如年份）不误识别', () async {

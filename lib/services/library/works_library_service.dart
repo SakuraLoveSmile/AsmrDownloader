@@ -31,6 +31,9 @@ class WorksListItem {
   /// 作品下载目录绝对路径
   final String sourceDir;
 
+  /// 显式作品目录路径（扁平外部导入目录），空串 = 按标准结构重建。
+  final String sourceDirOverride;
+
   /// 最近整理时间（null = 未整理）
   final String? organizedAt;
 
@@ -51,6 +54,7 @@ class WorksListItem {
     required this.dirName,
     required this.dlPath,
     required this.sourceDir,
+    required this.sourceDirOverride,
     required this.organizedAt,
     required this.trackCount,
     required this.missingSubtitleCount,
@@ -164,6 +168,7 @@ class WorksLibraryService {
       dirName: src.dirName,
       dlPath: src.dlPath,
       sourceDir: sourceDir,
+      sourceDirOverride: src.sourceDirOverride,
       // 仅把当前文件系统仍然完整的历史整理记录暴露给列表状态。
       organizedAt: organized ? src.organizedAt : null,
       // 用异步扫描版本：列表构建在 UI isolate 上，同步遍历大量目录会卡顿

@@ -1,6 +1,8 @@
 import 'dart:io';
 
+import 'package:asmr_downloader/services/library/library_database.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -132,5 +134,90 @@ void main() {
   test('文件损坏时容错为空表', () async {
     File(index.filePath).writeAsStringSync('not json');
     expect(await index.list(), isEmpty);
+  });
+
+  test('sourceDirOverride：JSON 往返与 sourceDir 两分支', () {
+    final flat = WorkEntry(
+      sourceId: 'RJ00001',
+      dlPath: p.join(testBase.path, 'dl'),
+      dirName: 'RJ00001 - CV - 标题',
+      title: '',
+      cvNames: '',
+      sourceDirOverride: p.join(testBase.path, 'dl', 'RJ00001 - CV - 标题'),
+    );
+
+    // JSON 往返保留 override
+    final restored = WorkEntry.fromJson(flat.toJson());
+    expect(restored.sourceDirOverride,
+        p.join(testBase.path, 'dl', 'RJ00001 - CV - 标题'));
+
+    // override 分支：sourceDir 直接指向显式目录，不拼接 {dlPath}/{dirName}/{sourceId}
+    expect(
+        restored.sourceDir, p.join(testBase.path, 'dl', 'RJ00001 - CV - 标题'));
+
+    // 旧数据没有该字段 → 空串 → 标准结构重建
+    final legacyJson = flat.toJson()..remove('sourceDirOverride');
+    final legacy = WorkEntry.fromJson(legacyJson);
+    expect(legacy.sourceDirOverride, '');
+    expect(
+      legacy.sourceDir,
+      p.join(testBase.path, 'dl', 'RJ00001 - CV - 标题', 'RJ00001'),
+    );
+
+    // copyWith 保留 override
+    final copied = flat.copyWith(organizedAt: '2026-08-13T00:00:00.000');
+    expect(copied.sourceDirOverride,
+        p.join(testBase.path, 'dl', 'RJ00001 - CV - 标题'));
+  });
+
+  test('schema v2 → v3 迁移：自动补充 sourceDirOverride 列，旧数据按空串读写', () async {
+    final dbFile = File(p.join(testBase.path, 'v2.db'));
+
+    // 以 v3 建表并写入旧数据（不含 override）
+    final v3db = LibraryDatabase.fromPath(dbFile.path);
+    await v3db.into(v3db.libraryWorks).insert(LibraryWorksCompanion.insert(
+          sourceId: 'RJ00001',
+          dlPath: Value(p.join(testBase.path, 'dl')),
+          dirName: Value('社团-标题RJ00001'),
+          title: Value('旧标题'),
+          cvNames: Value('CV1'),
+        ));
+    await v3db.close();
+
+    // 降级为 v2：删除新列并回退 user_version（模拟旧版本创建的数据库）。
+    // 当前 user_version 仍为 3，重开不会触发迁移，可安全执行降级语句。
+    final raw = LibraryDatabase.fromPath(dbFile.path);
+    await raw.customStatement(
+        'ALTER TABLE library_works DROP COLUMN source_dir_override');
+    await raw.customStatement('PRAGMA user_version = 2');
+    await raw.close();
+
+    // v2 数据打开：迁移补列，旧数据 override 为空串、sourceDir 按标准结构重建
+    final migratedDb = LibraryDatabase.fromPath(dbFile.path);
+    addTearDown(migratedDb.close);
+    final migratedIndex = WorksIndex(
+      filePath: p.join(testBase.path, 'migrated.json'),
+      database: migratedDb,
+    );
+    final legacy = await migratedIndex.get('RJ00001');
+    expect(legacy, isNotNull);
+    expect(legacy!.sourceDirOverride, '');
+    expect(
+      legacy.sourceDir,
+      p.join(testBase.path, 'dl', '社团-标题RJ00001', 'RJ00001'),
+    );
+
+    // 迁移后写入 override 可读回（null ↔ '' 转换）
+    await migratedIndex.upsert(legacy.copyWith(
+        sourceDirOverride: p.join(testBase.path, 'flat', 'RJ00001 - CV - 标题')));
+    final updated = await migratedIndex.get('RJ00001');
+    expect(updated!.sourceDirOverride,
+        p.join(testBase.path, 'flat', 'RJ00001 - CV - 标题'));
+    expect(
+        updated.sourceDir, p.join(testBase.path, 'flat', 'RJ00001 - CV - 标题'));
+
+    // 空串写回 → 存 null → 读回仍为空串
+    await migratedIndex.upsert(entry('RJ00001'));
+    expect((await migratedIndex.get('RJ00001'))!.sourceDirOverride, '');
   });
 }

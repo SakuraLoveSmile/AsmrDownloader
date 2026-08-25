@@ -46,6 +46,13 @@ class WorkEntry {
   /// 非 null 时整理以本条目（手动）值为准，不被在线 workInfo 覆盖。
   final DateTime? manuallyEditedAt;
 
+  /// 显式作品目录路径（如扁平外部导入目录 "RJ号 - CV - 标题"），空串表示
+  /// 目录可按现有规则由 [dlPath]/[dirName]/[sourceId] 重建。
+  ///
+  /// 仅用于无法通过标准结构表达的目录：非空时 [sourceDir] 直接返回该值，
+  /// 不再拼接三层路径。
+  final String sourceDirOverride;
+
   const WorkEntry({
     required this.sourceId,
     required this.dlPath,
@@ -58,10 +65,14 @@ class WorkEntry {
     this.coverUrl = '',
     this.organizedAt,
     this.manuallyEditedAt,
+    this.sourceDirOverride = '',
   });
 
-  /// 下载目录：{dlPath}/{dirName}/{sourceId}
-  String get sourceDir => p.join(dlPath, dirName, sourceId);
+  /// 下载目录：{dlPath}/{dirName}/{sourceId}；
+  /// 设置了 [sourceDirOverride] 时直接使用该显式路径。
+  String get sourceDir => sourceDirOverride.isNotEmpty
+      ? sourceDirOverride
+      : p.join(dlPath, dirName, sourceId);
 
   WorkEntry copyWith({
     String? dlPath,
@@ -69,6 +80,7 @@ class WorkEntry {
     String? organizedAt,
     bool clearOrganizedAt = false,
     DateTime? manuallyEditedAt,
+    String? sourceDirOverride,
   }) {
     return WorkEntry(
       sourceId: sourceId,
@@ -82,6 +94,7 @@ class WorkEntry {
       coverUrl: coverUrl,
       organizedAt: clearOrganizedAt ? null : (organizedAt ?? this.organizedAt),
       manuallyEditedAt: manuallyEditedAt ?? this.manuallyEditedAt,
+      sourceDirOverride: sourceDirOverride ?? this.sourceDirOverride,
     );
   }
 
@@ -97,6 +110,7 @@ class WorkEntry {
         'coverUrl': coverUrl,
         'organizedAt': organizedAt,
         'manuallyEditedAt': manuallyEditedAt?.toIso8601String(),
+        'sourceDirOverride': sourceDirOverride,
       };
 
   factory WorkEntry.fromJson(Map<String, dynamic> json) => WorkEntry(
@@ -114,6 +128,7 @@ class WorkEntry {
         manuallyEditedAt: json['manuallyEditedAt'] == null
             ? null
             : DateTime.tryParse(json['manuallyEditedAt'].toString()),
+        sourceDirOverride: json['sourceDirOverride']?.toString() ?? '',
       );
 }
 
@@ -203,6 +218,9 @@ class WorksIndex {
       coverUrl: Value(entry.coverUrl),
       organizedAt: Value(entry.organizedAt),
       manuallyEditedAt: Value(entry.manuallyEditedAt),
+      sourceDirOverride: Value(
+        entry.sourceDirOverride.isEmpty ? null : entry.sourceDirOverride,
+      ),
       updatedAt: Value(DateTime.now()),
     );
   }
@@ -229,6 +247,7 @@ class WorksIndex {
       coverUrl: row.coverUrl,
       organizedAt: row.organizedAt,
       manuallyEditedAt: row.manuallyEditedAt,
+      sourceDirOverride: row.sourceDirOverride ?? '',
     );
   }
 
@@ -274,6 +293,7 @@ class WorksIndex {
       coverUrl: entry.coverUrl,
       organizedAt: entry.organizedAt,
       manuallyEditedAt: DateTime.now(),
+      sourceDirOverride: entry.sourceDirOverride,
     ));
   }
 
