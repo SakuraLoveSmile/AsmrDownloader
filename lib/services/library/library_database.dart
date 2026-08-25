@@ -22,6 +22,11 @@ class LibraryWorks extends Table {
   TextColumn get tagsJson => text().withDefault(const Constant('[]'))();
   TextColumn get coverUrl => text().withDefault(const Constant(''))();
   TextColumn get organizedAt => text().nullable()();
+  /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
+  ///
+  /// 非 null 时整理以注册表手动值为准（标题/CV/社团/发行日期/标签），
+  /// 不再被在线 workInfo 覆盖。
+  DateTimeColumn get manuallyEditedAt => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -85,11 +90,16 @@ class LibraryDatabase extends _$LibraryDatabase {
       p.join(getAppDataDir(), 'library', 'asmr_library.db');
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) => m.createAll(),
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(libraryWorks, libraryWorks.manuallyEditedAt);
+          }
+        },
       );
 
   static QueryExecutor _openConnection(String dbPath) {

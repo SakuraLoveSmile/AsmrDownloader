@@ -69,6 +69,41 @@ void main() {
     expect((await index.list()).length, 1);
   });
 
+  test('manuallyEditedAt 迁移后默认 null，updateMetadata 写入并保留往返', () async {
+    await index.upsert(entry('RJ00001'));
+    final before = await index.get('RJ00001');
+    expect(before!.manuallyEditedAt, isNull);
+    // 普通 upsert 不产生手动标记（与 updateMetadata 区分）
+    expect(before.toJson()['manuallyEditedAt'], isNull);
+
+    // 手动编辑：更新元数据并显式标记
+    await index.updateMetadata(WorkEntry(
+      sourceId: before.sourceId,
+      dlPath: before.dlPath,
+      dirName: before.dirName,
+      title: '手动标题',
+      cvNames: '手动CV1&手动CV2',
+      circleName: '手动社团',
+      releaseDate: '2026-01-01',
+      tags: ['手动标签'],
+      coverUrl: before.coverUrl,
+      organizedAt: before.organizedAt,
+    ));
+
+    final edited = await index.get('RJ00001');
+    expect(edited!.manuallyEditedAt, isNotNull);
+    expect(edited.title, '手动标题');
+    expect(edited.cvNames, '手动CV1&手动CV2');
+    expect(edited.circleName, '手动社团');
+    expect(edited.releaseDate, '2026-01-01');
+    expect(edited.tags, ['手动标签']);
+
+    // JSON 往返保留手动标记
+    final restored = WorkEntry.fromJson(edited.toJson());
+    expect(restored.manuallyEditedAt, isNotNull);
+    expect(restored.title, '手动标题');
+  });
+
   test('markOrganized 记录整理时间', () async {
     await index.upsert(entry('RJ00001'));
     await index.markOrganized('RJ00001',

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:asmr_downloader/pages/library/tools/work_edit_dialog.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
@@ -174,10 +175,26 @@ class _WorksIndexDialogState extends ConsumerState<WorksIndexDialog> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            trailing: IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              onPressed: () => _remove(entry),
-              tooltip: '删除条目',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  onPressed: () async {
+                    await showDialog<void>(
+                      context: context,
+                      builder: (_) => WorkEditDialog(sourceId: entry.sourceId),
+                    );
+                    await _reload();
+                  },
+                  tooltip: '编辑元数据',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  onPressed: () => _remove(entry),
+                  tooltip: '删除条目',
+                ),
+              ],
             ),
           );
         },
