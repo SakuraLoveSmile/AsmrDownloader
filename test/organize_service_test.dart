@@ -1536,4 +1536,72 @@ void main() {
       );
     });
   });
+
+  group('sourceDirOverride 扁平目录', () {
+    test('扁平目录整理：sourceDirOverride 保留且按真实目录整理', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      // 扁平结构：<dlPath>/RJ100001 - CV1 - 标题/e01_舔耳.wav（无内层 RJ 目录）
+      final flatDir = Directory(p.join(dlPath.path, 'RJ100001 - CV1 - 标题'))
+        ..createSync(recursive: true);
+      File(p.join(flatDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+
+      final flat = WorkEntry(
+        sourceId: 'RJ100001',
+        dlPath: dlPath.path,
+        dirName: 'RJ100001 - CV1 - 标题',
+        title: '',
+        cvNames: '',
+        sourceDirOverride: flatDir.path,
+      );
+
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                flat,
+                targetRoot: targetRoot.path,
+              );
+
+      expect(outcome.result, isNotNull);
+      // 回写条目保留 override；sourceDir 仍指向扁平目录
+      final resolved = outcome.resolvedEntry;
+      expect(resolved.sourceDirOverride, flatDir.path);
+      expect(resolved.sourceDir, flatDir.path);
+      // 元数据从三段式目录名降级解析
+      expect(resolved.title, '标题');
+      expect(resolved.cvNames, 'CV1');
+      // 整理产物按 circle/RJ - CV - 标题/RJ 结构落盘（circle 兜底 CV）
+      final workDir = p.join(
+        targetRoot.path,
+        'CV1',
+        'RJ100001 - CV1 - 标题',
+        'RJ100001',
+      );
+      expect(File(p.join(workDir, 'e01_舔耳.wav')).existsSync(), true);
+    });
+
+    test('批量整理：扁平目录入库后 override 不丢失', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final flatDir = Directory(p.join(dlPath.path, 'RJ100002 - CV2 - 标题2'))
+        ..createSync(recursive: true);
+      File(p.join(flatDir.path, 'e01_舔耳.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+
+      final result = await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: true,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+
+      expect(result.success, 1);
+      final entry = await index.get('RJ100002');
+      expect(entry, isNotNull);
+      expect(entry!.sourceDirOverride, flatDir.path);
+      expect(entry.sourceDir, flatDir.path);
+      expect(entry.dirName, 'RJ100002 - CV2 - 标题2');
+      expect(entry.organizedAt, isNotNull);
+    });
+  });
 }

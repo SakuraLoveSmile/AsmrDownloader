@@ -806,6 +806,7 @@ class UIService {
       title: item.title,
       cvNames: item.cvNames,
       circleName: item.circleName,
+      sourceDirOverride: item.sourceDirOverride,
     );
     final organizer = ref.read(organizeServiceProvider);
     if (await organizer.needsWorkInfoNetwork(entry, fetchWorkInfo: true)) {

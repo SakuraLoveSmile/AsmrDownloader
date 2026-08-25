@@ -25,6 +25,11 @@ typedef _ScanHit = ({
 /// - 父子目录同时命中（外层为 "RJ号 - CV - 标题" 包装目录、内层才是真正的
 ///   RJ 作品目录）时优先保留更深的内层目录；
 /// - 两个目录互不包含时保留最浅路径。
+///
+/// 生成的 WorkEntry 针对扁平作品目录（"RJ号 - CV - 标题/" 直接存放音频）
+/// 设置 [WorkEntry.sourceDirOverride] 指向真实目录；标准结构
+/// （"CV-标题/RJ123456/" 或内层 RJ 目录）按 {dlPath}/{dirName}/{sourceId}
+/// 重建，不设置 override。
 /// 跳过隐藏目录。
 Future<List<WorkEntry>> scanDownloadRoot({
   required String dlRoot,
@@ -70,15 +75,21 @@ Future<List<WorkEntry>> scanDownloadRoot({
   }
 
   await walk(Directory(dlRoot), 1);
-  return found.values
-      .map((f) => WorkEntry(
-            sourceId: f.sourceId,
-            dlPath: f.dlPath,
-            dirName: f.dirName,
-            title: '',
-            cvNames: '',
-          ))
-      .toList();
+  return found.values.map((f) {
+    // 命中目录名与 sourceId 完全一致（如 "CV-标题/RJ123456/"）：
+    // 继续用 {dlPath}/{dirName}/{sourceId} 重建作品目录，不设置 override。
+    // 扁平后缀目录（如 "RJ123456 - CV - 标题/"）无法按标准结构重建：
+    // 直接指向命中目录本身，dirName 保留完整三段式名称供 parseDirName 解析。
+    final isStandard = p.basename(f.entryPath).toUpperCase() == f.sourceId;
+    return WorkEntry(
+      sourceId: f.sourceId,
+      dlPath: isStandard ? f.dlPath : p.dirname(f.entryPath),
+      dirName: isStandard ? f.dirName : p.basename(f.entryPath),
+      title: '',
+      cvNames: '',
+      sourceDirOverride: isStandard ? '' : f.entryPath,
+    );
+  }).toList();
 }
 
 /// 同一 sourceId 两次命中时，新命中是否取代旧命中：

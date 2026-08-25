@@ -191,7 +191,7 @@ class OrganizeService {
   /// circleName 取 [resolvedCircleName]（汉化跟踪后的原版社团名或在线社团名），
   /// 缺省时保留注册表原值；手动编辑过的条目（[entry.manuallyEditedAt] 非 null）
   /// 保留手动字段，不被在线值覆盖。
-  /// [dlPath]/[dirName]/[organizedAt] 始终原样保留。
+  /// [dlPath]/[dirName]/[organizedAt]/[sourceDirOverride] 始终原样保留。
   static WorkEntry resolveResolvedEntry({
     required WorkEntry entry,
     required Map<String, dynamic>? workInfo,
@@ -227,6 +227,7 @@ class OrganizeService {
           : entry.coverUrl,
       organizedAt: entry.organizedAt,
       manuallyEditedAt: entry.manuallyEditedAt,
+      sourceDirOverride: entry.sourceDirOverride,
     );
   }
 
@@ -609,8 +610,13 @@ class OrganizeService {
           entries.add(d);
         } else if (!Directory(existing.sourceDir).existsSync() &&
             Directory(d.sourceDir).existsSync()) {
-          // 目录被移动：修正注册表路径，本次按新路径整理
-          final fixed = existing.copyWith(dlPath: d.dlPath, dirName: d.dirName);
+          // 目录被移动：修正注册表路径（含扁平目录的 sourceDirOverride），
+          // 本次按新路径整理
+          final fixed = existing.copyWith(
+            dlPath: d.dlPath,
+            dirName: d.dirName,
+            sourceDirOverride: d.sourceDirOverride,
+          );
           await index.upsert(fixed);
           final idx = entries.indexWhere((e) => e.sourceId == d.sourceId);
           if (idx >= 0) entries[idx] = fixed;
