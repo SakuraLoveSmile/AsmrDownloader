@@ -76,6 +76,40 @@ void main() {
     expect(found.first.dirName, '');
   });
 
+  test('外部三层目录：父子命中时优先内层 RJ 目录', () async {
+    // <dlRoot>/<circle>/RJ号 - CV - 标题/RJ号/音轨
+    touch('社团A/RJ123456 - CV1 - 标题/RJ123456/a.wav');
+    final found = await scanDownloadRoot(dlRoot: root.path);
+    expect(found.length, 1);
+    expect(found.first.sourceId, 'RJ123456');
+    expect(found.first.dirName, 'RJ123456 - CV1 - 标题');
+    expect(found.first.dlPath, p.join(root.path, '社团A'));
+    expect(
+      found.first.sourceDir,
+      p.join(root.path, '社团A', 'RJ123456 - CV1 - 标题', 'RJ123456'),
+    );
+  });
+
+  test('多层包装目录仍优先取最深命中（包装目录名也带 RJ 前缀）', () async {
+    touch('dict1/RJ654321 - CV - 标题/RJ654321/b.wav');
+    final found = await scanDownloadRoot(dlRoot: root.path);
+    expect(found.length, 1);
+    expect(found.first.dirName, 'RJ654321 - CV - 标题');
+    expect(found.first.dlPath, p.join(root.path, 'dict1'));
+  });
+
+  test('互不包含的重复作品仍保持最浅路径规则（不因嵌套规则回归）', () async {
+    // 同一作品两份独立副本（两层互不包含）：仍按最浅路径取舍，
+    // 浅层的完整内层目录（dirName = 包装目录名）胜出
+    touch('表现2/RJ987654 - CV - 标题/RJ987654/x.wav');
+    touch('copy/archive/RJ987654 - CV - 标题/RJ987654/y.wav');
+    final found = await scanDownloadRoot(dlRoot: root.path);
+    expect(found.length, 1);
+    expect(found.first.sourceId, 'RJ987654');
+    expect(found.first.dirName, 'RJ987654 - CV - 标题');
+    expect(found.first.dlPath, p.join(root.path, '表现2'));
+  });
+
   test('纯数字目录（如年份）不误识别', () async {
     touch('2024/a.wav');
     touch('12345/b.wav');

@@ -1,4 +1,5 @@
 import 'package:asmr_downloader/pages/library/tools/batch_verify_dialog.dart';
+import 'package:asmr_downloader/pages/library/tools/complete_works_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/library_config_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
 import 'package:asmr_downloader/pages/library/tools/transcribe_status_indicator.dart';
@@ -41,6 +42,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             const OrganizeAllButton(),
             const WorksIndexButton(),
             const VerifyButton(),
+            const CompleteWorksButton(),
             TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
             IconButton(
               key: const ValueKey('onboarding-library-config'),
@@ -89,6 +91,23 @@ class VerifyButton extends ConsumerWidget {
         builder: (_) => const BatchVerifyDialog(),
       ),
       child: const Text('校验'),
+    );
+  }
+}
+
+/// 作品库「补全数据」按钮：打开补全对话框（补全下载作品的元数据、
+/// tracks/封面缓存并回写注册表，加入后台任务队列执行）。
+class CompleteWorksButton extends ConsumerWidget {
+  const CompleteWorksButton({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return OutlinedButton(
+      onPressed: () => showDialog(
+        context: context,
+        builder: (_) => const CompleteWorksDialog(),
+      ),
+      child: const Text('补全数据'),
     );
   }
 }
