@@ -13,14 +13,26 @@ void main() {
       expect(matchSourceIdFromDirName(' RJ12345678 '), 'RJ12345678');
     });
 
+    test('放宽：识别带标题后缀/包裹符的作品目录名', () {
+      expect(matchSourceIdFromDirName('RJ12345678 标题'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('RJ12345678_cover'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('RJ12345678-标题'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('[RJ12345678]'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('[RJ12345678] 标题'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('作品RJ12345678'), 'RJ12345678');
+      expect(matchSourceIdFromDirName('社团-标题 RJ87654321 全年龄'),
+          'RJ87654321');
+    });
+
     test('非作品目录不识别（避免误判）', () {
       expect(matchSourceIdFromDirName('2024'), isNull); // 纯数字（年份）
       expect(matchSourceIdFromDirName('12345678'), isNull); // 纯数字
       expect(matchSourceIdFromDirName('音声资料'), isNull);
       expect(matchSourceIdFromDirName('RJ12345'), isNull); // 位数不足
       expect(matchSourceIdFromDirName('RJ12345678901'), isNull); // 超过 10 位
-      expect(matchSourceIdFromDirName('RJ12345678_cover'), isNull); // 带后缀
-      expect(matchSourceIdFromDirName('abcRJ12345678'), isNull); // 带前缀
+      expect(matchSourceIdFromDirName('12RJ12345678'), isNull); // 前缀紧贴数字
+      expect(matchSourceIdFromDirName('abcRJ12345678'), isNull); // 前缀紧贴字母
+      expect(matchSourceIdFromDirName('ORJ1234567'), isNull); // 字母误拼
       expect(matchSourceIdFromDirName(''), isNull);
     });
   });

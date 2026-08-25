@@ -50,6 +50,15 @@ void main() {
     expect(found.map((e) => e.sourceId).toSet(), {'VJ123456', 'BJ234567'});
   });
 
+  test('放宽：带标题后缀的 RJ 目录也被识别', () async {
+    // NAS/手工整理的目录名可能是 "RJ111111 标题"、"RJ111111-标题" 等
+    touch('RJ111111 标题/a.wav');
+    touch('[RJ222222] 精选/b.wav');
+    final found = await scanDownloadRoot(dlRoot: root.path);
+    expect(found.map((e) => e.sourceId).toSet(), {'RJ111111', 'RJ222222'});
+    expect(found.firstWhere((e) => e.sourceId == 'RJ111111').dirName, '');
+  });
+
   test('排除 excludeRoot（整理目标目录不被当作源）', () async {
     touch('RJ111111/a.wav');
     // 整理目标目录（可能是下载目录的子目录）里的 RJ 目录不算源
