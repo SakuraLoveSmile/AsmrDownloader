@@ -7,6 +7,7 @@ import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/organize/works_scanner.dart';
 import 'package:asmr_downloader/services/transcribe/subtitle_gap_detector.dart';
 import 'package:asmr_downloader/services/transcribe/vtt_converter.dart';
+import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -117,11 +118,20 @@ class WorksLibraryService {
   ///
   /// 数据源：扫描下载根目录识别的 RJ/VJ/BJ 目录 + 注册表条目
   /// （注册表中目录仍存在但扫描遗漏的也补入），按 sourceId 倒序。
+  ///
+  /// 合并时注册表路径优先；仅当注册表路径已失效而扫描器发现同一
+  /// sourceId 的真实目录时，用扫描到的目录字段接管并自动修复注册表，
+  /// 其余元数据（标题/CV/社团/手动编辑标记等）保留注册表值。
   Future<List<WorksListItem>> listWorks() async {
     final dlRoot = ref.read(downloadPathProvider);
     final navRoot = ref.read(navidromePathProvider);
     final discovered =
         await scanDownloadRoot(dlRoot: dlRoot, excludeRoot: navRoot);
+
+    // 下载根目录不可访问（NAS 未挂载/网络盘断开/外部磁盘未连接）时，
+    // 本次扫描结果不可信：不执行任何注册表路径写回，避免临时环境问题
+    // 导致错误自愈。
+    final downloadRootAvailable = await Directory(dlRoot).exists();
 
     final registry = await ref.read(worksIndexProvider).list();
     final byId = {for (final e in registry) e.sourceId: e};
@@ -129,25 +139,65 @@ class WorksLibraryService {
     final items = <WorksListItem>[];
     final seen = <String>{};
     for (final d in discovered) {
-      items.add(await _build(d, byId[d.sourceId], targetRoot: navRoot));
+      final src = await _resolveSource(
+        discovered: d,
+        registry: byId[d.sourceId],
+        downloadRootAvailable: downloadRootAvailable,
+      );
+      items.add(await _build(src, targetRoot: navRoot));
       seen.add(d.sourceId);
     }
     for (final r in registry) {
       if (seen.contains(r.sourceId)) continue;
       if (!Directory(r.sourceDir).existsSync()) continue;
-      items.add(await _build(r, r, targetRoot: navRoot));
+      items.add(await _build(r, targetRoot: navRoot));
       seen.add(r.sourceId);
     }
     items.sort((a, b) => b.sourceId.compareTo(a.sourceId));
     return items;
   }
 
+  /// 合并扫描结果与注册表条目为最终用于展示的条目。
+  ///
+  /// - 无注册表条目 → 直接用扫描结果；
+  /// - 注册表路径仍然存在 → 保持注册表优先（即使扫描器发现另一同
+  ///   sourceId 路径也不替换）；
+  /// - 注册表路径已失效且扫描到的目录真实存在 → 仅用扫描结果的目录字段
+  ///   （[WorkEntry.dlPath]/[WorkEntry.dirName]/[WorkEntry.sourceDirOverride]）
+  ///   接管，其余元数据保留注册表值，并写回修复注册表；
+  /// - 两条路径都失效 → 保持注册表原值，不做任何写入。
+  Future<WorkEntry> _resolveSource({
+    required WorkEntry discovered,
+    required WorkEntry? registry,
+    required bool downloadRootAvailable,
+  }) async {
+    if (registry == null || !downloadRootAvailable) {
+      return registry ?? discovered;
+    }
+    if (await Directory(registry.sourceDir).exists()) return registry;
+
+    // 注册表路径已失效；不能只因为存在扫描结果就修改注册表，
+    // 必须确认扫描到的目录真实存在。
+    if (!await Directory(discovered.sourceDir).exists()) return registry;
+
+    final repaired = registry.copyWith(
+      dlPath: discovered.dlPath,
+      dirName: discovered.dirName,
+      sourceDirOverride: discovered.sourceDirOverride,
+    );
+    Log.info(
+      'WorksLibraryService: repair stale path for ${registry.sourceId}\n'
+      'old: ${registry.sourceDir}\n'
+      'new: ${discovered.sourceDir}',
+    );
+    await ref.read(worksIndexProvider).upsert(repaired);
+    return repaired;
+  }
+
   Future<WorksListItem> _build(
-    WorkEntry discovered,
-    WorkEntry? registry, {
+    WorkEntry src, {
     required String targetRoot,
   }) async {
-    final src = registry ?? discovered;
     final parsed = OrganizeService.parseDirName(src.dirName);
     final title = src.title.isNotEmpty
         ? src.title
