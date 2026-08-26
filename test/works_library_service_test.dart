@@ -182,6 +182,8 @@ void main() {
           sourceDir: sourceDir,
           sourceDirOverride: '',
           organizedAt: null,
+          verifyNote: null,
+          verifyRepairable: false,
           trackCount: 0,
           missingSubtitleCount: 0,
           convertibleVttCount: 0,

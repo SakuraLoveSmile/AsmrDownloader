@@ -1604,4 +1604,105 @@ void main() {
       expect(entry.organizedAt, isNotNull);
     });
   });
+
+  group('校验状态持久化（organizeEntry 写回注册表）', () {
+    /// 用合法 wav 构造下载源（校验读取标签安全）
+    WorkEntry defectEntry(String sourceId) {
+      final dir = Directory(p.join(dlPath.path, '社团-标题$sourceId', sourceId))
+        ..createSync(recursive: true);
+      Directory(p.join(dir.path, '音声')).createSync();
+      File(p.join(dir.path, '音声', 'e01_舔耳.wav'))
+          .writeAsBytesSync(_buildMinimalWav());
+      return WorkEntry(
+        sourceId: sourceId,
+        dlPath: dlPath.path,
+        dirName: '社团-标题$sourceId',
+        title: '标题$sourceId',
+        cvNames: 'CV1&CV2',
+        circleName: '社团',
+        // 注册表记录在线封面 URL：fetchWorkInfo=false 不拉取，
+        // 整理不嵌入封面 → 校验检出缺封面（可修复缺陷）
+        coverUrl: 'https://example.com/cover.jpg',
+      );
+    }
+
+    WorkEntry cleanEntry(String sourceId) {
+      final dir = Directory(p.join(dlPath.path, '社团-标题$sourceId', sourceId))
+        ..createSync(recursive: true);
+      Directory(p.join(dir.path, '音声')).createSync();
+      File(p.join(dir.path, '音声', 'e01_舔耳.wav'))
+          .writeAsBytesSync(_buildMinimalWav());
+      return WorkEntry(
+        sourceId: sourceId,
+        dlPath: dlPath.path,
+        dirName: '社团-标题$sourceId',
+        title: '标题$sourceId',
+        cvNames: 'CV1&CV2',
+        circleName: '社团',
+      );
+    }
+
+    test('有缺陷时写入 verifyNote/verifyRepairable/verifiedAt', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final e = defectEntry('RJ00001');
+      await index.upsert(e);
+
+      final outcome = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e, targetRoot: targetRoot.path, fetchWorkInfo: false);
+
+      expect(outcome.result, isNotNull);
+      expect(outcome.resolvedEntry.verifyNote, isNotNull);
+      expect(outcome.resolvedEntry.verifyRepairable, isTrue);
+      expect(outcome.resolvedEntry.verifiedAt, isNotNull);
+
+      final stored = await index.get('RJ00001');
+      expect(stored!.verifyNote, isNotNull);
+      expect(stored.verifyRepairable, isTrue);
+      expect(stored.verifiedAt, isNotNull);
+    });
+
+    test('校验通过：verifyNote == null、verifyRepairable == false、verifiedAt 写入',
+        () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final e = cleanEntry('RJ00002');
+      await index.upsert(e);
+
+      final outcome = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e, targetRoot: targetRoot.path, fetchWorkInfo: false);
+
+      expect(outcome.result, isNotNull);
+      expect(outcome.resolvedEntry.verifyNote, isNull);
+      expect(outcome.resolvedEntry.verifyRepairable, isFalse);
+      expect(outcome.resolvedEntry.verifiedAt, isNotNull);
+
+      final stored = await index.get('RJ00002');
+      expect(stored!.verifyNote, isNull);
+      expect(stored.verifyRepairable, isFalse);
+      expect(stored.verifiedAt, isNotNull);
+    });
+
+    test('后续更新 organizedAt 不丢 verify 状态', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      final e = defectEntry('RJ00003');
+      await index.upsert(e);
+
+      final outcome = await container
+          .read(organizeServiceProvider)
+          .organizeEntry(e, targetRoot: targetRoot.path, fetchWorkInfo: false);
+      expect(outcome.resolvedEntry.verifyNote, isNotNull);
+
+      // 模拟批量整理 upsert（补录 organizedAt）
+      await index.upsert(outcome.resolvedEntry
+          .copyWith(organizedAt: DateTime.now().toIso8601String()));
+      final stored = await index.get('RJ00003');
+      expect(stored!.verifyNote, isNotNull);
+      expect(stored.verifyRepairable, isTrue);
+      expect(stored.organizedAt, isNotNull);
+    });
+  });
 }
