@@ -228,6 +228,9 @@ class OrganizeService {
       organizedAt: entry.organizedAt,
       manuallyEditedAt: entry.manuallyEditedAt,
       sourceDirOverride: entry.sourceDirOverride,
+      verifyNote: entry.verifyNote,
+      verifyRepairable: entry.verifyRepairable,
+      verifiedAt: entry.verifiedAt,
     );
   }
 
@@ -459,7 +462,7 @@ class OrganizeService {
     // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段；
     // 手动编辑过的条目保留手动字段与手动标记，后续整理继续以手动值为准）。
     // 与作品库「补全数据」共用同一套组装规则（见 [resolveResolvedEntry]）。
-    final resolved = resolveResolvedEntry(
+    var resolved = resolveResolvedEntry(
       entry: entry,
       workInfo: workInfo,
       fallbackTitle: fallbackTitle,
@@ -478,6 +481,15 @@ class OrganizeService {
               keepDirStructure: keepDirStructure,
             );
         verifyNote = verify.ok ? '校验通过' : '校验：${verify.summary}';
+        // 校验成功后统一写回持久化状态（含 verifiedAt）；
+        // 通过时传 null 清除旧缺陷摘要。校验异常不修改持久化状态，
+        // 保留上一次有效校验结果。
+        final worksIndex = ref.read(worksIndexProvider);
+        resolved = await worksIndex.updateVerifyState(
+          resolved,
+          verifyNote: verify.ok ? null : verify.summary,
+          verifyRepairable: verify.repairable,
+        );
       } catch (e) {
         Log.warning('verify work failed: ${entry.sourceId}\n' 'error: $e');
       }

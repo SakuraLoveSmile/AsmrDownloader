@@ -1,8 +1,10 @@
+import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/pages/library/tools/work_edit_dialog.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
+import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/transcribe/transcribe_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/ui/app_theme.dart';
@@ -31,6 +33,78 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
 
   /// 批量生成字幕（外部工具栏可调用）
   Future<void> transcribeSelected() => _transcribeSelected();
+
+  /// 批量修复当前列表中可修复的缺陷作品（外部工具栏可调用）。
+  /// 串行执行、单条失败不中断后续；完成后刷新作品库。
+  Future<void> repairRepairable() async {
+    final works = ref.read(worksLibraryProvider).value ?? const [];
+    final defects =
+        works.where((w) => w.verifyNote != null && w.verifyRepairable).toList();
+    if (defects.isEmpty) return;
+
+    var repaired = 0;
+    var failed = 0;
+    for (final item in defects) {
+      final ok = await _repairWork(item);
+      if (ok) {
+        repaired++;
+      } else {
+        failed++;
+      }
+    }
+
+    if (!mounted) return;
+    if (failed == 0) {
+      ref.read(uiServiceProvider).showSnack('修复缺陷完成：成功 $repaired');
+    } else {
+      ref
+          .read(uiServiceProvider)
+          .showSnack('修复缺陷完成：成功 $repaired，失败 $failed');
+    }
+  }
+
+  /// 单行/批量共用的修复逻辑：对单个缺陷作品重新整理（wav 强制重写），
+  /// 完成后自动重新校验并刷新状态。返回是否成功执行整理。
+  Future<bool> _repairWork(WorksListItem item) async {
+    final ui = ref.read(uiServiceProvider);
+    var navidromePath = ref.read(navidromePathProvider);
+    if (navidromePath.isEmpty) {
+      await ui.pickNavidromePath();
+      navidromePath = ref.read(navidromePathProvider);
+      if (navidromePath.isEmpty) return false;
+    }
+
+    final entry = await ref.read(worksIndexProvider).get(item.sourceId);
+    if (entry == null) return false;
+
+    final organizer = ref.read(organizeServiceProvider);
+    try {
+      final outcome = await organizer.organizeEntry(
+        entry,
+        targetRoot: navidromePath,
+        fetchWorkInfo: true,
+        forceWavRewrite: true,
+        keepDirStructure: ref.read(keepOrganizeDirStructureProvider),
+      );
+      if (outcome.result == null) {
+        ui.showSnack('修复未执行（目录缺失）：${item.sourceId}');
+        return false;
+      }
+      // organizeEntry 已重新校验并写回校验状态；此处补录整理时间。
+      await ref.read(worksIndexProvider).upsert(
+            outcome.resolvedEntry
+                .copyWith(organizedAt: DateTime.now().toIso8601String()),
+          );
+    } catch (e) {
+      ui.showSnack('修复失败：${item.sourceId}：$e');
+      return false;
+    } finally {
+      ref
+        ..invalidate(worksLibraryProvider)
+        ..invalidate(unorganizedCountProvider);
+    }
+    return true;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +238,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       itemCount: works.length,
       separatorBuilder: (_, __) => const SizedBox(height: 6),
-      itemBuilder: (context, i) => _WorkRow(
+      itemBuilder: (context, i) => WorkRow(
         item: works[i],
         selected: _selected.contains(works[i].sourceId),
         transcribing: activeSourceId == works[i].sourceId,
@@ -172,6 +246,8 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
             downloadingSourceId != works[i].sourceId,
         onToggleSelect: () => _toggleSelect(works[i].sourceId),
         onDelete: () => _deleteWork(works[i]),
+        onRepair: () => _repairWork(works[i]),
+        key: ValueKey(works[i].sourceId),
       ),
     );
   }
@@ -336,14 +412,16 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
 }
 
 /// 单行作品。
-class _WorkRow extends ConsumerStatefulWidget {
-  const _WorkRow({
+class WorkRow extends ConsumerStatefulWidget {
+  const WorkRow({
+    super.key,
     required this.item,
     required this.selected,
     required this.transcribing,
     required this.deleteEnabled,
     required this.onToggleSelect,
     required this.onDelete,
+    required this.onRepair,
   });
 
   final WorksListItem item;
@@ -352,12 +430,13 @@ class _WorkRow extends ConsumerStatefulWidget {
   final bool deleteEnabled;
   final VoidCallback onToggleSelect;
   final VoidCallback onDelete;
+  final VoidCallback onRepair;
 
   @override
-  ConsumerState<_WorkRow> createState() => _WorkRowState();
+  ConsumerState<WorkRow> createState() => WorkRowState();
 }
 
-class _WorkRowState extends ConsumerState<_WorkRow> {
+class WorkRowState extends ConsumerState<WorkRow> {
   /// 鼠标悬停高亮
   bool _hovered = false;
 
@@ -369,6 +448,7 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
     final deleteEnabled = widget.deleteEnabled;
     final onDelete = widget.onDelete;
     final onToggleSelect = widget.onToggleSelect;
+    final onRepair = widget.onRepair;
     final scheme = Theme.of(context).colorScheme;
     final ui = ref.read(uiServiceProvider);
 
@@ -527,6 +607,28 @@ class _WorkRowState extends ConsumerState<_WorkRow> {
               ),
             ),
             const SizedBox(width: 8),
+            // 缺陷标记：警告图标（Tooltip 显示缺陷摘要），可修复时显示修复入口
+            if (item.verifyNote != null) ...[
+              Tooltip(
+                message: item.verifyNote!,
+                waitDuration: const Duration(milliseconds: 300),
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  size: 16,
+                  color: AppColors.warning,
+                ),
+              ),
+              if (item.verifyRepairable) ...[
+                const SizedBox(width: 4),
+                _RowIconBtn(
+                  icon: Icons.build_rounded,
+                  tooltip: '修复缺陷',
+                  color: scheme.primary,
+                  onTap: onRepair,
+                ),
+              ],
+              const SizedBox(width: 4),
+            ],
             Container(
               width: 1,
               height: 22,

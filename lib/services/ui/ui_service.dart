@@ -760,6 +760,8 @@ class UIService {
 
   /// 整理成功后校验产物（内嵌歌词/封面），返回「校验：缺陷摘要」；
   /// 校验通过或校验失败返回 null。
+  /// 校验成功后同步把状态持久化到注册表（[WorksIndex.updateVerifyState]），
+  /// 供作品库透传缺陷与修复入口使用。
   Future<String?> _verifyEntryNote(WorkEntry entry) async {
     final targetRoot = ref.read(navidromePathProvider);
     if (targetRoot.isEmpty) return null;
@@ -767,7 +769,13 @@ class UIService {
       final verify = await ref
           .read(verifyServiceProvider)
           .verifyWork(entry, targetRoot: targetRoot);
-      return verify.ok ? null : '校验：${verify.summary}';
+      final note = verify.ok ? null : '校验：${verify.summary}';
+      await ref.read(worksIndexProvider).updateVerifyState(
+            entry,
+            verifyNote: note,
+            verifyRepairable: verify.repairable,
+          );
+      return note;
     } catch (e) {
       Log.warning('verify work failed: ${entry.sourceId}\n' 'error: $e');
       return null;

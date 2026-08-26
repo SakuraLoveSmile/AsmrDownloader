@@ -98,6 +98,7 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
   Future<List<VerifyWorkResult>> _verifyAll(
       String targetRoot, List<WorkEntry> entries) async {
     final results = <VerifyWorkResult>[];
+    final index = ref.read(worksIndexProvider);
     for (var i = 0; i < entries.length; i++) {
       if (_cancelled) break;
       final entry = entries[i];
@@ -108,11 +109,19 @@ class _BatchVerifyDialogState extends ConsumerState<BatchVerifyDialog> {
         });
       }
       try {
-        results.add(await ref.read(verifyServiceProvider).verifyWork(
+        final verify = await ref.read(verifyServiceProvider).verifyWork(
               entry,
               targetRoot: targetRoot,
               keepDirStructure: ref.read(keepOrganizeDirStructureProvider),
-            ));
+            );
+        results.add(verify);
+        // 校验成功（含通过与有缺陷）同步写回持久化状态；
+        // 校验异常产生的「校验失败：xxx」只用于当前对话框展示，不持久化。
+        await index.updateVerifyState(
+          entry,
+          verifyNote: verify.ok ? null : verify.summary,
+          verifyRepairable: verify.repairable,
+        );
       } catch (e) {
         results.add(VerifyWorkResult(
           sourceId: entry.sourceId,

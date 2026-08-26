@@ -27,6 +27,15 @@ class LibraryWorks extends Table {
   /// 重建的目录），null = 空串（按标准结构重建）。
   TextColumn get sourceDirOverride => text().nullable()();
 
+  /// 最近一次校验结果摘要（如「3 首缺内嵌歌词、封面缺失」），null = 无缺陷。
+  TextColumn get verifyNote => text().nullable()();
+
+  /// 缺陷是否可通过重新整理修复（重跑 organizeEntry forceWavRewrite）。
+  BoolColumn get verifyRepairable => boolean().nullable()();
+
+  /// 最近一次校验时间，null = 从未校验。
+  DateTimeColumn get verifiedAt => dateTime().nullable()();
+
   /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
   ///
   /// 非 null 时整理以注册表手动值为准（标题/CV/社团/发行日期/标签），
@@ -95,7 +104,7 @@ class LibraryDatabase extends _$LibraryDatabase {
       p.join(getAppDataDir(), 'library', 'asmr_library.db');
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -106,6 +115,11 @@ class LibraryDatabase extends _$LibraryDatabase {
           }
           if (from < 3) {
             await m.addColumn(libraryWorks, libraryWorks.sourceDirOverride);
+          }
+          if (from < 4) {
+            await m.addColumn(libraryWorks, libraryWorks.verifyNote);
+            await m.addColumn(libraryWorks, libraryWorks.verifyRepairable);
+            await m.addColumn(libraryWorks, libraryWorks.verifiedAt);
           }
         },
       );

@@ -4,6 +4,7 @@ import 'package:asmr_downloader/pages/library/tools/library_config_dialog.dart';
 import 'package:asmr_downloader/pages/library/tools/organize_all_button.dart';
 import 'package:asmr_downloader/pages/library/tools/transcribe_status_indicator.dart';
 import 'package:asmr_downloader/pages/library/work_list.dart';
+import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/ui/page_header.dart';
 import 'package:asmr_downloader/ui/toolbar_row.dart';
@@ -26,6 +27,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final works = ref.watch(worksLibraryProvider).value ?? const [];
+    final repairableCount =
+        works.where((w) => w.verifyNote != null && w.verifyRepairable).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,6 +47,12 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             const WorksIndexButton(),
             const VerifyButton(),
             const CompleteWorksButton(),
+            if (repairableCount > 0)
+              OutlinedButton(
+                onPressed: () =>
+                    _workListKey.currentState?.repairRepairable(),
+                child: Text('修复缺陷（$repairableCount）'),
+              ),
             TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
             IconButton(
               key: const ValueKey('onboarding-library-config'),

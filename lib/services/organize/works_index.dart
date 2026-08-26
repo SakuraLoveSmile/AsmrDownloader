@@ -53,6 +53,15 @@ class WorkEntry {
   /// 不再拼接三层路径。
   final String sourceDirOverride;
 
+  /// 最近一次校验结果摘要（如「3 首缺内嵌歌词、封面缺失」），null = 无缺陷。
+  final String? verifyNote;
+
+  /// 缺陷是否可通过重新整理修复（重跑 organizeEntry forceWavRewrite）。
+  final bool? verifyRepairable;
+
+  /// 最近一次校验时间，null = 从未校验。
+  final DateTime? verifiedAt;
+
   const WorkEntry({
     required this.sourceId,
     required this.dlPath,
@@ -66,6 +75,9 @@ class WorkEntry {
     this.organizedAt,
     this.manuallyEditedAt,
     this.sourceDirOverride = '',
+    this.verifyNote,
+    this.verifyRepairable,
+    this.verifiedAt,
   });
 
   /// 下载目录：{dlPath}/{dirName}/{sourceId}；
@@ -81,6 +93,9 @@ class WorkEntry {
     bool clearOrganizedAt = false,
     DateTime? manuallyEditedAt,
     String? sourceDirOverride,
+    String? verifyNote,
+    bool? verifyRepairable,
+    DateTime? verifiedAt,
   }) {
     return WorkEntry(
       sourceId: sourceId,
@@ -95,6 +110,9 @@ class WorkEntry {
       organizedAt: clearOrganizedAt ? null : (organizedAt ?? this.organizedAt),
       manuallyEditedAt: manuallyEditedAt ?? this.manuallyEditedAt,
       sourceDirOverride: sourceDirOverride ?? this.sourceDirOverride,
+      verifyNote: verifyNote ?? this.verifyNote,
+      verifyRepairable: verifyRepairable ?? this.verifyRepairable,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
     );
   }
 
@@ -111,6 +129,9 @@ class WorkEntry {
         'organizedAt': organizedAt,
         'manuallyEditedAt': manuallyEditedAt?.toIso8601String(),
         'sourceDirOverride': sourceDirOverride,
+        'verifyNote': verifyNote,
+        'verifyRepairable': verifyRepairable,
+        'verifiedAt': verifiedAt?.toIso8601String(),
       };
 
   factory WorkEntry.fromJson(Map<String, dynamic> json) => WorkEntry(
@@ -129,6 +150,11 @@ class WorkEntry {
             ? null
             : DateTime.tryParse(json['manuallyEditedAt'].toString()),
         sourceDirOverride: json['sourceDirOverride']?.toString() ?? '',
+        verifyNote: json['verifyNote']?.toString(),
+        verifyRepairable: json['verifyRepairable'] as bool?,
+        verifiedAt: json['verifiedAt'] == null
+            ? null
+            : DateTime.tryParse(json['verifiedAt'].toString()),
       );
 }
 
@@ -221,6 +247,9 @@ class WorksIndex {
       sourceDirOverride: Value(
         entry.sourceDirOverride.isEmpty ? null : entry.sourceDirOverride,
       ),
+      verifyNote: Value(entry.verifyNote),
+      verifyRepairable: Value(entry.verifyRepairable),
+      verifiedAt: Value(entry.verifiedAt),
       updatedAt: Value(DateTime.now()),
     );
   }
@@ -248,6 +277,9 @@ class WorksIndex {
       organizedAt: row.organizedAt,
       manuallyEditedAt: row.manuallyEditedAt,
       sourceDirOverride: row.sourceDirOverride ?? '',
+      verifyNote: row.verifyNote,
+      verifyRepairable: row.verifyRepairable,
+      verifiedAt: row.verifiedAt,
     );
   }
 
@@ -281,6 +313,9 @@ class WorksIndex {
   /// 编辑对话框使用；此后整理（单条/批量）以手动值为准，不被在线
   /// workInfo 覆盖。
   Future<void> updateMetadata(WorkEntry entry) async {
+    // 保留既有校验状态：编辑对话框构造的条目不含校验字段，因此以注册表中
+    // 已存的校验结果为准（缺失时退回调用方传入值）。元数据编辑不应清除缺陷记录。
+    final existing = await get(entry.sourceId);
     await upsert(WorkEntry(
       sourceId: entry.sourceId,
       dlPath: entry.dlPath,
@@ -294,6 +329,9 @@ class WorksIndex {
       organizedAt: entry.organizedAt,
       manuallyEditedAt: DateTime.now(),
       sourceDirOverride: entry.sourceDirOverride,
+      verifyNote: existing?.verifyNote ?? entry.verifyNote,
+      verifyRepairable: existing?.verifyRepairable ?? entry.verifyRepairable,
+      verifiedAt: existing?.verifiedAt ?? entry.verifiedAt,
     ));
   }
 
@@ -311,6 +349,28 @@ class WorksIndex {
     if (entry == null) return;
     await upsert(entry.copyWith(
         organizedAt: (time ?? DateTime.now()).toIso8601String()));
+  }
+
+  /// 统一写回校验状态（整理/批量校验/对话框共用，不依赖 VerifyWorkResult）。
+  ///
+  /// - [verifiedAt] 固定为当前时间；
+  /// - [verifyNote] 为 null 表示「最近校验通过」，会清除旧的缺陷摘要；
+  /// - [verifyRepairable] 标识缺陷是否可通过重新整理修复。
+  /// 写回后再读取注册表返回最新 [WorkEntry]（含持久化校验字段）。
+  Future<WorkEntry> updateVerifyState(
+    WorkEntry entry, {
+    required String? verifyNote,
+    required bool verifyRepairable,
+  }) async {
+    final updated = entry.copyWith(
+      verifiedAt: DateTime.now(),
+      verifyNote: verifyNote,
+      verifyRepairable: verifyRepairable,
+    );
+    await upsert(updated);
+    // 回读以确保持久化字段（含其他并发更新）一致
+    final stored = await get(entry.sourceId);
+    return stored ?? updated;
   }
 
   /// 下载目录已不存在的条目。

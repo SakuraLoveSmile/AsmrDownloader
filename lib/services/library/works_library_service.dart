@@ -38,6 +38,12 @@ class WorksListItem {
   /// 最近整理时间（null = 未整理）
   final String? organizedAt;
 
+  /// 最近一次校验结果摘要（null = 无缺陷/从未校验）
+  final String? verifyNote;
+
+  /// 缺陷是否可通过重新整理修复
+  final bool verifyRepairable;
+
   /// 音轨总数
   final int trackCount;
 
@@ -57,6 +63,8 @@ class WorksListItem {
     required this.sourceDir,
     required this.sourceDirOverride,
     required this.organizedAt,
+    required this.verifyNote,
+    required this.verifyRepairable,
     required this.trackCount,
     required this.missingSubtitleCount,
     required this.convertibleVttCount,
@@ -221,6 +229,9 @@ class WorksLibraryService {
       sourceDirOverride: src.sourceDirOverride,
       // 仅把当前文件系统仍然完整的历史整理记录暴露给列表状态。
       organizedAt: organized ? src.organizedAt : null,
+      // 透传缺陷状态（never 修复入口据此判断）；verifiedAt 暂不暴露到 UI。
+      verifyNote: src.verifyNote,
+      verifyRepairable: src.verifyRepairable ?? false,
       // 用异步扫描版本：列表构建在 UI isolate 上，同步遍历大量目录会卡顿
       trackCount: await SubtitleGapDetector.countAudioFilesAsync(sourceDir),
       missingSubtitleCount:

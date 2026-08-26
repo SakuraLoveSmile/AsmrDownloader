@@ -89,6 +89,27 @@ class $LibraryWorksTable extends LibraryWorks
   late final GeneratedColumn<String> sourceDirOverride =
       GeneratedColumn<String>('source_dir_override', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _verifyNoteMeta =
+      const VerificationMeta('verifyNote');
+  @override
+  late final GeneratedColumn<String> verifyNote = GeneratedColumn<String>(
+      'verify_note', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _verifyRepairableMeta =
+      const VerificationMeta('verifyRepairable');
+  @override
+  late final GeneratedColumn<bool> verifyRepairable = GeneratedColumn<bool>(
+      'verify_repairable', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("verify_repairable" IN (0, 1))'));
+  static const VerificationMeta _verifiedAtMeta =
+      const VerificationMeta('verifiedAt');
+  @override
+  late final GeneratedColumn<DateTime> verifiedAt = GeneratedColumn<DateTime>(
+      'verified_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
   static const VerificationMeta _manuallyEditedAtMeta =
       const VerificationMeta('manuallyEditedAt');
   @override
@@ -116,6 +137,9 @@ class $LibraryWorksTable extends LibraryWorks
         coverUrl,
         organizedAt,
         sourceDirOverride,
+        verifyNote,
+        verifyRepairable,
+        verifiedAt,
         manuallyEditedAt,
         updatedAt
       ];
@@ -183,6 +207,24 @@ class $LibraryWorksTable extends LibraryWorks
           sourceDirOverride.isAcceptableOrUnknown(
               data['source_dir_override']!, _sourceDirOverrideMeta));
     }
+    if (data.containsKey('verify_note')) {
+      context.handle(
+          _verifyNoteMeta,
+          verifyNote.isAcceptableOrUnknown(
+              data['verify_note']!, _verifyNoteMeta));
+    }
+    if (data.containsKey('verify_repairable')) {
+      context.handle(
+          _verifyRepairableMeta,
+          verifyRepairable.isAcceptableOrUnknown(
+              data['verify_repairable']!, _verifyRepairableMeta));
+    }
+    if (data.containsKey('verified_at')) {
+      context.handle(
+          _verifiedAtMeta,
+          verifiedAt.isAcceptableOrUnknown(
+              data['verified_at']!, _verifiedAtMeta));
+    }
     if (data.containsKey('manually_edited_at')) {
       context.handle(
           _manuallyEditedAtMeta,
@@ -224,6 +266,12 @@ class $LibraryWorksTable extends LibraryWorks
           .read(DriftSqlType.string, data['${effectivePrefix}organized_at']),
       sourceDirOverride: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}source_dir_override']),
+      verifyNote: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}verify_note']),
+      verifyRepairable: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}verify_repairable']),
+      verifiedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}verified_at']),
       manuallyEditedAt: attachedDatabase.typeMapping.read(
           DriftSqlType.dateTime, data['${effectivePrefix}manually_edited_at']),
       updatedAt: attachedDatabase.typeMapping
@@ -253,6 +301,15 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
   /// 重建的目录），null = 空串（按标准结构重建）。
   final String? sourceDirOverride;
 
+  /// 最近一次校验结果摘要（如「3 首缺内嵌歌词、封面缺失」），null = 无缺陷。
+  final String? verifyNote;
+
+  /// 缺陷是否可通过重新整理修复（重跑 organizeEntry forceWavRewrite）。
+  final bool? verifyRepairable;
+
+  /// 最近一次校验时间，null = 从未校验。
+  final DateTime? verifiedAt;
+
   /// 最近一次手动编辑元数据的时间，null = 未手动编辑过。
   ///
   /// 非 null 时整理以注册表手动值为准（标题/CV/社团/发行日期/标签），
@@ -271,6 +328,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       required this.coverUrl,
       this.organizedAt,
       this.sourceDirOverride,
+      this.verifyNote,
+      this.verifyRepairable,
+      this.verifiedAt,
       this.manuallyEditedAt,
       required this.updatedAt});
   @override
@@ -290,6 +350,15 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
     }
     if (!nullToAbsent || sourceDirOverride != null) {
       map['source_dir_override'] = Variable<String>(sourceDirOverride);
+    }
+    if (!nullToAbsent || verifyNote != null) {
+      map['verify_note'] = Variable<String>(verifyNote);
+    }
+    if (!nullToAbsent || verifyRepairable != null) {
+      map['verify_repairable'] = Variable<bool>(verifyRepairable);
+    }
+    if (!nullToAbsent || verifiedAt != null) {
+      map['verified_at'] = Variable<DateTime>(verifiedAt);
     }
     if (!nullToAbsent || manuallyEditedAt != null) {
       map['manually_edited_at'] = Variable<DateTime>(manuallyEditedAt);
@@ -315,6 +384,15 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       sourceDirOverride: sourceDirOverride == null && nullToAbsent
           ? const Value.absent()
           : Value(sourceDirOverride),
+      verifyNote: verifyNote == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verifyNote),
+      verifyRepairable: verifyRepairable == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verifyRepairable),
+      verifiedAt: verifiedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verifiedAt),
       manuallyEditedAt: manuallyEditedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(manuallyEditedAt),
@@ -338,6 +416,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       organizedAt: serializer.fromJson<String?>(json['organizedAt']),
       sourceDirOverride:
           serializer.fromJson<String?>(json['sourceDirOverride']),
+      verifyNote: serializer.fromJson<String?>(json['verifyNote']),
+      verifyRepairable: serializer.fromJson<bool?>(json['verifyRepairable']),
+      verifiedAt: serializer.fromJson<DateTime?>(json['verifiedAt']),
       manuallyEditedAt:
           serializer.fromJson<DateTime?>(json['manuallyEditedAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -358,6 +439,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       'coverUrl': serializer.toJson<String>(coverUrl),
       'organizedAt': serializer.toJson<String?>(organizedAt),
       'sourceDirOverride': serializer.toJson<String?>(sourceDirOverride),
+      'verifyNote': serializer.toJson<String?>(verifyNote),
+      'verifyRepairable': serializer.toJson<bool?>(verifyRepairable),
+      'verifiedAt': serializer.toJson<DateTime?>(verifiedAt),
       'manuallyEditedAt': serializer.toJson<DateTime?>(manuallyEditedAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -375,6 +459,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
           String? coverUrl,
           Value<String?> organizedAt = const Value.absent(),
           Value<String?> sourceDirOverride = const Value.absent(),
+          Value<String?> verifyNote = const Value.absent(),
+          Value<bool?> verifyRepairable = const Value.absent(),
+          Value<DateTime?> verifiedAt = const Value.absent(),
           Value<DateTime?> manuallyEditedAt = const Value.absent(),
           DateTime? updatedAt}) =>
       LibraryWork(
@@ -391,6 +478,11 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
         sourceDirOverride: sourceDirOverride.present
             ? sourceDirOverride.value
             : this.sourceDirOverride,
+        verifyNote: verifyNote.present ? verifyNote.value : this.verifyNote,
+        verifyRepairable: verifyRepairable.present
+            ? verifyRepairable.value
+            : this.verifyRepairable,
+        verifiedAt: verifiedAt.present ? verifiedAt.value : this.verifiedAt,
         manuallyEditedAt: manuallyEditedAt.present
             ? manuallyEditedAt.value
             : this.manuallyEditedAt,
@@ -414,6 +506,13 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       sourceDirOverride: data.sourceDirOverride.present
           ? data.sourceDirOverride.value
           : this.sourceDirOverride,
+      verifyNote:
+          data.verifyNote.present ? data.verifyNote.value : this.verifyNote,
+      verifyRepairable: data.verifyRepairable.present
+          ? data.verifyRepairable.value
+          : this.verifyRepairable,
+      verifiedAt:
+          data.verifiedAt.present ? data.verifiedAt.value : this.verifiedAt,
       manuallyEditedAt: data.manuallyEditedAt.present
           ? data.manuallyEditedAt.value
           : this.manuallyEditedAt,
@@ -435,6 +534,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
           ..write('coverUrl: $coverUrl, ')
           ..write('organizedAt: $organizedAt, ')
           ..write('sourceDirOverride: $sourceDirOverride, ')
+          ..write('verifyNote: $verifyNote, ')
+          ..write('verifyRepairable: $verifyRepairable, ')
+          ..write('verifiedAt: $verifiedAt, ')
           ..write('manuallyEditedAt: $manuallyEditedAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -454,6 +556,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
       coverUrl,
       organizedAt,
       sourceDirOverride,
+      verifyNote,
+      verifyRepairable,
+      verifiedAt,
       manuallyEditedAt,
       updatedAt);
   @override
@@ -471,6 +576,9 @@ class LibraryWork extends DataClass implements Insertable<LibraryWork> {
           other.coverUrl == this.coverUrl &&
           other.organizedAt == this.organizedAt &&
           other.sourceDirOverride == this.sourceDirOverride &&
+          other.verifyNote == this.verifyNote &&
+          other.verifyRepairable == this.verifyRepairable &&
+          other.verifiedAt == this.verifiedAt &&
           other.manuallyEditedAt == this.manuallyEditedAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -487,6 +595,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
   final Value<String> coverUrl;
   final Value<String?> organizedAt;
   final Value<String?> sourceDirOverride;
+  final Value<String?> verifyNote;
+  final Value<bool?> verifyRepairable;
+  final Value<DateTime?> verifiedAt;
   final Value<DateTime?> manuallyEditedAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -502,6 +613,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     this.coverUrl = const Value.absent(),
     this.organizedAt = const Value.absent(),
     this.sourceDirOverride = const Value.absent(),
+    this.verifyNote = const Value.absent(),
+    this.verifyRepairable = const Value.absent(),
+    this.verifiedAt = const Value.absent(),
     this.manuallyEditedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -518,6 +632,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     this.coverUrl = const Value.absent(),
     this.organizedAt = const Value.absent(),
     this.sourceDirOverride = const Value.absent(),
+    this.verifyNote = const Value.absent(),
+    this.verifyRepairable = const Value.absent(),
+    this.verifiedAt = const Value.absent(),
     this.manuallyEditedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -534,6 +651,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     Expression<String>? coverUrl,
     Expression<String>? organizedAt,
     Expression<String>? sourceDirOverride,
+    Expression<String>? verifyNote,
+    Expression<bool>? verifyRepairable,
+    Expression<DateTime>? verifiedAt,
     Expression<DateTime>? manuallyEditedAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -550,6 +670,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
       if (coverUrl != null) 'cover_url': coverUrl,
       if (organizedAt != null) 'organized_at': organizedAt,
       if (sourceDirOverride != null) 'source_dir_override': sourceDirOverride,
+      if (verifyNote != null) 'verify_note': verifyNote,
+      if (verifyRepairable != null) 'verify_repairable': verifyRepairable,
+      if (verifiedAt != null) 'verified_at': verifiedAt,
       if (manuallyEditedAt != null) 'manually_edited_at': manuallyEditedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -568,6 +691,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
       Value<String>? coverUrl,
       Value<String?>? organizedAt,
       Value<String?>? sourceDirOverride,
+      Value<String?>? verifyNote,
+      Value<bool?>? verifyRepairable,
+      Value<DateTime?>? verifiedAt,
       Value<DateTime?>? manuallyEditedAt,
       Value<DateTime>? updatedAt,
       Value<int>? rowid}) {
@@ -583,6 +709,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
       coverUrl: coverUrl ?? this.coverUrl,
       organizedAt: organizedAt ?? this.organizedAt,
       sourceDirOverride: sourceDirOverride ?? this.sourceDirOverride,
+      verifyNote: verifyNote ?? this.verifyNote,
+      verifyRepairable: verifyRepairable ?? this.verifyRepairable,
+      verifiedAt: verifiedAt ?? this.verifiedAt,
       manuallyEditedAt: manuallyEditedAt ?? this.manuallyEditedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -625,6 +754,15 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
     if (sourceDirOverride.present) {
       map['source_dir_override'] = Variable<String>(sourceDirOverride.value);
     }
+    if (verifyNote.present) {
+      map['verify_note'] = Variable<String>(verifyNote.value);
+    }
+    if (verifyRepairable.present) {
+      map['verify_repairable'] = Variable<bool>(verifyRepairable.value);
+    }
+    if (verifiedAt.present) {
+      map['verified_at'] = Variable<DateTime>(verifiedAt.value);
+    }
     if (manuallyEditedAt.present) {
       map['manually_edited_at'] = Variable<DateTime>(manuallyEditedAt.value);
     }
@@ -651,6 +789,9 @@ class LibraryWorksCompanion extends UpdateCompanion<LibraryWork> {
           ..write('coverUrl: $coverUrl, ')
           ..write('organizedAt: $organizedAt, ')
           ..write('sourceDirOverride: $sourceDirOverride, ')
+          ..write('verifyNote: $verifyNote, ')
+          ..write('verifyRepairable: $verifyRepairable, ')
+          ..write('verifiedAt: $verifiedAt, ')
           ..write('manuallyEditedAt: $manuallyEditedAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -1436,6 +1577,9 @@ typedef $$LibraryWorksTableCreateCompanionBuilder = LibraryWorksCompanion
   Value<String> coverUrl,
   Value<String?> organizedAt,
   Value<String?> sourceDirOverride,
+  Value<String?> verifyNote,
+  Value<bool?> verifyRepairable,
+  Value<DateTime?> verifiedAt,
   Value<DateTime?> manuallyEditedAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -1453,6 +1597,9 @@ typedef $$LibraryWorksTableUpdateCompanionBuilder = LibraryWorksCompanion
   Value<String> coverUrl,
   Value<String?> organizedAt,
   Value<String?> sourceDirOverride,
+  Value<String?> verifyNote,
+  Value<bool?> verifyRepairable,
+  Value<DateTime?> verifiedAt,
   Value<DateTime?> manuallyEditedAt,
   Value<DateTime> updatedAt,
   Value<int> rowid,
@@ -1500,6 +1647,16 @@ class $$LibraryWorksTableFilterComposer
   ColumnFilters<String> get sourceDirOverride => $composableBuilder(
       column: $table.sourceDirOverride,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get verifyNote => $composableBuilder(
+      column: $table.verifyNote, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get verifyRepairable => $composableBuilder(
+      column: $table.verifyRepairable,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get verifiedAt => $composableBuilder(
+      column: $table.verifiedAt, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get manuallyEditedAt => $composableBuilder(
       column: $table.manuallyEditedAt,
@@ -1552,6 +1709,16 @@ class $$LibraryWorksTableOrderingComposer
       column: $table.sourceDirOverride,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get verifyNote => $composableBuilder(
+      column: $table.verifyNote, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get verifyRepairable => $composableBuilder(
+      column: $table.verifyRepairable,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get verifiedAt => $composableBuilder(
+      column: $table.verifiedAt, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get manuallyEditedAt => $composableBuilder(
       column: $table.manuallyEditedAt,
       builder: (column) => ColumnOrderings(column));
@@ -1602,6 +1769,15 @@ class $$LibraryWorksTableAnnotationComposer
   GeneratedColumn<String> get sourceDirOverride => $composableBuilder(
       column: $table.sourceDirOverride, builder: (column) => column);
 
+  GeneratedColumn<String> get verifyNote => $composableBuilder(
+      column: $table.verifyNote, builder: (column) => column);
+
+  GeneratedColumn<bool> get verifyRepairable => $composableBuilder(
+      column: $table.verifyRepairable, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get verifiedAt => $composableBuilder(
+      column: $table.verifiedAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get manuallyEditedAt => $composableBuilder(
       column: $table.manuallyEditedAt, builder: (column) => column);
 
@@ -1647,6 +1823,9 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             Value<String> coverUrl = const Value.absent(),
             Value<String?> organizedAt = const Value.absent(),
             Value<String?> sourceDirOverride = const Value.absent(),
+            Value<String?> verifyNote = const Value.absent(),
+            Value<bool?> verifyRepairable = const Value.absent(),
+            Value<DateTime?> verifiedAt = const Value.absent(),
             Value<DateTime?> manuallyEditedAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -1663,6 +1842,9 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             coverUrl: coverUrl,
             organizedAt: organizedAt,
             sourceDirOverride: sourceDirOverride,
+            verifyNote: verifyNote,
+            verifyRepairable: verifyRepairable,
+            verifiedAt: verifiedAt,
             manuallyEditedAt: manuallyEditedAt,
             updatedAt: updatedAt,
             rowid: rowid,
@@ -1679,6 +1861,9 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             Value<String> coverUrl = const Value.absent(),
             Value<String?> organizedAt = const Value.absent(),
             Value<String?> sourceDirOverride = const Value.absent(),
+            Value<String?> verifyNote = const Value.absent(),
+            Value<bool?> verifyRepairable = const Value.absent(),
+            Value<DateTime?> verifiedAt = const Value.absent(),
             Value<DateTime?> manuallyEditedAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<int> rowid = const Value.absent(),
@@ -1695,6 +1880,9 @@ class $$LibraryWorksTableTableManager extends RootTableManager<
             coverUrl: coverUrl,
             organizedAt: organizedAt,
             sourceDirOverride: sourceDirOverride,
+            verifyNote: verifyNote,
+            verifyRepairable: verifyRepairable,
+            verifiedAt: verifiedAt,
             manuallyEditedAt: manuallyEditedAt,
             updatedAt: updatedAt,
             rowid: rowid,
