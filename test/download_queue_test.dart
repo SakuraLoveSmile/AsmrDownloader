@@ -292,6 +292,41 @@ void main() {
     expect((await queue2.list()).map((item) => item.sourceId), ['RJ00002']);
   });
 
+  test('队列文件损坏时自动从 .bak 恢复（原子写回退）', () async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('dl_queue_test_recover');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final filePath = p.join(tempDir.path, 'download_queue.json');
+
+    final queue = DownloadQueue(filePath: filePath);
+    await queue.add('RJ00001');
+    await queue.add('RJ00002');
+
+    // 模拟异常退出留下的半截 JSON
+    await File(filePath).writeAsString('{"items": ["RJ0000');
+
+    // 重新构造（模拟重启）：应回退 .bak 恢复上一次完好内容
+    // （.bak 是上一次成功写入的快照：RJ00002 那次损坏的写入丢失）
+    final queue2 = DownloadQueue(filePath: filePath);
+    expect((await queue2.list()).map((item) => item.sourceId), ['RJ00001']);
+    // 正式文件已自动恢复，可继续正常读写
+    await queue2.add('RJ00003');
+    expect((await queue2.list()).map((item) => item.sourceId),
+        ['RJ00001', 'RJ00003']);
+  });
+
+  test('队列写失败向上抛出，不静默假成功', () async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('dl_queue_test_writefail');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    // 同名路径是目录：写文件必然失败
+    final badPath = p.join(tempDir.path, 'download_queue.json');
+    Directory(badPath).createSync();
+
+    final queue = DownloadQueue(filePath: badPath);
+    await expectLater(queue.add('RJ00001'), throwsException);
+  });
+
   test('队列持久化入队时的勾选音轨，并兼容旧版 sourceId 格式', () async {
     final tempDir =
         Directory.systemTemp.createTempSync('dl_queue_test_selection');

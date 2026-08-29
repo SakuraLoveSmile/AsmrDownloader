@@ -122,10 +122,18 @@ class _EnqueueButtonState extends ConsumerState<_EnqueueButton> {
         return;
       }
       final selectedIds = selectedFileIds(rootFolder);
-      final added = await ref.read(downloadQueueProvider.notifier).add(
-            sourceId,
-            selectedTrackIds: selectedIds,
-          );
+      final bool added;
+      try {
+        added = await ref.read(downloadQueueProvider.notifier).add(
+              sourceId,
+              selectedTrackIds: selectedIds,
+            );
+      } catch (e) {
+        // 持久层写入失败：明确告知未入队，不让用户误以为已成功
+        if (!mounted) return;
+        ref.read(uiServiceProvider).showSnack('加入队列失败（队列保存出错）：$e');
+        return;
+      }
       if (!mounted) return;
 
       if (added) {
