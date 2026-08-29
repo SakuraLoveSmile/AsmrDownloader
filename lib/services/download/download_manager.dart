@@ -130,6 +130,8 @@ class DownloadManager {
       while (true) {
         final outcome = await _runOnce(runSeq);
         if (runSeq != _runSeq) return; // 被新一轮抢占
+        // 队列当前作品的收尾：出结果即释放崩溃恢复占用；取消则放回队首
+        await _settleClaimedQueueWork(runSeq, outcome);
         if (_cancelRequested) {
           // 用户取消：终止整个队列循环，条目保留
           _finalizeQueueIfLoop(runSeq, canceled: true);
@@ -390,8 +392,9 @@ class DownloadManager {
     applySelectedFileIds(rootFolder, queuedWork!.selectedTrackIds);
     ref.read(rootFolderProvider.notifier).state = rootFolder;
 
-    // 仅当队首仍未被用户移除时才消费它，避免异步加载期间错删下一个条目。
-    final claimed = await queueNotifier.popFrontIf(nextSourceId);
+    // 仅当队首仍未被用户移除时才占用它，避免异步加载期间错删下一个条目。
+    // 占用（claim）会记入持久化 current：崩溃后可恢复到队首。
+    final claimed = await queueNotifier.claimFrontIf(nextSourceId);
     if (!claimed) {
       // 用户可能在元数据加载期间移除了原队首；继续尝试新的队首，
       // 不让一个合法的移除操作意外中断整个下载循环。
@@ -399,6 +402,27 @@ class DownloadManager {
       return _prepareNextQueuedWork(runSeq);
     }
     return true;
+  }
+
+  /// 队列当前作品出结果后的收尾（崩溃恢复语义）：
+  /// - completed/failed：作品已处理完毕，清除 current 占用标记；
+  /// - canceled/aborted（或被抢占退出）：把条目放回队首，下次可继续。
+  Future<void> _settleClaimedQueueWork(int runSeq, _RunOutcome outcome) async {
+    if (runSeq != _runSeq) return;
+    final queueNotifier = ref.read(downloadQueueProvider.notifier);
+    if (outcome == _RunOutcome.completed || outcome == _RunOutcome.failed) {
+      try {
+        await queueNotifier.releaseCurrent();
+      } catch (e) {
+        Log.warning('release queue current failed\nerror: $e');
+      }
+      return;
+    }
+    try {
+      await queueNotifier.restoreCurrent();
+    } catch (e) {
+      Log.warning('restore queue current failed\nerror: $e');
+    }
   }
 
   /// 队列循环结束时统一提示（仅队列模式下有意义）。
@@ -450,6 +474,7 @@ class DownloadManager {
       while (true) {
         final outcome = await _runOnce(runSeq);
         if (runSeq != _runSeq) return;
+        await _settleClaimedQueueWork(runSeq, outcome);
         if (_cancelRequested) {
           _finalizeQueueIfLoop(runSeq, canceled: true);
           return;
