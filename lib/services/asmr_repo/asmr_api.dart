@@ -7,6 +7,20 @@ import 'package:asmr_downloader/utils/log.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 
+/// 远端文件身份信息（断点续传前校验远端文件是否已更换）。
+/// 字段为 null 表示服务器未提供该项，跳过比较。
+class RemoteIdentity {
+  const RemoteIdentity({
+    this.contentLength,
+    this.etag,
+    this.lastModified,
+  });
+
+  final int? contentLength;
+  final String? etag;
+  final String? lastModified;
+}
+
 class AsmrApi {
   final Dio _apiDio;
 
@@ -22,7 +36,6 @@ class AsmrApi {
   String _apiChannel = '';
 
   String get proxy => _proxy;
-
   set proxy(String proxy) {
     _proxy = proxy;
     _apiDio.httpClientAdapter = IOHttpClientAdapter(
@@ -403,6 +416,10 @@ class AsmrApi {
 
   /// 探测文件服务器是否支持 Range 分段下载（多线程下载的前置检查）。
   /// 返回 null 表示探测本身失败（网络抖动等），由调用方按「不支持」处理。
+  ///
+  /// 使用 ResponseType.stream：服务器忽略 Range 返回 200 完整文件时，
+  /// 只丢弃流而不把整个文件载入内存；同时校验 206 + Content-Range，
+  /// 两者都满足才认为真正支持分段。
   Future<bool?> supportsRangeDownload(String url,
       {CancelToken? cancelToken}) async {
     try {
@@ -410,16 +427,48 @@ class AsmrApi {
         url,
         options: Options(
           headers: {'range': 'bytes=0-0'},
-          responseType: ResponseType.bytes,
+          responseType: ResponseType.stream,
         ),
         cancelToken: cancelToken,
       );
-      return response.statusCode == HttpStatus.partialContent;
+      final statusCode = response.statusCode;
+      // 及时释放连接（丢弃响应体，避免占用连接/内存）
+      final data = response.data;
+      if (data is ResponseBody) {
+        await data.stream.drain<void>();
+      }
+      if (statusCode != HttpStatus.partialContent) {
+        return false;
+      }
+      // 206 但缺失 Content-Range：无法确定分段边界，按不支持处理
+      final contentRange = response.headers.value('content-range');
+      return contentRange != null && contentRange.isNotEmpty;
     } on DioException catch (e) {
       Log.warning('range support probe failed\nurl: $url\nerror: $e');
       return null;
     } catch (e) {
       Log.error('range support probe failed\nurl: $url\nunhandled error: $e');
+      return null;
+    }
+  }
+
+  /// HEAD 探测远端文件身份（大小 / ETag / Last-Modified），供断点续传前
+  /// 校验远端文件是否已更换。探测失败返回 null（调用方按「无法验证」处理，
+  /// 退回响应头逐次校验）。
+  Future<RemoteIdentity?> tryProbeRemoteIdentity(String url,
+      {CancelToken? cancelToken}) async {
+    try {
+      final response = await head(url, cancelToken: cancelToken, maxTry: 1);
+      final headers = response?.headers;
+      final len =
+          int.tryParse(headers?.value(Headers.contentLengthHeader) ?? '');
+      return RemoteIdentity(
+        contentLength: len != null && len >= 0 ? len : null,
+        etag: headers?.value('etag'),
+        lastModified: headers?.value('last-modified'),
+      );
+    } catch (e) {
+      Log.warning('probe remote identity failed\nurl: $url\nerror: $e');
       return null;
     }
   }
