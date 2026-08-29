@@ -190,11 +190,12 @@ void main() {
     await raw.customStatement(
         'ALTER TABLE library_works DROP COLUMN source_dir_override');
     // 一并移除 v4 的校验列（模拟 pre-v4 数据库，避免迁移时重复建列）
-    await raw.customStatement('ALTER TABLE library_works DROP COLUMN verify_note');
+    await raw
+        .customStatement('ALTER TABLE library_works DROP COLUMN verify_note');
     await raw.customStatement(
         'ALTER TABLE library_works DROP COLUMN verify_repairable');
-    await raw.customStatement(
-        'ALTER TABLE library_works DROP COLUMN verified_at');
+    await raw
+        .customStatement('ALTER TABLE library_works DROP COLUMN verified_at');
     await raw.customStatement('PRAGMA user_version = 2');
     await raw.close();
 
@@ -247,8 +248,7 @@ void main() {
       expect(got.verifiedAt, isNotNull);
     });
 
-    test('校验通过可清除旧 verifyNote（传 null 清缺陷、repairable=false）',
-        () async {
+    test('校验通过可清除旧 verifyNote（传 null 清缺陷、repairable=false）', () async {
       final e = entry('RJ00001');
       await index.upsert(e);
       await index.updateVerifyState(
@@ -264,6 +264,29 @@ void main() {
       expect(cleared.verifyNote, isNull);
       expect(cleared.verifyRepairable, isFalse);
       expect(cleared.verifiedAt, isNotNull);
+
+      final got = await index.get('RJ00001');
+      expect(got!.verifyNote, isNull);
+      expect(got.verifyRepairable, isFalse);
+    });
+
+    test('条目自带旧缺陷摘要时，校验通过（null）仍能真正清除旧 verifyNote', () async {
+      final e = entry('RJ00001');
+      await index.upsert(e);
+      await index.updateVerifyState(
+        e,
+        verifyNote: '第一次校验失败：缺少封面',
+        verifyRepairable: true,
+      );
+
+      // 模拟整理编排：resolvedEntry 从注册表读回，自带旧 verifyNote
+      final carried = await index.get('RJ00001');
+      expect(carried!.verifyNote, '第一次校验失败：缺少封面');
+
+      // 第二次校验通过：verifyNote=null 必须真正写回 NULL
+      final cleared = await index.updateVerifyState(carried,
+          verifyNote: null, verifyRepairable: false);
+      expect(cleared.verifyNote, isNull);
 
       final got = await index.get('RJ00001');
       expect(got!.verifyNote, isNull);
@@ -319,8 +342,7 @@ void main() {
       expect(restored.verifiedAt, DateTime.parse('2026-08-13T00:00:00.000'));
     });
 
-    test('schema v3 → v4 迁移：自动补充 verify 三列，旧数据按 null 读写',
-        () async {
+    test('schema v3 → v4 迁移：自动补充 verify 三列，旧数据按 null 读写', () async {
       final dbFile = File(p.join(testBase.path, 'v3.db'));
 
       // 以 v4 建表并写入旧数据（不含 verify 三列）
@@ -336,9 +358,12 @@ void main() {
 
       // 降级为 v3：删除三列并回退 user_version（模拟旧版本创建的数据库）。
       final raw = LibraryDatabase.fromPath(dbFile.path);
-      await raw.customStatement('ALTER TABLE library_works DROP COLUMN verify_note');
-      await raw.customStatement('ALTER TABLE library_works DROP COLUMN verify_repairable');
-      await raw.customStatement('ALTER TABLE library_works DROP COLUMN verified_at');
+      await raw
+          .customStatement('ALTER TABLE library_works DROP COLUMN verify_note');
+      await raw.customStatement(
+          'ALTER TABLE library_works DROP COLUMN verify_repairable');
+      await raw
+          .customStatement('ALTER TABLE library_works DROP COLUMN verified_at');
       await raw.customStatement('PRAGMA user_version = 3');
       await raw.close();
 
