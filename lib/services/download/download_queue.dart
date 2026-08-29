@@ -74,8 +74,7 @@ class DownloadQueue {
     await writeJsonAtomic(filePath, data);
   }
 
-  Future<List<DownloadQueueItem>> _readItems() async {
-    final raw = await _readRaw();
+  static List<DownloadQueueItem> _parseItems(Map<String, dynamic> raw) {
     final items = raw['items'];
     if (items is List) {
       return [
@@ -86,9 +85,27 @@ class DownloadQueue {
     return <DownloadQueueItem>[];
   }
 
-  Future<void> _writeItems(List<DownloadQueueItem> items) async {
-    await _writeRaw({'items': items.map((item) => item.toJson()).toList()});
+  Future<List<DownloadQueueItem>> _readItems() async {
+    final raw = await _readRaw();
+    return _parseItems(raw);
   }
+
+  Future<void> _writeItems(List<DownloadQueueItem> items,
+      {Object? current = _keepCurrent}) async {
+    Object? currentToWrite;
+    if (identical(current, _keepCurrent)) {
+      // 普通队列变更不触碰 current（崩溃恢复的队首占用标记）
+      currentToWrite = (await _readRaw())['current'];
+    } else {
+      currentToWrite = current;
+    }
+    await _writeRaw({
+      'items': items.map((item) => item.toJson()).toList(),
+      'current': currentToWrite,
+    });
+  }
+
+  static const Object _keepCurrent = Object();
 
   /// 读取当前队列。读取也要排在写操作之后，避免启动时的异步加载
   /// 把刚刚写入的条目覆盖掉。
@@ -157,15 +174,46 @@ class DownloadQueue {
   /// 仅当队首仍是 [expected] 时取出它。
   /// 队列页允许用户在元数据加载期间移除条目，因此下载器不能
   /// 在条目已经被用户移除后误取出下一个作品。
-  Future<DownloadQueueItem?> popFrontIf(String expected) async {
+  ///
+  /// 取出的条目会记入持久化 `current` 字段：作品真正出结果（完成/失败）
+  /// 前应用崩溃或退出，下次启动可由 [restoreCurrent] 放回队首续下。
+  Future<DownloadQueueItem?> claimFrontIf(String expected) async {
     final task = _pendingWrite.then((_) async {
       final items = await _readItems();
       if (items.isEmpty || items.first.sourceId != expected) return null;
       final popped = items.removeAt(0);
-      await _writeItems(items);
+      await _writeItems(items, current: popped.toJson());
       return popped;
     });
     _pendingWrite = task.catchError((_) => null);
+    return task;
+  }
+
+  /// 当前作品已出结果（完成/失败）：清除崩溃恢复占用标记。
+  Future<void> releaseCurrent() async {
+    final task = _pendingWrite.then((_) async {
+      final raw = await _readRaw();
+      if (raw['current'] == null) return;
+      await _writeItems(_parseItems(raw), current: null);
+    });
+    _pendingWrite = task.catchError((_) {});
+    return task;
+  }
+
+  /// 把 `current` 占用的条目放回队首（幂等）并清除占用标记。
+  /// 启动恢复（上次退出/崩溃时正在下载）与用户取消下载时调用。
+  Future<void> restoreCurrent() async {
+    final task = _pendingWrite.then((_) async {
+      final raw = await _readRaw();
+      final current = DownloadQueueItem.fromJson(raw['current']);
+      if (current == null) return;
+      final items = _parseItems(raw);
+      if (!items.any((item) => item.sourceId == current.sourceId)) {
+        items.insert(0, current);
+      }
+      await _writeItems(items, current: null);
+    });
+    _pendingWrite = task.catchError((_) {});
     return task;
   }
 }
@@ -194,6 +242,8 @@ class DownloadQueueNotifier extends Notifier<List<DownloadQueueItem>> {
   }
 
   Future<void> _loadFromDisk() async {
+    // 崩溃/退出恢复：上次正在下载的队首条目放回队列，供「继续下载」续传
+    await _queue.restoreCurrent();
     final items = await _queue.list();
     if (_mounted) state = items;
   }
@@ -253,14 +303,28 @@ class DownloadQueueNotifier extends Notifier<List<DownloadQueueItem>> {
     return _queue.peek();
   }
 
-  /// 仅当队首仍为 [expected] 时移除，并返回是否成功。
-  Future<bool> popFrontIf(String expected) async {
+  /// 仅当队首仍为 [expected] 时取出并标记为「正在下载」（持久化 current），
+  /// 返回是否成功。作品出结果后由 [releaseCurrent] / [restoreCurrent] 收尾。
+  Future<bool> claimFrontIf(String expected) async {
     await _ready;
-    final popped = await _queue.popFrontIf(expected);
+    final popped = await _queue.claimFrontIf(expected);
     if (popped != null && _mounted) {
       state = state.where((e) => e.sourceId != expected).toList();
     }
     return popped != null;
+  }
+
+  /// 当前作品已出结果（完成/失败）：清除崩溃恢复占用标记。
+  Future<void> releaseCurrent() async {
+    await _ready;
+    await _queue.releaseCurrent();
+  }
+
+  /// 把「正在下载」占用的条目放回队首（取消下载/启动恢复）。
+  Future<void> restoreCurrent() async {
+    await _ready;
+    await _queue.restoreCurrent();
+    if (_mounted) state = await _queue.list();
   }
 }
 

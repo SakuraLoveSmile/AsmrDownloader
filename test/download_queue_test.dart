@@ -292,6 +292,50 @@ void main() {
     expect((await queue2.list()).map((item) => item.sourceId), ['RJ00002']);
   });
 
+  test('崩溃恢复：claim 占用队首，重启后 restoreCurrent 放回队首', () async {
+    final tempDir = Directory.systemTemp.createTempSync('dl_queue_test_crash');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final filePath = p.join(tempDir.path, 'download_queue.json');
+
+    final queue = DownloadQueue(filePath: filePath);
+    await queue.add('RJ00001');
+    await queue.add('RJ00002');
+
+    // 模拟下载器占用队首开始下载
+    final claimed = await queue.claimFrontIf('RJ00001');
+    expect(claimed?.sourceId, 'RJ00001');
+    expect((await queue.list()).map((e) => e.sourceId), ['RJ00002']);
+
+    // 模拟应用崩溃后重启：占用标记仍在文件里
+    final queue2 = DownloadQueue(filePath: filePath);
+    expect((await queue2.list()).map((e) => e.sourceId), ['RJ00002']);
+    await queue2.restoreCurrent();
+    expect(
+        (await queue2.list()).map((e) => e.sourceId), ['RJ00001', 'RJ00002']);
+    // 恢复后占用标记清除（幂等：再次恢复无副作用）
+    await queue2.restoreCurrent();
+    expect(
+        (await queue2.list()).map((e) => e.sourceId), ['RJ00001', 'RJ00002']);
+  });
+
+  test('作品出结果后 releaseCurrent 清除占用，不回插队首', () async {
+    final tempDir =
+        Directory.systemTemp.createTempSync('dl_queue_test_release');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
+    final filePath = p.join(tempDir.path, 'download_queue.json');
+
+    final queue = DownloadQueue(filePath: filePath);
+    await queue.add('RJ00001');
+    await queue.add('RJ00002');
+    await queue.claimFrontIf('RJ00001');
+
+    // 下载完成/失败：释放占用，RJ00001 不回到队列
+    await queue.releaseCurrent();
+    final queue2 = DownloadQueue(filePath: filePath);
+    await queue2.restoreCurrent();
+    expect((await queue2.list()).map((e) => e.sourceId), ['RJ00002']);
+  });
+
   test('队列文件损坏时自动从 .bak 恢复（原子写回退）', () async {
     final tempDir =
         Directory.systemTemp.createTempSync('dl_queue_test_recover');
