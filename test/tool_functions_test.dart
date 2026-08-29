@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:asmr_downloader/utils/tool_functions.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -17,8 +19,8 @@ void main() {
       expect(matchSourceIdFromDirName('RJ12345678_cover'), 'RJ12345678');
       expect(matchSourceIdFromDirName('RJ12345678 标题'), 'RJ12345678');
       expect(matchSourceIdFromDirName('RJ12345678-标题'), 'RJ12345678');
-      expect(matchSourceIdFromDirName('RJ01077805 - 阳向葵优花 - 舔耳魅魔8'),
-          'RJ01077805');
+      expect(
+          matchSourceIdFromDirName('RJ01077805 - 阳向葵优花 - 舔耳魅魔8'), 'RJ01077805');
       expect(matchSourceIdFromDirName('rj12345678 - 标题'), 'RJ12345678');
     });
 
@@ -88,6 +90,71 @@ void main() {
       final r = smartTruncate('字' * 90, maxChars: 80); // 90*3=270 字节 > 240 也超
       expect(r.endsWith('…'), true);
       expect(r.runes.length, lessThanOrEqualTo(81));
+    });
+  });
+
+  group('旧版数据迁移 migrateLegacyAppDataSync（Windows 数据目录）', () {
+    late Directory base;
+    late Directory legacyDir;
+    late Directory targetDir;
+
+    setUp(() {
+      base = Directory.systemTemp.createTempSync('tool_functions_test');
+      legacyDir = Directory(p.join(base.path, 'legacy'))..createSync();
+      targetDir = Directory(p.join(base.path, 'target'));
+    });
+
+    tearDown(() {
+      base.deleteSync(recursive: true);
+    });
+
+    test('旧目录有 config.json：复制全部数据到新目录且旧数据保留', () {
+      File(p.join(legacyDir.path, 'config.json'))
+          .writeAsStringSync('{"dlPath":"C:\\x"}');
+      File(p.join(legacyDir.path, 'download_queue.json'))
+          .writeAsStringSync('{"items":[]}');
+      Directory(p.join(legacyDir.path, 'cache')).createSync();
+      File(p.join(legacyDir.path, 'cache', 'cover.db')).writeAsStringSync('db');
+
+      migrateLegacyAppDataSync(
+          legacyDir: legacyDir.path, targetDir: targetDir.path);
+
+      expect(File(p.join(targetDir.path, 'config.json')).existsSync(), isTrue);
+      expect(
+        File(p.join(targetDir.path, 'config.json')).readAsStringSync(),
+        contains('dlPath'),
+      );
+      expect(
+        File(p.join(targetDir.path, 'download_queue.json')).existsSync(),
+        isTrue,
+      );
+      expect(File(p.join(targetDir.path, 'cache', 'cover.db')).existsSync(),
+          isTrue);
+      // 旧数据原样保留（不删除）
+      expect(File(p.join(legacyDir.path, 'config.json')).existsSync(), isTrue);
+      expect(Directory(p.join(legacyDir.path, 'cache')).existsSync(), isTrue);
+    });
+
+    test('新目录已有 config.json（已迁移/已使用）：不覆盖', () {
+      File(p.join(legacyDir.path, 'config.json'))
+          .writeAsStringSync('{"old":1}');
+      targetDir.createSync();
+      File(p.join(targetDir.path, 'config.json'))
+          .writeAsStringSync('{"new":1}');
+
+      migrateLegacyAppDataSync(
+          legacyDir: legacyDir.path, targetDir: targetDir.path);
+
+      expect(
+        File(p.join(targetDir.path, 'config.json')).readAsStringSync(),
+        '{"new":1}',
+      );
+    });
+
+    test('旧目录无 config.json（首次安装）：不迁移', () {
+      migrateLegacyAppDataSync(
+          legacyDir: legacyDir.path, targetDir: targetDir.path);
+      expect(targetDir.existsSync(), isFalse);
     });
   });
 }
