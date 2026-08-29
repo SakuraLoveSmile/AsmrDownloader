@@ -1412,7 +1412,7 @@ void main() {
       expect(d2.existsSync(), true);
     });
 
-    test('Force 失败不更新 organizedAt（旧产物已被清理）', () async {
+    test('Force 失败不更新 organizedAt，且旧整理产物原样保留（事务化）', () async {
       final container = makeContainer();
       addTearDown(container.dispose);
       await index.upsert(entry('RJ00001'));
@@ -1442,10 +1442,15 @@ void main() {
       final after = (await index.get('RJ00001'))!.organizedAt;
       // 失败路径不更新 organizedAt
       expect(after, before);
-      // 旧整理产物已被删除
+      // 旧整理产物必须原样保留（staging 事务：不再先删后建）
       final oldDir = Directory(p.join(
           targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
-      expect(oldDir.existsSync(), false);
+      expect(oldDir.existsSync(), true);
+      // staging 不应残留
+      expect(
+        Directory(p.join(targetRoot.path, '.asmr-staging')).existsSync(),
+        false,
+      );
     });
 
     test('Force + onlyUnorganized 仍处理全部条目', () async {
@@ -1532,6 +1537,136 @@ void main() {
       // 在线社团目录不应出现
       expect(
         Directory(p.join(targetRoot.path, '在线社团')).existsSync(),
+        false,
+      );
+    });
+
+    test('Force 中复制失败（异常）：旧整理产物保留且 staging 被清理', () async {
+      if (Platform.isWindows) {
+        // Windows 不支持 POSIX 权限注入，跳过该场景
+        return;
+      }
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      await index.upsert(entry('RJ00001'));
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      final oldDir = Directory(p.join(
+          targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      expect(oldDir.existsSync(), true);
+
+      // 源文件不可读 → 复制阶段抛异常（旧实现此时已删除旧产物）
+      final srcFile = File(
+          p.join((await index.get('RJ00001'))!.sourceDir, '音声', 'e01_舔耳.wav'));
+      await Process.run('chmod', ['000', srcFile.path]);
+
+      await expectLater(
+        container.read(organizeServiceProvider).organizeEntry(
+              (await index.get('RJ00001'))!,
+              targetRoot: targetRoot.path,
+              forceReorganize: true,
+            ),
+        throwsException,
+      );
+
+      // 旧整理产物必须仍在
+      expect(oldDir.existsSync(), true);
+      // staging 已清理
+      expect(
+        Directory(p.join(targetRoot.path, '.asmr-staging')).existsSync(),
+        false,
+      );
+    });
+
+    test('Force 时 staging 校验失败：不替换旧目录', () async {
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      // 源目录含损坏 mp3（标签写入失败、内嵌读取失败）+ 同名 lrc
+      // → staging 产物校验「缺内嵌歌词」不通过
+      final workDir = Directory(p.join(dlPath.path, '社团-标题RJ00001', 'RJ00001'))
+        ..createSync(recursive: true);
+      Directory(p.join(workDir.path, '音声')).createSync();
+      File(p.join(workDir.path, '音声', 'a01.mp3'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(64, 0xAB)));
+      File(p.join(workDir.path, '音声', 'a01.lrc'))
+          .writeAsStringSync('[00:01.00]测试歌词');
+      await index.upsert(WorkEntry(
+        sourceId: 'RJ00001',
+        dlPath: dlPath.path,
+        dirName: '社团-标题RJ00001',
+        title: '标题RJ00001',
+        cvNames: 'CV1&CV2',
+        circleName: '社团',
+      ));
+
+      // 第一次普通整理：建立旧产物（校验缺陷只记 note，不影响产物存在）
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      final oldDir = Directory(p.join(
+          targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001', 'RJ00001'));
+      expect(oldDir.existsSync(), true);
+
+      final outcome =
+          await container.read(organizeServiceProvider).organizeEntry(
+                (await index.get('RJ00001'))!,
+                targetRoot: targetRoot.path,
+                forceReorganize: true,
+              );
+
+      // 校验门禁不通过：返回未执行，旧产物原样保留
+      expect(outcome.result, isNull);
+      expect(oldDir.existsSync(), true);
+      expect(
+        Directory(p.join(targetRoot.path, '.asmr-staging')).existsSync(),
+        false,
+      );
+    });
+
+    test('Force 替换失败（备份 rename 失败）：自动回滚且旧目录保留', () async {
+      if (Platform.isWindows) {
+        // Windows 不支持 POSIX 权限注入，跳过该场景
+        return;
+      }
+      final container = makeContainer();
+      addTearDown(container.dispose);
+      await index.upsert(entry('RJ00001'));
+      await container.read(organizeServiceProvider).organizeAll(
+            targetRoot: targetRoot.path,
+            onlyUnorganized: false,
+            onProgress: (_) {},
+            isCancelled: () => false,
+          );
+      final albumDir = Directory(
+          p.join(targetRoot.path, '社团', 'RJ00001 - CV1&CV2 - 标题RJ00001'));
+      final oldDir = Directory(p.join(albumDir.path, 'RJ00001'));
+      expect(oldDir.existsSync(), true);
+
+      // 专辑目录只读 → 旧目录 rename 成备份失败 → 替换流程整体失败回滚
+      await Process.run('chmod', ['555', albumDir.path]);
+      try {
+        final outcome =
+            await container.read(organizeServiceProvider).organizeEntry(
+                  (await index.get('RJ00001'))!,
+                  targetRoot: targetRoot.path,
+                  forceReorganize: true,
+                );
+        expect(outcome.result, isNull);
+        expect(outcome.metadataNote, contains('已保留原整理产物'));
+      } finally {
+        await Process.run('chmod', ['755', albumDir.path]);
+      }
+
+      expect(oldDir.existsSync(), true);
+      expect(
+        Directory(p.join(targetRoot.path, '.asmr-staging')).existsSync(),
         false,
       );
     });

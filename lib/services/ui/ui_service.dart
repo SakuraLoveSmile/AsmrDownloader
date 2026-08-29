@@ -825,8 +825,8 @@ class UIService {
       await ref.read(worksIndexProvider).upsert(outcome.resolvedEntry
           .copyWith(organizedAt: DateTime.now().toIso8601String()));
     } else if (forceReorganize) {
-      // 完全重新整理失败：旧整理产物可能已被清理，提示用户重试
-      showSnack('完全重新整理失败，旧整理产物可能已被清理，请重试。');
+      // 完全重新整理失败：staging 事务流程已保证旧整理产物原样保留
+      showSnack('完全重新整理失败，原整理产物已保留，可重试。');
     }
     ref.invalidate(worksLibraryProvider);
     ref.invalidate(unorganizedCountProvider);

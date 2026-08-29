@@ -60,7 +60,7 @@ class FakeRepairOrganizeService extends OrganizeService {
     ref.read(itemsState.notifier).state =
         current.map((w) => w.sourceId == entry.sourceId ? cleared(w) : w).toList();
     return OrganizeEntryOutcome(
-      result: const OrganizeResult(copied: 1, skipped: 0),
+      result: const OrganizeResult(copied: 1, skipped: 0, targetDir: ''),
       resolvedEntry: entry.copyWith(verifyNote: null, verifyRepairable: false),
       verifyNote: '校验通过',
     );

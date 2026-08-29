@@ -12,10 +12,15 @@ class OrganizeResult {
   final int skipped;
   final int tagWriteFailures;
 
+  /// 本次整理实际写入的作品目录（最内层 `<sourceId>/` 绝对路径）。
+  /// 供整理服务做 staging 事务替换等后续流程使用。
+  final String targetDir;
+
   const OrganizeResult({
     required this.copied,
     required this.skipped,
     this.tagWriteFailures = 0,
+    required this.targetDir,
   });
 }
 
@@ -449,6 +454,7 @@ class NavidromeOrganizer {
       copied: copied,
       skipped: skipped,
       tagWriteFailures: tagWriteFailures,
+      targetDir: targetDir,
     );
   }
 
@@ -571,6 +577,14 @@ class NavidromeOrganizer {
 
   /// 删除 [dir] 后向上清理空父目录，直到 [root]（含）为止。
   /// 遇到非空父目录或父目录超出 [root] 范围立即停止。
+  /// 导出为公开方法：整理服务的 staging 替换流程清理备份后复用。
+  static Future<void> cleanupEmptyParentsUpTo(
+    Directory dir,
+    Directory root,
+  ) async {
+    return _cleanupEmptyParents(dir, root);
+  }
+
   static Future<void> _cleanupEmptyParents(
     Directory dir,
     Directory root,
