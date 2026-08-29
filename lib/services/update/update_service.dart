@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:asmr_downloader/services/download/chunk_downloader.dart';
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
@@ -18,6 +19,8 @@ class UpdateInfo {
     required this.assetUrl,
     required this.assetSize,
     required this.htmlUrl,
+    this.checksumsUrl = '',
+    this.assetSha256 = '',
   });
 
   /// Release tag（如 v0.9.0）
@@ -37,6 +40,23 @@ class UpdateInfo {
 
   /// Release 网页地址（手动下载兜底）
   final String htmlUrl;
+
+  /// Release 内 SHA256SUMS 文件的下载地址；空 = 未提供（跳过校验）
+  final String checksumsUrl;
+
+  /// 平台 zip 的 SHA-256（小写 hex，来自 SHA256SUMS）；空 = 未知
+  final String assetSha256;
+
+  UpdateInfo copyWith({String? assetSha256}) => UpdateInfo(
+        tagName: tagName,
+        version: version,
+        releaseNotes: releaseNotes,
+        assetUrl: assetUrl,
+        assetSize: assetSize,
+        htmlUrl: htmlUrl,
+        checksumsUrl: checksumsUrl,
+        assetSha256: assetSha256 ?? this.assetSha256,
+      );
 }
 
 /// 一次更新检查的结果：携带 ETag 与响应体供调用方缓存，
@@ -240,6 +260,14 @@ class UpdateService {
     if (version.startsWith('v') || version.startsWith('V')) {
       version = version.substring(1);
     }
+    // SHA256SUMS 文件（含全部 zip 的 SHA-256），供下载后完整性校验
+    String checksumsUrl = '';
+    for (final a in assets) {
+      if ((a['name'] as String? ?? '') == 'SHA256SUMS') {
+        checksumsUrl = a['browser_download_url'] as String? ?? '';
+        break;
+      }
+    }
     return UpdateInfo(
       tagName: tagName,
       version: version,
@@ -247,7 +275,29 @@ class UpdateService {
       assetUrl: url,
       assetSize: (matched?['size'] as num?)?.toInt() ?? 0,
       htmlUrl: release['html_url'] as String? ?? '',
+      checksumsUrl: checksumsUrl,
     );
+  }
+
+  /// 从 sha256sum 格式文本（`<hex>  <filename>` 每行一条）中提取
+  /// [fileName] 的哈希；非法/缺失返回空串。
+  static String extractSha256For(String sumsText, String fileName) {
+    for (final line in sumsText.split('\n')) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final parts = trimmed.split(RegExp(r'\s+'));
+      if (parts.length >= 2 && parts.last == fileName) {
+        final hex = parts.first.toLowerCase();
+        if (RegExp(r'^[0-9a-f]{64}$').hasMatch(hex)) return hex;
+      }
+    }
+    return '';
+  }
+
+  /// 流式计算文件 SHA-256（不整体载入内存）。
+  static Future<String> sha256OfFile(String path) async {
+    final digest = await sha256.bind(File(path).openRead()).first;
+    return digest.toString();
   }
 
   // --------------------------------------------------------------- check
@@ -300,14 +350,15 @@ class UpdateService {
       if (resp.statusCode == 304) {
         // Release 未变化：复用上次响应体重新判定（当前版本可能已升级）
         return UpdateCheckResult(
-          info: evaluateRelease(cachedReleaseBody, currentVersion),
+          info: await _attachChecksum(
+              evaluateRelease(cachedReleaseBody, currentVersion)),
           etag: newEtag,
           releaseBody: cachedReleaseBody,
         );
       }
       final body = resp.data;
       return UpdateCheckResult(
-        info: evaluateRelease(body, currentVersion),
+        info: await _attachChecksum(evaluateRelease(body, currentVersion)),
         etag: newEtag,
         releaseBody: body,
       );
@@ -317,6 +368,28 @@ class UpdateService {
       throw _toCheckException(e);
     } catch (e) {
       throw UpdateCheckException('检查更新失败：$e');
+    }
+  }
+
+  /// Release 提供 SHA256SUMS 时拉取并提取当前平台 zip 的哈希，
+  /// 附着到 [UpdateInfo.assetSha256]；拉取失败仅告警（下载时跳过校验）。
+  Future<UpdateInfo?> _attachChecksum(UpdateInfo? info) async {
+    if (info == null || info.checksumsUrl.isEmpty) return info;
+    try {
+      final resp = await _apiDio.getUri<String>(
+        Uri.parse(info.checksumsUrl),
+        options: Options(responseType: ResponseType.plain),
+      );
+      final fileName = p.basename(Uri.parse(info.assetUrl).path);
+      final sha = extractSha256For(resp.data ?? '', fileName);
+      if (sha.isEmpty) {
+        Log.warning('SHA256SUMS has no entry for $fileName');
+        return info;
+      }
+      return info.copyWith(assetSha256: sha);
+    } catch (e) {
+      Log.warning('fetch SHA256SUMS failed: ${info.checksumsUrl}\nerror: $e');
+      return info;
     }
   }
 
@@ -394,6 +467,19 @@ class UpdateService {
         await File(savePath).delete();
         return null;
       }
+      // SHA-256 校验（Release 提供 SHA256SUMS 时）
+      if (info.assetSha256.isNotEmpty) {
+        final actual = await sha256OfFile(savePath);
+        if (actual != info.assetSha256) {
+          Log.error('update package sha256 mismatch: '
+              'expect ${info.assetSha256}, got $actual');
+          await File(savePath).delete();
+          return null;
+        }
+      } else {
+        Log.warning('update package sha256 not verified: '
+            'release has no SHA256SUMS entry for ${p.basename(savePath)}');
+      }
       return savePath;
     } finally {
       _activeToken = null;
@@ -459,14 +545,17 @@ class UpdateService {
   }
 
   /// 按平台生成更新脚本，返回脚本路径；产物异常返回 null。
+  ///
+  /// staging 内容检查：Windows 必须包含主 exe，macOS 必须包含完整的
+  /// `AsmrDownloader.app`（含 Contents/MacOS）；不得仅凭 staging 非空替换。
   Future<String?> _writeUpdateScript(String exePath, String stagingDir) async {
     final scriptDir = Directory.systemTemp.path;
     if (Platform.isWindows) {
       // zip 根目录即程序文件：staging 平铺 → 覆盖安装目录
       final installDir = p.dirname(exePath);
       final exeName = p.basename(exePath);
-      if (!Directory(stagingDir).listSync().any((e) => e is File)) {
-        Log.error('staging dir is empty: $stagingDir');
+      if (!File(p.join(stagingDir, exeName)).existsSync()) {
+        Log.error('main exe missing in staging dir: $stagingDir ($exeName)');
         return null;
       }
       final scriptPath = p.join(scriptDir, 'asmr_updater.vbs');
@@ -484,8 +573,10 @@ class UpdateService {
           break;
         }
       }
-      if (newApp == null) {
-        Log.error('no .app found in staging dir: $stagingDir');
+      if (newApp == null ||
+          !Directory(p.join(newApp, 'Contents', 'MacOS')).existsSync()) {
+        Log.error('valid .app not found in staging dir: $stagingDir '
+            '(missing .app or Contents/MacOS)');
         return null;
       }
       final scriptPath = p.join(scriptDir, 'asmr_updater.sh');
@@ -496,7 +587,8 @@ class UpdateService {
   }
 
   /// Windows 更新脚本：通过 wscript.exe 无窗口运行，等 PID 退出（最多
-  /// 60 秒）→ 隐藏 xcopy 覆盖 → 重启 → 自删。
+  /// 60 秒）→ 备份旧主程序 → 隐藏 xcopy 覆盖 → 失败回滚主程序 / 成功
+  /// 重启并清理备份 → 自删。
   ///
   /// 路径不嵌入脚本：Dart 以 UTF-16 命令行参数传给 WSH，避免中文/日文
   /// 安装路径经过 VBS 源文件代码页转码。保留参数列表是为了让该方法
@@ -505,7 +597,7 @@ class UpdateService {
       int pid, String stagingDir, String installDir, String exeName) {
     return 'Option Explicit\r\n'
         'Dim shell, fso, processId, stagingDir, installDir, exeName\r\n'
-        'Dim processSet, query, installExe, i\r\n'
+        'Dim processSet, query, installExe, exeBackup, i, xcopyResult\r\n'
         'Set shell = CreateObject("WScript.Shell")\r\n'
         'Set fso = CreateObject("Scripting.FileSystemObject")\r\n'
         'If WScript.Arguments.Count < 4 Then WScript.Quit 2\r\n'
@@ -524,8 +616,21 @@ class UpdateService {
         '  If processSet.Count = 0 Then Exit For\r\n'
         '  WScript.Sleep 1000\r\n'
         'Next\r\n'
-        'shell.Run "cmd.exe /c xcopy " & Quote(stagingDir & "\\*") & " " & Quote(installDir & "\\") & " /E /Y /Q", 0, True\r\n'
         'installExe = fso.BuildPath(installDir, exeName)\r\n'
+        'exeBackup = installExe & ".bak"\r\n'
+        'On Error Resume Next\r\n'
+        'fso.CopyFile installExe, exeBackup, True\r\n'
+        'On Error GoTo 0\r\n'
+        'xcopyResult = shell.Run("cmd.exe /c xcopy " & Quote(stagingDir & "\\*") & " " & Quote(installDir & "\\") & " /E /Y /Q", 0, True)\r\n'
+        'If xcopyResult <> 0 Then\r\n'
+        '  On Error Resume Next\r\n'
+        '  If fso.FileExists(exeBackup) Then fso.CopyFile exeBackup, installExe, True\r\n'
+        '  On Error GoTo 0\r\n'
+        '  WScript.Quit 1\r\n'
+        'End If\r\n'
+        'On Error Resume Next\r\n'
+        'If fso.FileExists(exeBackup) Then fso.DeleteFile exeBackup, True\r\n'
+        'On Error GoTo 0\r\n'
         'shell.Run Quote(installExe), 1, False\r\n'
         'fso.DeleteFile WScript.ScriptFullName, True\r\n'
         'Function Quote(value)\r\n'
@@ -538,19 +643,32 @@ class UpdateService {
           int pid, String stagingDir, String installDir, String exeName) =>
       buildWindowsVbsScript(pid, stagingDir, installDir, exeName);
 
-  /// macOS 更新脚本：等 PID 退出 → 删旧 .app → 移入新 .app → open 重启。
+  /// macOS 更新脚本：等 PID 退出 → 旧 .app 改名备份 → 移入新 .app →
+  /// open 重启；移动失败时把备份改回原名（回滚）并重启旧版。
   static String buildMacScript(int pid, String newApp, String oldApp) {
     return '#!/bin/sh\n'
-        '# AsmrDownloader auto updater: wait exit, replace .app, restart\n'
+        '# AsmrDownloader auto updater: wait exit, backup old .app,\n'
+        '# move new .app in place, restart; rollback on failure\n'
         'PID="$pid"\n'
         'NEW_APP="$newApp"\n'
         'OLD_APP="$oldApp"\n'
+        'BACKUP="\$OLD_APP.bak"\n'
         'while kill -0 "\$PID" 2>/dev/null; do\n'
         '  sleep 1\n'
         'done\n'
-        'rm -rf "\$OLD_APP"\n'
-        'if mv "\$NEW_APP" "\$(dirname "\$OLD_APP")/"; then\n'
-        '  open "\$OLD_APP"\n'
+        'if mv "\$OLD_APP" "\$BACKUP"; then\n'
+        '  if mv "\$NEW_APP" "\$(dirname "\$OLD_APP")/"; then\n'
+        '    open "\$OLD_APP"\n'
+        '    rm -rf "\$BACKUP"\n'
+        '  else\n'
+        '    mv "\$BACKUP" "\$OLD_APP"\n'
+        '    open "\$OLD_APP"\n'
+        '  fi\n'
+        'else\n'
+        '  # 旧 .app 备份失败（权限等）：保守起见仍尝试原位覆盖\n'
+        '  if mv "\$NEW_APP" "\$(dirname "\$OLD_APP")/"; then\n'
+        '    open "\$OLD_APP"\n'
+        '  fi\n'
         'fi\n'
         'rm -f "\$0"\n';
   }

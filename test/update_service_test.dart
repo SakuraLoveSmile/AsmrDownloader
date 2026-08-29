@@ -4,9 +4,12 @@ import 'dart:typed_data';
 
 import 'package:asmr_downloader/services/download/chunk_downloader.dart';
 import 'package:asmr_downloader/services/update/update_service.dart';
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+
+String sha256Of(List<int> bytes) => sha256.convert(bytes).toString();
 
 void main() {
   // 应用仅面向 Windows/macOS；Linux 仅作 CI quality-gate 运行环境，
@@ -87,6 +90,38 @@ void main() {
       expect(win!.assetUrl, 'https://fake.test/win.zip');
     });
 
+    test('识别 SHA256SUMS asset 并记录下载地址', () {
+      final release = sampleRelease()
+        ..['assets'].add({
+          'name': 'SHA256SUMS',
+          'browser_download_url': 'https://fake.test/SHA256SUMS',
+        });
+      final mac =
+          UpdateService.parseRelease(release, assetSuffix: '-macOS.zip');
+      expect(mac!.checksumsUrl, 'https://fake.test/SHA256SUMS');
+      // 未提供 SHA256SUMS 时为空串（下载时跳过校验）
+      final noSums = UpdateService.parseRelease(sampleRelease(),
+          assetSuffix: '-macOS.zip');
+      expect(noSums!.checksumsUrl, '');
+    });
+
+    test('extractSha256For：从 sha256sum 文本提取指定文件哈希', () {
+      const sums = '''
+2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  AsmrDownloader-v0.9.0-Windows.zip
+68aa2e2ee5dff95e58c5b0c91f36d7c2f2e2e75d2ba0e6d3f0e7d0f8d0c0b0a1  AsmrDownloader-v0.9.0-macOS.zip
+''';
+      expect(
+        UpdateService.extractSha256For(sums, 'AsmrDownloader-v0.9.0-macOS.zip'),
+        '68aa2e2ee5dff95e58c5b0c91f36d7c2f2e2e75d2ba0e6d3f0e7d0f8d0c0b0a1',
+      );
+      expect(UpdateService.extractSha256For(sums, 'missing.zip'), '');
+      // 哈希长度非法的行不应被采纳
+      expect(
+        UpdateService.extractSha256For('abc  pkg.zip', 'pkg.zip'),
+        '',
+      );
+    });
+
     test('缺少匹配 asset / tag → null', () {
       final noMac = sampleRelease()..['assets'] = <Map<String, dynamic>>[];
       expect(
@@ -130,6 +165,36 @@ void main() {
       expect(result.info!.version, '9.9.9');
       expect(result.info!.assetUrl, 'https://fake.test/pkg.zip');
       expect(result.releaseBody, contains('v9.9.9'));
+    });
+
+    test('Release 提供 SHA256SUMS → info 附带平台 zip 哈希', () async {
+      final releaseJson = json.encode({
+        'tag_name': 'v9.9.9',
+        'body': 'notes',
+        'html_url': 'https://fake.test/release',
+        'assets': [
+          {
+            'name': 'AsmrDownloader-v9.9.9$suffix',
+            'browser_download_url': 'https://fake.test/pkg.zip',
+            'size': 100,
+          },
+          {
+            'name': 'SHA256SUMS',
+            'browser_download_url': 'https://fake.test/dl/SHA256SUMS',
+          },
+        ],
+      });
+      final sums = 'a' * 64 + '  pkg.zip\n';
+      final svc = UpdateService(
+        apiDio: Dio()
+          ..httpClientAdapter = _FakeAdapter({
+            'api.github.com': releaseJson,
+            'SHA256SUMS': sums,
+          }),
+      );
+      final result = await svc.checkForUpdate('0.0.1');
+      expect(result.info, isNotNull);
+      expect(result.info!.assetSha256, 'a' * 64);
     });
 
     test('已是最新 / 更低版本 → info 为 null', () async {
@@ -332,6 +397,46 @@ void main() {
       expect(path, isNull);
     });
 
+    test('SHA-256 一致 → 校验通过返回 zip 路径', () async {
+      final bytes = utf8.encode('fake zip content');
+      final expected = sha256Of(bytes);
+      final svc = UpdateService(downloader: _FakeDownloader(bytes));
+      final info = const UpdateInfo(
+        tagName: 'v9.9.9',
+        version: '9.9.9',
+        releaseNotes: '',
+        assetUrl: 'https://fake.test/pkg.zip',
+        assetSize: 16,
+        htmlUrl: '',
+      ).copyWith(assetSha256: expected);
+      final path = await svc.downloadUpdate(info);
+      expect(path, isNotNull);
+      await File(path!).parent.delete(recursive: true);
+    });
+
+    test('SHA-256 不符 → 删除文件并返回 null', () async {
+      final bytes = utf8.encode('fake zip content');
+      final svc = UpdateService(downloader: _FakeDownloader(bytes));
+      final info = const UpdateInfo(
+        tagName: 'v9.9.9',
+        version: '9.9.9',
+        releaseNotes: '',
+        assetUrl: 'https://fake.test/pkg.zip',
+        assetSize: 16,
+        htmlUrl: '',
+      ).copyWith(assetSha256: '0' * 64);
+      final path = await svc.downloadUpdate(info);
+      expect(path, isNull);
+      // 损坏文件已被删除
+      expect(
+        Directory(p.join(Directory.systemTemp.path, 'asmr_update_dl'))
+            .listSync()
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.zip')),
+        isEmpty,
+      );
+    });
+
     test('下载失败 → null', () async {
       final svc = UpdateService(downloader: _FakeDownloader(null));
       const info = UpdateInfo(
@@ -356,22 +461,33 @@ void main() {
       expect(script, contains('WScript.Arguments(3)'));
       expect(script, contains('Win32_Process'));
       expect(script, contains('WScript.Sleep 1000'));
-      expect(script, contains('shell.Run "cmd.exe /c xcopy'));
+      expect(script, contains('shell.Run("cmd.exe /c xcopy'));
       expect(script, contains(', 0, True'));
+      expect(script, contains('fso.CopyFile installExe, exeBackup, True'));
+      expect(script, contains('xcopyResult = shell.Run('));
+      expect(script, contains('If xcopyResult <> 0 Then'));
+      // 失败回滚：从备份恢复主程序且不启动新版本
+      expect(script, contains('fso.CopyFile exeBackup, installExe, True'));
+      expect(script, contains('WScript.Quit 1'));
       expect(script, contains('shell.Run Quote(installExe), 1, False'));
       expect(script, contains('fso.DeleteFile WScript.ScriptFullName'));
       expect(script, isNot(contains('ping')));
       expect(script, isNot(contains('tasklist')));
     });
 
-    test('macOS 脚本：等 PID 退出 → 删旧 .app → 移入新 .app → open', () {
+    test('macOS 脚本：等 PID 退出 → 旧 .app 备份 → 移入新 .app → open；失败回滚', () {
       final script = UpdateService.buildMacScript(
           4242, '/tmp/staging/AsmrDownloader.app', '/app/AsmrDownloader.app');
       expect(script, contains('PID="4242"'));
       expect(script, contains('kill -0 "\$PID"'));
-      expect(script, contains('rm -rf "\$OLD_APP"'));
+      // 旧 .app 先改名备份，不再直接 rm -rf 删除
+      expect(script, contains('mv "\$OLD_APP" "\$BACKUP"'));
       expect(script, contains('mv "\$NEW_APP"'));
       expect(script, contains('open "\$OLD_APP"'));
+      // 成功后清理备份
+      expect(script, contains('rm -rf "\$BACKUP"'));
+      // 移入失败时把备份改回原名并重启旧版
+      expect(script, contains('mv "\$BACKUP" "\$OLD_APP"'));
       expect(script, contains('rm -f "\$0"'));
     });
   });
@@ -391,11 +507,12 @@ void main() {
       var exitCode = -1;
       final svc = UpdateService(
         extractor: (zip, dest) async {
-          // 模拟解压产物：Windows 平铺文件 / macOS 根目录含 .app
+          // 模拟解压产物：Windows 平铺主 exe / macOS 根目录含完整 .app
           if (Platform.isWindows) {
-            File(p.join(dest, 'AsmrDownloader.exe')).writeAsStringSync('x');
+            File(p.join(dest, p.basename(Platform.resolvedExecutable)))
+                .writeAsStringSync('x');
           } else {
-            Directory(p.join(dest, 'AsmrDownloader.app'))
+            Directory(p.join(dest, 'AsmrDownloader.app', 'Contents', 'MacOS'))
                 .createSync(recursive: true);
           }
           return true;
