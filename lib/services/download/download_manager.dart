@@ -5,6 +5,7 @@ import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
+import 'package:asmr_downloader/services/download/download_work_context.dart';
 import 'package:asmr_downloader/services/download/multi_thread_downloader.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/models/track_item.dart';
@@ -66,33 +67,6 @@ class _DownloadTask {
 /// 单次 run 下载结果的简化分类，供队列循环决定是否继续下一个。
 /// completed = 全部成功；failed = 部分失败；aborted = 被取消或被新一轮抢占。
 enum _RunOutcome { completed, failed, aborted }
-
-/// 下载开始时对作品上下文的快照。下载中允许搜索新作品，
-/// 若收尾时重读全局 provider 会把注册表写成新作品的数据，
-/// 故在此快照，收尾一律用快照值。
-class _RunContext {
-  final String sourceId;
-  final String voiceWorkPath;
-  final String downloadPath;
-  final String title;
-  final List<String> cvNames;
-  final String circleName;
-  final String releaseDate;
-  final List<String> tags;
-  final String coverUrl;
-
-  _RunContext({
-    required this.sourceId,
-    required this.voiceWorkPath,
-    required this.downloadPath,
-    required this.title,
-    required this.cvNames,
-    required this.circleName,
-    required this.releaseDate,
-    required this.tags,
-    required this.coverUrl,
-  });
-}
 
 class DownloadManager {
   final Ref ref;
@@ -196,12 +170,45 @@ class DownloadManager {
 
     await ref.read(uiServiceProvider).resetProgress();
 
-    // handle error
-
+    // 下载开始即原子快照作品上下文：sourceId / 下载目录 / 音轨树 / 元数据
+    // 必须在同一事件循环内读取（本块内无 await），否则下载中搜索新作品
+    // 会让不同字段来自不同作品，出现任务串数据。社团名解析是异步的，
+    // 这里只捕获当前时刻的 future，稍后再 await（旧一轮 future 不受
+    // 依赖重算影响，仍以快照时刻的作品为准）。
     final sourceId = ref.read(sourceIdProvider);
+    final voiceWorkPath = ref.read(voiceWorkPathProvider);
+    final downloadRoot = ref.read(downloadPathProvider);
+    final rootFolderSnapshot = ref.read(rootFolderProvider)?.copyWith();
+    final title = ref.read(titleProvider);
+    final cvNames = ref.read(cvLsProvider);
+    final releaseDate = ref.read(releaseDateProvider);
+    final tags = ref.read(tagLsProvider);
+    final coverUrl = ref.read(coverUrlProvider);
+    final coverAsync = ref.read(coverBytesProvider);
+    final coverBytes = coverAsync is AsyncData && coverAsync.value != null
+        ? coverAsync.value
+        : null;
+    final circleNameFuture = ref.read(circleNameProvider.future);
+
     if (sourceId == null) {
       Log.fatal('download failed\n' 'error: sourceId is null');
       ref.read(uiServiceProvider).showSnack('下载失败：请先搜索作品');
+      return _RunOutcome.aborted;
+    }
+
+    // 标题/目录名为空（title 降级链尚未给出保底值）时拒绝下载
+    if (p.basename(voiceWorkPath) == '-' ||
+        p.equals(voiceWorkPath, downloadRoot)) {
+      Log.error('download failed: $sourceId\n'
+          'error: voiceWorkPath is invalid, which means you have to start downloading after work info is loaded');
+      ref.read(uiServiceProvider).showSnack('下载失败：请等待作品信息加载完成后再下载');
+      return _RunOutcome.aborted;
+    }
+
+    if (rootFolderSnapshot == null) {
+      Log.fatal(
+          'download tracks failed: $sourceId\n' 'error: rootFolder is null');
+      ref.read(uiServiceProvider).showSnack('下载失败：音轨列表为空，请重新搜索');
       return _RunOutcome.aborted;
     }
 
@@ -210,7 +217,7 @@ class DownloadManager {
     final existingExternalCopy =
         await ref.read(mediaLibraryServiceProvider).findExistingOutsideRoot(
               sourceId: sourceId,
-              excludedRoot: ref.read(downloadPathProvider),
+              excludedRoot: downloadRoot,
             );
     if (existingExternalCopy != null) {
       // 刚执行过实时重扫，同步刷新搜索页的入库状态徽章
@@ -221,22 +228,23 @@ class DownloadManager {
       return _RunOutcome.aborted;
     }
 
-    // 标题/目录名为空（title 降级链尚未给出保底值）时拒绝下载
-    final voiceWorkPath = ref.read(voiceWorkPathProvider);
-    if (p.basename(voiceWorkPath) == '-' ||
-        p.equals(voiceWorkPath, ref.read(downloadPathProvider))) {
-      Log.error('download failed: $sourceId\n'
-          'error: voiceWorkPath is invalid, which means you have to start downloading after work info is loaded');
-      ref.read(uiServiceProvider).showSnack('下载失败：请等待作品信息加载完成后再下载');
-      return _RunOutcome.aborted;
-    }
-
     ref.read(currentDownloadingSourceIdProvider.notifier).state = sourceId;
     ref.read(lastDownloadSourceIdProvider.notifier).state = sourceId;
 
-    // 下载开始即快照作品上下文：下载中允许搜索新作品，
-    // 收尾写注册表时全部用快照值，避免被搜索切走的新作品数据污染。
-    final ctx = await _snapshotRunContext(sourceId, voiceWorkPath);
+    // 组装下载上下文：收尾写注册表、封面落盘、自动整理/自动字幕
+    // 一律使用快照值，不受下载中搜索切走的作品影响。
+    final ctx = DownloadWorkContext(
+      sourceId: sourceId,
+      title: title,
+      cvNames: cvNames,
+      circleName: await circleNameFuture,
+      releaseDate: releaseDate,
+      tags: tags,
+      coverUrl: coverUrl,
+      coverBytes: coverBytes,
+      downloadRoot: downloadRoot,
+      workDir: voiceWorkPath,
+    );
     if (runSeq != _runSeq) {
       ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
       return _RunOutcome.aborted;
@@ -247,17 +255,8 @@ class DownloadManager {
     ref.read(dlStatusProvider.notifier).state = DownloadStatus.downloading;
     ref.read(currentDlNoProvider.notifier).state = 0;
 
-    final rootFolderSnapshot = ref.read(rootFolderProvider)?.copyWith();
-    if (rootFolderSnapshot == null) {
-      Log.fatal(
-          'download tracks failed: $sourceId\n' 'error: rootFolder is null');
-      ref.read(uiServiceProvider).showSnack('下载失败：音轨列表为空，请重新搜索');
-      ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
-      return _RunOutcome.aborted;
-    }
-
     // 拍平所有下载任务：封面优先，随后按音轨树先序收集选中文件
-    final tasks = await _collectTasks(rootFolderSnapshot, voiceWorkPath);
+    final tasks = await _collectTasks(rootFolderSnapshot, ctx);
     if (_cancelRequested || runSeq != _runSeq) {
       ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
       return _RunOutcome.aborted;
@@ -303,13 +302,13 @@ class DownloadManager {
     ref.read(dlStatusProvider.notifier).state = DownloadStatus.completed;
 
     // 写入下载注册表（批量整理的数据源）；
-    // 自动整理成功后会由 organizeCurrentWork 补录 organizedAt。
+    // 自动整理成功后会由 organizeDownloadedWork 补录 organizedAt。
     // 全部用快照值，不受下载中搜索切走的作品影响。
     try {
       await ref.read(worksIndexProvider).upsert(WorkEntry(
             sourceId: ctx.sourceId,
-            dlPath: ctx.downloadPath,
-            dirName: p.basename(ctx.voiceWorkPath),
+            dlPath: ctx.downloadRoot,
+            dirName: p.basename(ctx.workDir),
             title: ctx.title,
             cvNames: ctx.cvNames.join('&'),
             circleName: ctx.circleName,
@@ -335,35 +334,19 @@ class DownloadManager {
 
     ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
 
-    // auto organize to navidrome
+    // auto organize to navidrome（使用下载上下文快照，不读当前搜索状态）
     if (ref.read(autoOrganizeProvider)) {
-      await ref.read(uiServiceProvider).autoOrganize();
+      await ref.read(uiServiceProvider).autoOrganizeDownloadedWork(ctx);
     }
 
-    // auto AI subtitle translate (ChickenRice)
+    // auto AI subtitle translate (ChickenRice)（显式传入快照目录）
     if (ref.read(autoTranscribeProvider)) {
-      await ref.read(uiServiceProvider).autoTranscribe(sourceId);
+      await ref
+          .read(uiServiceProvider)
+          .autoTranscribe(ctx.sourceId, ctx.sourceDir);
     }
 
     return _RunOutcome.completed;
-  }
-
-  /// 快照当前作品上下文（run 校验通过后立即调用）。
-  /// 社团名经 resolveCircleName 解析为原始社团名（汉化版跟踪原版），
-  /// 需异步获取，故本方法为 async。
-  Future<_RunContext> _snapshotRunContext(
-      String sourceId, String voiceWorkPath) async {
-    return _RunContext(
-      sourceId: sourceId,
-      voiceWorkPath: voiceWorkPath,
-      downloadPath: ref.read(downloadPathProvider),
-      title: ref.read(titleProvider),
-      cvNames: ref.read(cvLsProvider),
-      circleName: await ref.read(circleNameProvider.future),
-      releaseDate: ref.read(releaseDateProvider),
-      tags: ref.read(tagLsProvider),
-      coverUrl: ref.read(coverUrlProvider),
-    );
   }
 
   /// 从队列取下一个作品并准备好元数据。返回 true 表示已就绪可进入 _runOnce。
@@ -524,61 +507,59 @@ class DownloadManager {
   // ------------------------------------------------------------- 任务收集
 
   Future<List<_DownloadTask>> _collectTasks(
-      Folder? rootFolder, String voiceWorkPath) async {
+      Folder rootFolder, DownloadWorkContext ctx) async {
     final tasks = <_DownloadTask>[];
 
-    final coverTask = await _buildCoverTask(voiceWorkPath);
+    final coverTask = await _buildCoverTask(ctx);
     if (coverTask != null) {
       tasks.add(coverTask);
     }
 
-    if (rootFolder != null) {
-      void walk(TrackItem item, String dirPath) {
-        final targetPath = p.join(
-          dirPath,
-          getLegalWindowsName(item.title),
-        );
-        if (item is Folder) {
-          for (final child in item.children) {
-            walk(child, targetPath);
-          }
-        } else if (item is FileAsset) {
-          if (item.selected) {
-            item.savePath = targetPath;
-            tasks.add(_DownloadTask(
-              id: item.id,
-              title: item.title,
-              savePath: targetPath,
-              url: item.mediaDownloadUrl,
-              size: item.size,
-              kind: _DownloadTaskKind.network,
-            ));
-          }
+    void walk(TrackItem item, String dirPath) {
+      final targetPath = p.join(
+        dirPath,
+        getLegalWindowsName(item.title),
+      );
+      if (item is Folder) {
+        for (final child in item.children) {
+          walk(child, targetPath);
+        }
+      } else if (item is FileAsset) {
+        if (item.selected) {
+          item.savePath = targetPath;
+          tasks.add(_DownloadTask(
+            id: item.id,
+            title: item.title,
+            savePath: targetPath,
+            url: item.mediaDownloadUrl,
+            size: item.size,
+            kind: _DownloadTaskKind.network,
+          ));
         }
       }
-
-      walk(rootFolder, voiceWorkPath);
     }
+
+    walk(rootFolder, ctx.workDir);
 
     return tasks;
   }
 
-  /// 构建封面任务：优先使用内存中的封面字节，否则探测 Content-Length 后走网络下载。
+  /// 构建封面任务：优先使用快照中的封面字节，否则按快照 URL 探测
+  /// Content-Length 后走网络下载。
   /// 封面字节不可得且无法探测大小时返回 null（与旧逻辑一致：跳过封面）。
-  Future<_DownloadTask?> _buildCoverTask(String voiceWorkPath) async {
+  /// 只使用快照值：下载中搜索切走的作品不会影响封面来源。
+  Future<_DownloadTask?> _buildCoverTask(DownloadWorkContext ctx) async {
     if (!ref.read(dlCoverProvider)) return null;
 
-    final sourceId = ref.read(sourceIdProvider)!;
     final savePath = p.join(
-      voiceWorkPath,
-      sourceId,
-      '${sourceId}_cover.jpg',
+      ctx.workDir,
+      ctx.sourceId,
+      '${ctx.sourceId}_cover.jpg',
     );
     final coverName = p.basename(savePath);
 
-    final coverBytesAsync = ref.read(coverBytesProvider);
-    final bytes = coverBytesAsync.value;
-    if (coverBytesAsync is AsyncData && bytes != null) {
+    final bytes = ctx.coverBytes;
+    if (bytes != null) {
       return _DownloadTask(
         id: coverName,
         title: coverName,
@@ -590,7 +571,12 @@ class DownloadManager {
       );
     }
 
-    final coverUrl = ref.read(coverUrlProvider);
+    final coverUrl = ctx.coverUrl;
+    if (coverUrl.isEmpty) {
+      Log.error('download cover failed: $coverName\n'
+          'error: cover url is empty');
+      return null;
+    }
     final int? coverSize =
         await ref.read(asmrApiProvider).tryGetContentLength(coverUrl);
     if (coverSize == null) {

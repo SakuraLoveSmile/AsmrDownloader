@@ -9,6 +9,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.da
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/cache/media_library_settings.dart';
 import 'package:asmr_downloader/services/download/download_providers.dart';
+import 'package:asmr_downloader/services/download/download_work_context.dart';
 import 'package:asmr_downloader/services/engine/chicken_rice_engine_service.dart';
 import 'package:asmr_downloader/services/engine/engine_providers.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
@@ -576,8 +577,10 @@ class UIService {
   }
 
   /// 供「下载完成自动翻译」调用的非 UI 版本（无上下文提示直接执行）。
-  /// 目录优先从注册表取（下载完成已 upsert），兜底按当前搜索上下文计算。
-  Future<bool> autoTranscribe(String sourceId) async {
+  /// [sourceDir] 必须由调用方显式传入（下载上下文快照的 sourceDir），
+  /// 禁止根据当前搜索 provider 推导正在处理哪个作品。
+  /// 目录优先从注册表取（含目录移动修正），兜底使用传入的快照目录。
+  Future<bool> autoTranscribe(String sourceId, String sourceDir) async {
     final cfg = ref.read(chickenRiceConfigProvider);
     if (!cfg.isConfigured) return false;
     // 互斥：已有手动/自动翻译在跑时跳过，避免并发启动多个 infer.exe
@@ -593,15 +596,14 @@ class UIService {
       return false;
     }
 
-    String? sourceDir;
+    String? workDir;
     final entry = await ref.read(worksIndexProvider).get(sourceId);
     if (entry != null && Directory(entry.sourceDir).existsSync()) {
-      sourceDir = entry.sourceDir;
-    } else {
-      final fallback = p.join(ref.read(voiceWorkPathProvider), sourceId);
-      if (Directory(fallback).existsSync()) sourceDir = fallback;
+      workDir = entry.sourceDir;
+    } else if (Directory(sourceDir).existsSync()) {
+      workDir = sourceDir;
     }
-    if (sourceDir == null) {
+    if (workDir == null) {
       Log.warning('chickenRice autoTranscribe skipped: dir missing: $sourceId');
       return false;
     }
@@ -615,7 +617,7 @@ class UIService {
     _appendTranscribeLog('正在启动翻译引擎（杀毒软件首次扫描可能耗时较长）…');
 
     final result = await ref.read(chickenRiceServiceProvider).runOnDir(
-          sourceDir,
+          workDir,
           onProgress: (progress) {
             ref.read(transcribeProgressProvider.notifier).state = progress;
           },
@@ -683,11 +685,14 @@ class UIService {
       ..read(configFileProvider).addOrUpdate({'mediaLibraryRoots': roots});
   }
 
-  /// 执行整理（不依赖 UI），返回整理结果；未执行成功返回 null。
-  /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器（手动整理时 true，自动整理时 false）
+  /// 整理下载完成的作品（使用 [DownloadWorkContext] 快照，不依赖当前搜索状态），
+  /// 返回整理结果；未执行成功返回 null。
+  /// [pickPathIfEmpty] 整理路径未设置时是否弹目录选择器（自动整理时 true）
   /// 整理成功后会校验产物并把缺陷摘要并入 [verifyNote]（校验通过时为 null）。
-  Future<({OrganizeResult? result, String? verifyNote})> organizeCurrentWork(
-      {bool pickPathIfEmpty = false}) async {
+  Future<({OrganizeResult? result, String? verifyNote})> organizeDownloadedWork(
+    DownloadWorkContext ctx, {
+    bool pickPathIfEmpty = false,
+  }) async {
     var navidromePath = ref.read(navidromePathProvider);
     if (navidromePath.isEmpty) {
       if (!pickPathIfEmpty) {
@@ -699,54 +704,41 @@ class UIService {
       if (navidromePath.isEmpty) return (result: null, verifyNote: null);
     }
 
-    final sourceId = ref.read(sourceIdProvider);
-    if (sourceId == null) return (result: null, verifyNote: null);
-
-    final sourceDir = p.join(ref.read(voiceWorkPathProvider), sourceId);
-    if (!Directory(sourceDir).existsSync()) {
+    if (!Directory(ctx.sourceDir).existsSync()) {
       return (result: null, verifyNote: null);
     }
 
-    // 复用封面下载功能获取封面字节（不依赖本地 *_cover.jpg 文件）
-    Uint8List? coverBytes;
-    final coverAsync = ref.read(coverBytesProvider);
-    if (coverAsync is AsyncData && coverAsync.value != null) {
-      coverBytes = coverAsync.value;
-    } else {
-      final coverUrl = ref.read(coverUrlProvider);
-      if (coverUrl.isNotEmpty) {
-        coverBytes = await ref.read(asmrApiProvider).getCoverBytes(coverUrl);
-      }
+    // 封面：优先快照字节；缺失时按快照 URL 拉取（不读当前搜索状态）
+    Uint8List? coverBytes = ctx.coverBytes;
+    if (coverBytes == null && ctx.coverUrl.isNotEmpty) {
+      coverBytes = await ref.read(asmrApiProvider).getCoverBytes(ctx.coverUrl);
     }
 
-    // 走统一整理编排层（手动/自动/批量共用），含汉化 circle 跟踪与 artist 保底
-    final workInfo = ref.read(workInfoProvider).value;
-    final cvNames = ref.read(cvLsProvider).join('&');
-    // 社团名已解析为原始社团名（汉化版跟踪原版），整理与注册表共用同一值
-    final circleName = await ref.read(circleNameProvider.future);
+    // 元数据全部来自快照：不传 workInfo、不读 workInfoProvider/cvLsProvider，
+    // 下载中搜索切走的作品不会污染本作品的整理与注册表。
     final result = await ref.read(organizeServiceProvider).organizeWork(
-          sourceId: sourceId,
-          sourceDir: sourceDir,
+          sourceId: ctx.sourceId,
+          sourceDir: ctx.sourceDir,
           targetRoot: navidromePath,
-          workInfo: workInfo,
-          fallbackTitle: ref.read(titleProvider),
-          fallbackCvNames: cvNames,
-          fallbackCircle: circleName,
+          workInfo: null,
+          fallbackTitle: ctx.title,
+          fallbackCvNames: ctx.cvNames.join('&'),
+          fallbackCircle: ctx.circleName,
           coverBytes: coverBytes,
         );
 
     // 补录注册表（含整理时间），批量整理依赖它
     if (result != null) {
       final entry = WorkEntry(
-        sourceId: sourceId,
-        dlPath: ref.read(downloadPathProvider),
-        dirName: p.basename(ref.read(voiceWorkPathProvider)),
-        title: ref.read(titleProvider),
-        cvNames: cvNames,
-        circleName: circleName,
-        releaseDate: ref.read(releaseDateProvider),
-        tags: ref.read(tagLsProvider),
-        coverUrl: ref.read(coverUrlProvider),
+        sourceId: ctx.sourceId,
+        dlPath: ctx.downloadRoot,
+        dirName: p.basename(ctx.workDir),
+        title: ctx.title,
+        cvNames: ctx.cvNames.join('&'),
+        circleName: ctx.circleName,
+        releaseDate: ctx.releaseDate,
+        tags: ctx.tags,
+        coverUrl: ctx.coverUrl,
         organizedAt: DateTime.now().toIso8601String(),
       );
       await ref.read(worksIndexProvider).upsert(entry);
@@ -841,9 +833,10 @@ class UIService {
     return outcome;
   }
 
-  /// 下载完成后的自动整理（路径未设置时弹目录选择器）
-  Future<void> autoOrganize() async {
-    final outcome = await organizeCurrentWork(pickPathIfEmpty: true);
+  /// 下载完成后的自动整理（路径未设置时弹目录选择器）。
+  /// 使用下载开始时的上下文快照：下载中搜索切走的作品不影响本作品整理。
+  Future<void> autoOrganizeDownloadedWork(DownloadWorkContext ctx) async {
+    final outcome = await organizeDownloadedWork(ctx, pickPathIfEmpty: true);
     final result = outcome.result;
 
     if (result == null) {
