@@ -1,10 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:asmr_downloader/utils/source_id.dart';
 import 'package:path/path.dart' as p;
 
-bool isSourceIdValid(String sourceId) =>
-    RegExp(r'^(RJ|VJ|BJ)?\d+$', caseSensitive: false).hasMatch(sourceId);
+/// 输入合法性：RJ/VJ/BJ 前缀编号或纯数字（关键字搜索兜底）均放行。
+/// 前缀判断统一收口到 [SourceId]，避免 VJ/BJ 只在部分路径被识别。
+bool isSourceIdValid(String sourceId) {
+  final value = sourceId.trim();
+  return SourceId.isPrefixed(value) || RegExp(r'^\d+$').hasMatch(value);
+}
 
 /// 目录扫描：识别作品目录名中的 RJ/VJ/BJ 号（如 RJ01234567）。
 /// 返回规范化大写 sourceId（如 RJ12345678），否则 null。

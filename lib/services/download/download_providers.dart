@@ -6,6 +6,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.da
 import 'package:asmr_downloader/services/asmr_repo/providers/work_info_providers.dart';
 import 'package:asmr_downloader/services/download/download_manager.dart';
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:asmr_downloader/utils/source_id.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -32,7 +33,8 @@ final workTreePathProvider = StateProvider<List<String>>((ref) => const []);
 
 final searchResultProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final searchText = ref.watch(searchTextProvider);
-  if (searchText == null || searchText.startsWith('RJ')) {
+  // RJ/VJ/BJ 前缀编号直接走作品直查；纯数字/关键字才搜索
+  if (searchText == null || SourceId.isPrefixed(searchText)) {
     return null;
   }
 
@@ -46,13 +48,14 @@ final idProvider = Provider<String?>((ref) {
   if (searchText == null) {
     return null;
   }
-  if (searchText.startsWith('RJ')) {
-    return searchText.replaceAll(RegExp(r'[^0-9]'), '');
+  final normalized = SourceId.normalize(searchText);
+  if (normalized != null) {
+    return SourceId.digits(normalized);
   }
 
   final searchResult = ref.watch(searchResultProvider);
   return searchResult.maybeWhen(
-    data: (searchData) => searchData?['works'][0]['id'].toString(),
+    data: _firstWorkId,
     orElse: () => null,
   );
 });
@@ -62,16 +65,26 @@ final sourceIdProvider = Provider<String?>((ref) {
   if (searchText == null) {
     return null;
   }
-  if (searchText.startsWith('RJ')) {
-    return searchText;
+  final normalized = SourceId.normalize(searchText);
+  if (normalized != null) {
+    return normalized;
   }
 
   final searchResult = ref.watch(searchResultProvider);
   return searchResult.maybeWhen(
-    data: (searchData) => searchData?['works'][0]['source_id'].toString(),
+    data: (searchData) => _firstWorkId(searchData, key: 'source_id'),
     orElse: () => null,
   );
 });
+
+/// 从搜索结果取第一个作品字段；空结果/结构异常返回 null，禁止裸取 [0]。
+String? _firstWorkId(Map<String, dynamic>? searchData, {String key = 'id'}) {
+  final works = searchData?['works'];
+  if (works is! List || works.isEmpty) return null;
+  final first = works.first;
+  if (first is! Map) return null;
+  return first[key]?.toString();
+}
 
 final rootFolderProvider = StateProvider<Folder?>((ref) {
   final rawTracks = ref.watch(rawTracksProvider);
