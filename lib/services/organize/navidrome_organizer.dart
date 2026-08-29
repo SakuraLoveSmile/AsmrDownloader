@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:asmr_downloader/services/organize/audio_tag_writer.dart';
+import 'package:asmr_downloader/services/transcribe/subtitle_matcher.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/vtt_to_lrc.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
@@ -235,6 +236,18 @@ class NavidromeOrganizer {
         : p.basename(sourceFile.path);
   }
 
+  /// 扁平化布局是否会发生同名覆盖：不同子目录存在相同 basename 的文件
+  /// （如 disc1/01.wav 与 disc2/01.wav）。整理与 [hasExpectedFiles] 必须
+  /// 使用同一判定；冲突时统一回退为保留目录结构，绝不静默覆盖。
+  static bool flattenHasCollision(List<File> sourceFiles, String sourceDir) {
+    final basenameCounts = <String, int>{};
+    for (final file in sourceFiles) {
+      final base = p.basename(file.path);
+      basenameCounts[base] = (basenameCounts[base] ?? 0) + 1;
+    }
+    return basenameCounts.values.any((count) => count > 1);
+  }
+
   static Future<bool> hasExpectedFiles({
     required String sourceDir,
     required String targetRoot,
@@ -262,10 +275,15 @@ class NavidromeOrganizer {
     await _collectFiles(source, sourceFiles);
     if (sourceFiles.isEmpty) return false;
 
+    // 与 organize 相同的扁平冲突回退规则：冲突时目标布局是保留目录结构，
+    // 状态检查必须按同一规则指向真实布局，否则「仅整理未整理的」会错位。
+    final effectiveKeepDirStructure =
+        keepDirStructure || flattenHasCollision(sourceFiles, sourceDir);
+
     for (final sourceFile in sourceFiles) {
       final targetFile = File(p.join(
         targetDir,
-        _targetSubPath(sourceFile, sourceDir, keepDirStructure),
+        _targetSubPath(sourceFile, sourceDir, effectiveKeepDirStructure),
       ));
       if (!await targetFile.exists()) return false;
     }
@@ -322,6 +340,19 @@ class NavidromeOrganizer {
     int skipped = 0;
     int tagWriteFailures = 0;
 
+    // 收集源目录下所有文件（跳过隐藏文件和下载器生成的 *_cover.jpg）
+    final files = <File>[];
+    await _collectFiles(source, files);
+
+    // 扁平化冲突检测：不同子目录同名文件在扁平复制时会静默覆盖，
+    // 冲突时自动回退为保留目录结构（hasExpectedFiles 使用同一规则）。
+    var effectiveKeepDirStructure = keepDirStructure;
+    if (!effectiveKeepDirStructure && flattenHasCollision(files, sourceDir)) {
+      Log.warning('flatten collision detected, fallback to keep directory '
+          'structure: $sourceDir');
+      effectiveKeepDirStructure = true;
+    }
+
     // 封面：复用已获取的封面字节，保存为 Navidrome 识别的 cover.jpg
     if (coverBytes != null) {
       final coverFile = File(p.join(targetDir, 'cover.jpg'));
@@ -336,29 +367,23 @@ class NavidromeOrganizer {
       }
     }
 
-    // 收集源目录下所有文件（跳过隐藏文件和下载器生成的 *_cover.jpg）
-    final files = <File>[];
-    await _collectFiles(source, files);
-
-    // 建立歌词映射：音频引用名 → 歌词文本。
-    // 字幕文件命名可能带音频扩展名（"xxx.mp3.vtt" → key "xxx.mp3"）
-    // 或不带（"xxx.vtt" → key "xxx"），音频查找时两种 key 都试。
-    // 优先级：同名 .lrc > 同名 .vtt 转换结果（lrc 是人工/官方字幕，优先）。
-    final lrcMap = <String, String>{};
-    final vttMap = <String, String>{};
+    // 建立字幕匹配：统一走 [SubtitleMatcher]（相对路径优先，basename
+    // 全作品唯一才回退），disc1/01.vtt 不会错误绑定 disc2/01.wav。
+    // 字幕内容以文件路径为 key，由 matcher 负责音频 ↔ 字幕绑定。
+    final lrcContents = <String, String>{};
+    final vttContents = <String, String>{};
 
     Future<void> readSubtitle(File file, String suffix) async {
       final name = p.basename(file.path);
       if (!name.toLowerCase().endsWith(suffix)) return;
-      final key = name.substring(0, name.length - suffix.length);
       try {
         final content = await file.readAsString();
         if (suffix == '.lrc') {
-          lrcMap[key] = content;
+          lrcContents[file.path] = content;
         } else {
           final converted = vttToLrc(content);
           if (converted != null) {
-            vttMap[key] = converted;
+            vttContents[file.path] = converted;
           }
         }
       } catch (e) {
@@ -373,18 +398,41 @@ class NavidromeOrganizer {
       await readSubtitle(file, '.vtt');
     }
 
-    /// 音频文件的歌词：完整名或去扩展名两种 key，lrc 优先于 vtt
-    String? lyricsFor(String audioBasename) {
-      final base = p.basenameWithoutExtension(audioBasename);
-      return lrcMap[audioBasename] ??
-          lrcMap[base] ??
-          vttMap[audioBasename] ??
-          vttMap[base];
+    final matcher = SubtitleMatcher(
+      sourceDir: sourceDir,
+      audioPaths: [
+        for (final file in files)
+          if (AudioTagWriter.isAudioFile(file.path)) file.path,
+      ],
+      subtitlePaths: [...lrcContents.keys, ...vttContents.keys],
+    );
+
+    /// 音频文件的歌词：绑定字幕中 lrc 优先于 vtt（转换结果）
+    String? lyricsFor(String audioPath) {
+      String? lrc;
+      String? vtt;
+      for (final subtitle in matcher.subtitlesFor(audioPath)) {
+        final lrcText = lrcContents[subtitle];
+        if (lrcText != null) {
+          lrc ??= lrcText;
+          continue;
+        }
+        final vttText = vttContents[subtitle];
+        if (vttText != null) {
+          vtt ??= vttText;
+        }
+      }
+      return lrc ?? vtt;
     }
 
-    // 复制（keepDirStructure 为 true 时保留作品内子目录结构，否则扁平化）
+    /// 是否绑定了真实 .lrc（有真实 .lrc 时不生成 vtt 转换的侧车文件）
+    bool hasRealLrc(String audioPath) => matcher
+        .subtitlesFor(audioPath)
+        .any((subtitle) => subtitle.toLowerCase().endsWith('.lrc'));
+
+    // 复制（冲突回退后的 effectiveKeepDirStructure 决定布局）
     for (final file in files) {
-      final rel = _targetSubPath(file, sourceDir, keepDirStructure);
+      final rel = _targetSubPath(file, sourceDir, effectiveKeepDirStructure);
       final targetFile = File(p.join(targetDir, rel));
       if (await targetFile.exists() &&
           await targetFile.length() == await file.length()) {
@@ -399,17 +447,14 @@ class NavidromeOrganizer {
       if (AudioTagWriter.isAudioFile(targetFile.path)) {
         final audioName = p.basename(file.path);
         final base = p.basenameWithoutExtension(audioName);
-        final lyrics = lyricsFor(audioName);
+        final lyrics = lyricsFor(file.path);
 
         // VTT 转换出的歌词额外生成为 .lrc 侧车文件
         // （供 mp3tag 等其他工具使用；已有真实 .lrc 时跳过，避免覆盖）
         // 侧车文件跟随音频所在目录：扁平化时位于作品根，保留结构时位于
         // 音频对应的子目录。
-        final hasRealLrc =
-            lrcMap.containsKey(audioName) || lrcMap.containsKey(base);
-        if (lyrics != null &&
-            !hasRealLrc &&
-            (vttMap.containsKey(audioName) || vttMap.containsKey(base))) {
+        final realLrc = hasRealLrc(file.path);
+        if (lyrics != null && !realLrc) {
           final lrcDir = p.dirname(rel);
           final lrcFile = File(p.join(targetDir, lrcDir, '$audioName.lrc'));
           final existing =

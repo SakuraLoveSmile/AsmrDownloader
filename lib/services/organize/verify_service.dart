@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:asmr_downloader/services/organize/audio_tag_writer.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:asmr_downloader/services/transcribe/subtitle_matcher.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:asmr_downloader/utils/vtt_to_lrc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -131,10 +132,11 @@ class VerifyService {
       );
     }
 
-    // 源目录歌词 key（与 NavidromeOrganizer.organize 的 lrcMap/vttMap 完全一致：
-    // 带扩展名与不带扩展名两种 key；.vtt 仅计入可成功转换的）
-    final lrcKeys = <String>{};
-    final vttKeys = <String>{};
+    // 源目录音频 ↔ 字幕匹配：与 NavidromeOrganizer.organize 完全同一套
+    // [SubtitleMatcher] 规则（相对路径优先，basename 全作品唯一才回退），
+    // 避免整理与校验各用一套规则导致缺陷判定错位。
+    final sourceAudioPaths = <String>[];
+    final sourceSubtitlePaths = <String>[];
     final sourceDir = Directory(entry.sourceDir);
     if (sourceDir.existsSync()) {
       final files = <File>[];
@@ -143,19 +145,25 @@ class VerifyService {
         final name = p.basename(file.path);
         final lower = name.toLowerCase();
         if (lower.endsWith('.lrc')) {
-          lrcKeys.add(name.substring(0, name.length - 4));
+          sourceSubtitlePaths.add(file.path);
         } else if (lower.endsWith('.vtt')) {
-          final key = name.substring(0, name.length - 4);
           try {
             if (vttToLrc(await file.readAsString()) != null) {
-              vttKeys.add(key);
+              sourceSubtitlePaths.add(file.path);
             }
           } catch (e) {
             Log.warning('verify: read vtt failed: ${file.path}\n' 'error: $e');
           }
+        } else if (AudioTagWriter.isAudioFile(file.path)) {
+          sourceAudioPaths.add(file.path);
         }
       }
     }
+    final matcher = SubtitleMatcher(
+      sourceDir: entry.sourceDir,
+      audioPaths: sourceAudioPaths,
+      subtitlePaths: sourceSubtitlePaths,
+    );
 
     // 封面源：下载器落盘的本地封面，或注册表记录的在离线封面 URL
     final hasCoverSource = entry.coverUrl.trim().isNotEmpty ||
@@ -174,12 +182,11 @@ class VerifyService {
     for (final file in targetFiles) {
       if (!AudioTagWriter.isAudioFile(file.path)) continue;
       checkedAudio++;
-      final name = p.basename(file.path);
-      final base = p.basenameWithoutExtension(name);
-      final hasLrc = lrcKeys.contains(name) ||
-          lrcKeys.contains(base) ||
-          vttKeys.contains(name) ||
-          vttKeys.contains(base);
+      // 目标文件反推源音频路径（树状布局相对路径一致；扁平布局靠
+      // matcher 的唯一 basename 回退命中，与整理布局规则一致）。
+      final sourceAudio =
+          p.join(entry.sourceDir, p.relative(file.path, from: targetDir));
+      final hasLrc = matcher.hasSubtitle(sourceAudio);
       if (hasLrc) hasLyricsSource = true;
 
       // 第三方 LIST/INFO 曲名标签（无 id3 chunk）的 wav：本工具不重写，

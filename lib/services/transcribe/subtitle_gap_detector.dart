@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:asmr_downloader/services/transcribe/subtitle_matcher.dart';
 import 'package:path/path.dart' as p;
 
 /// 字幕扩展名（官方/本地字幕均视为「已有字幕」）。
@@ -44,33 +45,28 @@ class SubtitleGapDetector {
     List<String> audioExtensions = kAudioExtensions,
     List<String> subtitleExtensions = kSubtitleExtensions,
   }) {
-    final result = <File>[];
-    if (!Directory(sourceDir).existsSync()) return result;
+    if (!Directory(sourceDir).existsSync()) return const [];
 
     final audioExt = {for (final e in audioExtensions) e.toLowerCase()};
     final subExt = {for (final e in subtitleExtensions) e.toLowerCase()};
 
-    // 单次遍历同时收集音轨与字幕文件名 key。
+    // 单次遍历同时收集音轨与字幕路径，匹配交给统一的 [SubtitleMatcher]。
     // （旧实现对每个音轨都全量重扫一遍目录判字幕，O(N×M) 同步 I/O，
     // 音轨多时点击「生成字幕」主 isolate 会明显卡顿。）
-    final audios = <File>[];
-    final subtitleKeys = <String>{};
+    final audioPaths = <String>[];
+    final subtitlePaths = <String>[];
     for (final file in _allFiles(sourceDir)) {
       final name = p.basename(file.path).toLowerCase();
       final ext = p.extension(name);
       if (audioExt.contains(ext)) {
-        audios.add(file);
+        audioPaths.add(file.path);
       } else if (subExt.contains(ext)) {
-        subtitleKeys.add(name.substring(0, name.length - ext.length));
+        subtitlePaths.add(file.path);
       }
     }
-
-    for (final audio in audios) {
-      if (!_hasSubtitleKey(subtitleKeys, audio)) {
-        result.add(audio);
-      }
-    }
-    return result;
+    return _filterMissing(sourceDir, audioPaths, subtitlePaths)
+        .map(File.new)
+        .toList();
   }
 
   /// 返回指定目录下音轨文件总数（递归，扩展名不区分大小写）。
@@ -95,30 +91,43 @@ class SubtitleGapDetector {
     List<String> audioExtensions = kAudioExtensions,
     List<String> subtitleExtensions = kSubtitleExtensions,
   }) async {
-    final result = <File>[];
-    if (!await Directory(sourceDir).exists()) return result;
+    if (!await Directory(sourceDir).exists()) return const [];
 
     final audioExt = {for (final e in audioExtensions) e.toLowerCase()};
     final subExt = {for (final e in subtitleExtensions) e.toLowerCase()};
 
-    final audios = <File>[];
-    final subtitleKeys = <String>{};
+    final audioPaths = <String>[];
+    final subtitlePaths = <String>[];
     await for (final file in _allFilesAsync(sourceDir)) {
       final name = p.basename(file.path).toLowerCase();
       final ext = p.extension(name);
       if (audioExt.contains(ext)) {
-        audios.add(file);
+        audioPaths.add(file.path);
       } else if (subExt.contains(ext)) {
-        subtitleKeys.add(name.substring(0, name.length - ext.length));
+        subtitlePaths.add(file.path);
       }
     }
+    return _filterMissing(sourceDir, audioPaths, subtitlePaths)
+        .map(File.new)
+        .toList();
+  }
 
-    for (final audio in audios) {
-      if (!_hasSubtitleKey(subtitleKeys, audio)) {
-        result.add(audio);
-      }
-    }
-    return result;
+  /// 用统一的 [SubtitleMatcher] 过滤出缺少字幕的音轨路径
+  /// （相对路径优先，basename 全作品唯一时才回退）。
+  static List<String> _filterMissing(
+    String sourceDir,
+    List<String> audioPaths,
+    List<String> subtitlePaths,
+  ) {
+    final matcher = SubtitleMatcher(
+      sourceDir: sourceDir,
+      audioPaths: audioPaths,
+      subtitlePaths: subtitlePaths,
+    );
+    return [
+      for (final audio in audioPaths)
+        if (!matcher.hasSubtitle(audio)) audio,
+    ];
   }
 
   /// [countAudioFiles] 的异步版本（不阻塞调用方 isolate）。
@@ -133,26 +142,6 @@ class SubtitleGapDetector {
       if (audioExt.contains(p.extension(file.path).toLowerCase())) count++;
     }
     return count;
-  }
-
-  /// 用单次遍历收集的 [subtitleKeys] 判断 [audio] 是否已有同名字幕。
-  ///
-  /// 覆盖两种命名：
-  /// - `foo.lrc` / `foo.vtt` / `foo.srt`（key = stem，即 "foo"）
-  /// - `foo.mp3.lrc` / `foo.mp3.vtt`（key = stem + 音频扩展名，如 "foo.mp3"）
-  ///
-  /// 字幕与音轨不要求同目录（按文件名匹配，与整理逻辑一致）；
-  /// stem 比较不区分大小写。
-  static bool _hasSubtitleKey(Set<String> subtitleKeys, File audio) {
-    final basename = p.basename(audio.path).toLowerCase();
-    final stem = p.basenameWithoutExtension(basename);
-    if (subtitleKeys.contains(stem)) return true;
-    // targets 由 kAudioExtensions 泛化生成，保证视频音轨（如 foo.mp4）的
-    // `foo.mp4.vtt` 也能被识别为已有字幕，避免重复翻译。
-    for (final ext in kAudioExtensions) {
-      if (subtitleKeys.contains('$stem${ext.toLowerCase()}')) return true;
-    }
-    return false;
   }
 
   static Iterable<File> _allFiles(String dir) sync* {
