@@ -941,22 +941,42 @@ void main() {
     });
   });
 
-
   /// 构造最小合法 wav（RIFF + WAVE 头），AudioTagWriter 可写入标签。
   Uint8List buildMinimalWav({int fill = 0}) {
-    Uint8List u32le(int v) =>
-        Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
+    Uint8List u32le(int v) => Uint8List.fromList(
+        [v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
     final fmt = Uint8List.fromList([
-      0x01, 0x00, 0x01, 0x00, 0x40, 0x1F, 0x00, 0x00,
-      0x80, 0x3E, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00,
+      0x01,
+      0x00,
+      0x01,
+      0x00,
+      0x40,
+      0x1F,
+      0x00,
+      0x00,
+      0x80,
+      0x3E,
+      0x00,
+      0x00,
+      0x02,
+      0x00,
+      0x10,
+      0x00,
     ]);
     final data = List<int>.filled(16, fill);
     final body = <int>[
-      ...'fmt '.codeUnits, ...u32le(fmt.length), ...fmt,
-      ...'data'.codeUnits, ...u32le(data.length), ...data,
+      ...'fmt '.codeUnits,
+      ...u32le(fmt.length),
+      ...fmt,
+      ...'data'.codeUnits,
+      ...u32le(data.length),
+      ...data,
     ];
     return Uint8List.fromList([
-      ...'RIFF'.codeUnits, ...u32le(4 + body.length), ...'WAVE'.codeUnits, ...body,
+      ...'RIFF'.codeUnits,
+      ...u32le(4 + body.length),
+      ...'WAVE'.codeUnits,
+      ...body,
     ]);
   }
 
@@ -1033,8 +1053,10 @@ void main() {
     test('同名不同目录：disc1 字幕不会绑定 disc2 音频', () async {
       final d1 = Directory(p.join(sourceDir.path, 'disc1'))..createSync();
       final d2 = Directory(p.join(sourceDir.path, 'disc2'))..createSync();
-      File(p.join(d1.path, '01.wav')).writeAsBytesSync(buildMinimalWav(fill: 1));
-      File(p.join(d2.path, '01.wav')).writeAsBytesSync(buildMinimalWav(fill: 2));
+      File(p.join(d1.path, '01.wav'))
+          .writeAsBytesSync(buildMinimalWav(fill: 1));
+      File(p.join(d2.path, '01.wav'))
+          .writeAsBytesSync(buildMinimalWav(fill: 2));
       // 只有 disc1 有字幕
       File(p.join(d1.path, '01.lrc')).writeAsStringSync('[00:01.00]disc1歌词');
 

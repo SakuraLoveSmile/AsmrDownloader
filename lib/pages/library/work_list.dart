@@ -57,9 +57,7 @@ class LibraryWorkListState extends ConsumerState<LibraryWorkList> {
     if (failed == 0) {
       ref.read(uiServiceProvider).showSnack('修复缺陷完成：成功 $repaired');
     } else {
-      ref
-          .read(uiServiceProvider)
-          .showSnack('修复缺陷完成：成功 $repaired，失败 $failed');
+      ref.read(uiServiceProvider).showSnack('修复缺陷完成：成功 $repaired，失败 $failed');
     }
   }
 

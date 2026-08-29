@@ -57,8 +57,9 @@ class FakeRepairOrganizeService extends OrganizeService {
     bool forceReorganize = false,
   }) async {
     final current = ref.read(itemsState);
-    ref.read(itemsState.notifier).state =
-        current.map((w) => w.sourceId == entry.sourceId ? cleared(w) : w).toList();
+    ref.read(itemsState.notifier).state = current
+        .map((w) => w.sourceId == entry.sourceId ? cleared(w) : w)
+        .toList();
     return OrganizeEntryOutcome(
       result: const OrganizeResult(copied: 1, skipped: 0, targetDir: ''),
       resolvedEntry: entry.copyWith(verifyNote: null, verifyRepairable: false),
@@ -124,8 +125,8 @@ void main() {
     final container = ProviderContainer(overrides: [
       itemsState,
       navidromePathProvider.overrideWith((ref) => '/tmp/nav'),
-      organizeServiceProvider.overrideWith(
-          (ref) => FakeRepairOrganizeService(ref, itemsState)),
+      organizeServiceProvider
+          .overrideWith((ref) => FakeRepairOrganizeService(ref, itemsState)),
     ]);
     addTearDown(container.dispose);
     return (container, itemsState);
@@ -156,8 +157,7 @@ void main() {
     );
   }
 
-  Widget buildHarness(
-      ProviderContainer container,
+  Widget buildHarness(ProviderContainer container,
       StateProvider<List<WorksListItem>> itemsState) {
     return UncontrolledProviderScope(
       container: container,
@@ -174,17 +174,14 @@ void main() {
 
     expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     final tooltip = tester.widget<Tooltip>(
-      find.byWidgetPredicate(
-          (w) => w is Tooltip && w.message == '2 首缺内嵌歌词'),
+      find.byWidgetPredicate((w) => w is Tooltip && w.message == '2 首缺内嵌歌词'),
     );
     expect(tooltip.message, '2 首缺内嵌歌词');
   });
 
   testWidgets('可修复缺陷显示修复按钮', (tester) async {
     final item = mkItem(
-        sourceId: 'RJ00001',
-        verifyNote: '2 首缺内嵌歌词',
-        verifyRepairable: true);
+        sourceId: 'RJ00001', verifyNote: '2 首缺内嵌歌词', verifyRepairable: true);
     final (container, _) = makeContainer([item]);
 
     await tester.pumpWidget(buildRow(container, item));
@@ -211,9 +208,7 @@ void main() {
   testWidgets('修复成功并复验通过后警告消失', (tester) async {
     final items = [
       mkItem(
-          sourceId: 'RJ00001',
-          verifyNote: '2 首缺内嵌歌词',
-          verifyRepairable: true),
+          sourceId: 'RJ00001', verifyNote: '2 首缺内嵌歌词', verifyRepairable: true),
     ];
     final (container, itemsState) = makeContainer(items);
 
