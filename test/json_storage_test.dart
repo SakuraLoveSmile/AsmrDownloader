@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:asmr_downloader/utils/json_storage.dart';
@@ -40,5 +41,44 @@ void main() {
 
     final saved = await JsonStorage(filePath: configPath).read();
     expect(saved['a'], 2);
+  });
+
+  test('原子写：成功后保留 .bak（上一份已知完好内容）且无 .tmp 残留', () async {
+    final storage = JsonStorage(filePath: configPath);
+
+    await storage.write({'v': 1});
+    await storage.write({'v': 2});
+
+    expect(await JsonStorage(filePath: configPath).read(), {'v': 2});
+    expect(File('$configPath.bak').existsSync(), isTrue);
+    expect(json.decode(await File('$configPath.bak').readAsString()), {'v': 1});
+    expect(File('$configPath.tmp').existsSync(), isFalse);
+  });
+
+  test('读取恢复：正式文件损坏时自动回退 .bak 并恢复正式文件', () async {
+    final storage = JsonStorage(filePath: configPath);
+
+    await storage.write({'v': 1});
+    await storage.write({'v': 2});
+    // 模拟异常退出留下的半截 JSON
+    await File(configPath).writeAsString('{"v": 2');
+
+    // .bak 是上一次成功写入（v:1），损坏的最后一次写入丢失
+    final restored = await JsonStorage(filePath: configPath).read();
+    expect(restored, {'v': 1});
+    // 自动恢复：正式文件已可正常解析
+    expect(json.decode(await File(configPath).readAsString()), {'v': 1});
+  });
+
+  test('读取恢复：正式文件与 .bak 均不可用时返回空配置', () async {
+    await JsonStorage(filePath: configPath).write({'v': 1});
+    await File(configPath).writeAsString('{broken');
+    await File('$configPath.bak').writeAsString('also broken');
+
+    expect(await JsonStorage(filePath: configPath).read(), <String, dynamic>{});
+  });
+
+  test('读取：文件不存在（首次运行）返回空配置且不报错', () async {
+    expect(await JsonStorage(filePath: configPath).read(), <String, dynamic>{});
   });
 }

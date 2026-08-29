@@ -1,7 +1,4 @@
-import 'dart:convert';
-import 'dart:io';
-
-import 'package:asmr_downloader/utils/log.dart';
+import 'package:asmr_downloader/utils/json_storage.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -66,28 +63,15 @@ class DownloadQueue {
   Future<void> _pendingWrite = Future.value();
 
   Future<Map<String, dynamic>> _readRaw() async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) return {'items': <String>[]};
-      final decoded = json.decode(await file.readAsString());
-      if (decoded is Map<String, dynamic>) return decoded;
-      return {'items': <String>[]};
-    } catch (e) {
-      Log.warning('read download queue failed: $filePath\n' 'error: $e');
-      return {'items': <String>[]};
-    }
+    // 正式文件损坏时自动回退 .bak 恢复（writeJsonAtomic 的读取语义）
+    final decoded = await readJsonWithBackup(filePath);
+    if (decoded != null) return decoded;
+    return {'items': <String>[]};
   }
 
   Future<void> _writeRaw(Map<String, dynamic> data) async {
-    try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        await file.create(recursive: true);
-      }
-      await file.writeAsString(json.encode(data));
-    } catch (e) {
-      Log.error('write download queue failed: $filePath\n' 'error: $e');
-    }
+    // 原子写；失败时抛出（经 Notifier 返回 UI），不让调用方误以为已成功落盘
+    await writeJsonAtomic(filePath, data);
   }
 
   Future<List<DownloadQueueItem>> _readItems() async {
