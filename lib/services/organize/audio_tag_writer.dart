@@ -43,7 +43,8 @@ class AudioTagWriter {
       final ext = filePath.split('.').last.toLowerCase();
       switch (ext) {
         case 'wav':
-          return _writeWavTags(filePath,
+          // 必须 await：try 内直接 return future 会让异步异常逃出 catch
+          return await _writeWavTags(filePath,
               title: title,
               artist: artist,
               album: album,
@@ -56,7 +57,7 @@ class AudioTagWriter {
               forceWavRewrite: forceWavRewrite);
         case 'mp3':
         case 'flac':
-          return _writeTaglibTags(filePath,
+          return await _writeTaglibTags(filePath,
               title: title,
               artist: artist,
               album: album,

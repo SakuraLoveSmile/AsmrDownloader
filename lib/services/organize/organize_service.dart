@@ -6,6 +6,7 @@ import 'package:asmr_downloader/services/asmr_repo/providers/api_providers.dart'
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
+import 'package:asmr_downloader/services/organize/verify_service.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
 import 'package:asmr_downloader/services/organize/works_scanner.dart';
 import 'package:asmr_downloader/utils/log.dart';
@@ -350,6 +351,11 @@ class OrganizeService {
   /// 手动编辑过的条目（[entry.manuallyEditedAt] 非 null）优先使用手动值：
   /// title / cvNames / releaseDate / tags 非空即用，社团名直接采用且跳过
   /// 汉化重解析；workInfo 仅继续用于封面拉取。
+  ///
+  /// [forceReorganize] 完全重新整理：走 staging 事务流程——先把整理产物
+  /// 写入 `<targetRoot>/.asmr-staging/<sourceId>-<时间戳>/`，校验通过后
+  /// 再原子替换正式目录（旧产物先备份，替换失败自动回滚）。全程不先删除
+  /// 正式目录，任何失败都会保留原有整理产物。
   Future<OrganizeEntryOutcome> organizeEntry(
     WorkEntry entry, {
     required String targetRoot,
@@ -358,15 +364,14 @@ class OrganizeService {
     bool forceWavRewrite = false,
     bool forceReorganize = false,
   }) async {
-    // 完全重新整理：先删除媒体库中的既有整理产物，再依据当前元数据完整重建。
+    final String? stagingRoot;
     if (forceReorganize) {
-      Log.info('完全重新整理：${entry.sourceId} 清理旧产物中…');
-      await NavidromeOrganizer.deleteWorkTargetDirs(
-        targetRoot: targetRoot,
-        sourceId: entry.sourceId,
-      );
-      Log.info('完全重新整理：${entry.sourceId} 正在重新整理…');
+      Log.info('完全重新整理：${entry.sourceId} 使用 staging 事务流程');
+      stagingRoot = await _prepareStaging(targetRoot, entry.sourceId);
+    } else {
+      stagingRoot = null;
     }
+    final effectiveTargetRoot = stagingRoot ?? targetRoot;
 
     final manual = entry.manuallyEditedAt != null;
     Map<String, dynamic>? workInfo;
@@ -437,27 +442,36 @@ class OrganizeService {
           : '$metadataNote；$coverNote';
     }
 
-    final result = await organizeWork(
-      sourceId: entry.sourceId,
-      sourceDir: entry.sourceDir,
-      targetRoot: targetRoot,
-      workInfo: workInfo,
-      fallbackTitle: fallbackTitle,
-      fallbackCvNames: fallbackCvNames,
-      fallbackCircle: entry.circleName,
-      resolvedCircleName: resolvedCircleName,
-      coverBytes: coverBytes,
-      keepDirStructure: keepDirStructure,
-      forceWavRewrite: forceReorganize || forceWavRewrite,
-      // 手动编辑优先：非空即用，不被在线元数据覆盖
-      overrideTitle: manual && entry.title.isNotEmpty ? entry.title : null,
-      overrideCvNames:
-          manual && entry.cvNames.isNotEmpty ? entry.cvNames : null,
-      overrideCircleName: manual ? entry.circleName : null,
-      overrideReleaseDate:
-          manual && entry.releaseDate.isNotEmpty ? entry.releaseDate : null,
-      overrideGenres: manual && entry.tags.isNotEmpty ? entry.tags : null,
-    );
+    OrganizeResult? result;
+    try {
+      result = await organizeWork(
+        sourceId: entry.sourceId,
+        sourceDir: entry.sourceDir,
+        targetRoot: effectiveTargetRoot,
+        workInfo: workInfo,
+        fallbackTitle: fallbackTitle,
+        fallbackCvNames: fallbackCvNames,
+        fallbackCircle: entry.circleName,
+        resolvedCircleName: resolvedCircleName,
+        coverBytes: coverBytes,
+        keepDirStructure: keepDirStructure,
+        forceWavRewrite: forceReorganize || forceWavRewrite,
+        // 手动编辑优先：非空即用，不被在线元数据覆盖
+        overrideTitle: manual && entry.title.isNotEmpty ? entry.title : null,
+        overrideCvNames:
+            manual && entry.cvNames.isNotEmpty ? entry.cvNames : null,
+        overrideCircleName: manual ? entry.circleName : null,
+        overrideReleaseDate:
+            manual && entry.releaseDate.isNotEmpty ? entry.releaseDate : null,
+        overrideGenres: manual && entry.tags.isNotEmpty ? entry.tags : null,
+      );
+    } catch (_) {
+      // staging 中途失败：清理 staging 后原样抛出（正式目录从未被改动）
+      if (stagingRoot != null) {
+        await _discardStaging(targetRoot, entry.sourceId);
+      }
+      rethrow;
+    }
 
     // 解析后的元数据回写（在线拉取成功时入库带真实字段；workInfo 为空保留原字段；
     // 手动编辑过的条目保留手动字段与手动标记，后续整理继续以手动值为准）。
@@ -473,7 +487,54 @@ class OrganizeService {
     // 整理产物校验（缺歌词/封面等缺陷摘要，供批量消息与 snack 展示）。
     // 校验只读不修改文件；用解析后的 resolvedEntry 保证目标目录与本次整理一致。
     String? verifyNote;
-    if (result != null) {
+    if (result != null && stagingRoot != null) {
+      // staging 事务流程：先对 staging 产物执行校验，通过才替换正式目录。
+      // 任何一步失败都只删除 staging，旧整理产物原样保留。
+      VerifyWorkResult? verify;
+      try {
+        verify = await ref.read(verifyServiceProvider).verifyWork(
+              resolved,
+              targetRoot: stagingRoot,
+              keepDirStructure: keepDirStructure,
+            );
+      } catch (e) {
+        Log.warning('verify staging failed: ${entry.sourceId}\n' 'error: $e');
+      }
+      if (verify == null || !verify.ok) {
+        await _discardStaging(targetRoot, entry.sourceId);
+        return OrganizeEntryOutcome(
+          result: null,
+          resolvedEntry: entry,
+          metadataNote: _appendMetadataNote(
+              '完全重新整理失败：staging 校验未通过，已保留原整理产物', metadataNote),
+        );
+      }
+      if (!await _swapStagingIntoTarget(
+        targetRoot: targetRoot,
+        stagingRoot: stagingRoot,
+        stagingTargetDir: result.targetDir,
+        sourceId: entry.sourceId,
+      )) {
+        return OrganizeEntryOutcome(
+          result: null,
+          resolvedEntry: entry,
+          metadataNote: _appendMetadataNote(
+              '完全重新整理失败：替换整理产物失败（已回滚），已保留原整理产物', metadataNote),
+        );
+      }
+      // 替换成功：staging 校验结果即正式目录的校验结果，持久化状态
+      verifyNote = '校验通过';
+      try {
+        resolved = await ref.read(worksIndexProvider).updateVerifyState(
+              resolved,
+              verifyNote: null,
+              verifyRepairable: verify.repairable,
+            );
+      } catch (e) {
+        Log.warning('persist verify state failed: ${entry.sourceId}\n'
+            'error: $e');
+      }
+    } else if (result != null) {
       try {
         final verify = await ref.read(verifyServiceProvider).verifyWork(
               resolved,
@@ -493,6 +554,9 @@ class OrganizeService {
       } catch (e) {
         Log.warning('verify work failed: ${entry.sourceId}\n' 'error: $e');
       }
+    } else if (stagingRoot != null) {
+      // 整理未执行（如源目录缺失）：清理 staging，旧整理产物不动
+      await _discardStaging(targetRoot, entry.sourceId);
     }
 
     return OrganizeEntryOutcome(
@@ -501,6 +565,122 @@ class OrganizeService {
       metadataNote: metadataNote,
       verifyNote: verifyNote,
     );
+  }
+
+  /// 准备 staging 目录：`<targetRoot>/.asmr-staging/<sourceId>-<时间戳>/`。
+  /// 与正式目录同一文件系统，替换用 rename 完成。开始新整理前先清理
+  /// 属于当前 sourceId 的历史 staging（上次中断残留）。
+  Future<String> _prepareStaging(String targetRoot, String sourceId) async {
+    final stagingBase = Directory(p.join(targetRoot, '.asmr-staging'));
+    await _cleanStagingDirs(stagingBase, sourceId);
+    final stagingDir = Directory(p.join(
+      stagingBase.path,
+      '$sourceId-${DateTime.now().millisecondsSinceEpoch}',
+    ));
+    await stagingDir.create(recursive: true);
+    return stagingDir.path;
+  }
+
+  /// 删除当前 sourceId 的全部 staging 目录，并尽力清掉空的 staging 基目录
+  Future<void> _discardStaging(String targetRoot, String sourceId) async {
+    final stagingBase = Directory(p.join(targetRoot, '.asmr-staging'));
+    await _cleanStagingDirs(stagingBase, sourceId);
+  }
+
+  Future<void> _cleanStagingDirs(
+    Directory stagingBase,
+    String sourceId,
+  ) async {
+    if (!await stagingBase.exists()) return;
+    await for (final entity in stagingBase.list()) {
+      if (entity is Directory &&
+          p.basename(entity.path).startsWith('$sourceId-')) {
+        try {
+          await entity.delete(recursive: true);
+        } catch (e) {
+          Log.warning('clean staging dir failed: ${entity.path}\nerror: $e');
+        }
+      }
+    }
+    try {
+      // 仅在为空时才会成功，避免影响其它作品的 staging
+      await stagingBase.delete();
+    } catch (_) {}
+  }
+
+  /// 把 staging 中的整理产物替换到正式目录（事务化替换）。
+  ///
+  /// 流程：旧产物逐个 rename 为 `<原路径>.asmr-backup` → staging 作品目录
+  /// rename 到正式位置 → 删除备份并向上清理空目录。任一步失败时把已备份
+  /// 的旧目录恢复原位并删除 staging，返回 false。
+  Future<bool> _swapStagingIntoTarget({
+    required String targetRoot,
+    required String stagingRoot,
+    required String stagingTargetDir,
+    required String sourceId,
+  }) async {
+    final officialTargetDir = p.join(
+      targetRoot,
+      p.relative(stagingTargetDir, from: stagingRoot),
+    );
+    final rootDir = Directory(p.absolute(p.normalize(targetRoot)));
+
+    final backups = <String, String>{};
+    try {
+      // 1. 旧整理产物 -> 备份（同文件系统 rename）
+      final oldDirs = await NavidromeOrganizer.findWorkTargetDirs(
+        targetRoot: targetRoot,
+        sourceId: sourceId,
+      );
+      for (final dir in oldDirs) {
+        final normalized = p.absolute(p.normalize(dir));
+        // 与删除流程一致的安全边界：绝不处理 targetRoot 本身或越界路径
+        if (p.equals(normalized, rootDir.path) ||
+            !p.isWithin(rootDir.path, normalized)) {
+          Log.warning('swap staging: skip unsafe path $dir');
+          continue;
+        }
+        final backupPath = '$normalized.asmr-backup';
+        await Directory(normalized).rename(backupPath);
+        backups[normalized] = backupPath;
+      }
+
+      // 2. staging -> 正式位置
+      await Directory(p.dirname(officialTargetDir)).create(recursive: true);
+      if (await Directory(officialTargetDir).exists()) {
+        // 旧目录已全部备份，此处仍存在说明有未知冲突：保守失败并回滚
+        throw StateError(
+            'official target dir already exists: $officialTargetDir');
+      }
+      await Directory(stagingTargetDir).rename(officialTargetDir);
+    } catch (e) {
+      // 回滚：备份恢复原位
+      for (final backup in backups.entries) {
+        try {
+          await Directory(backup.value).rename(backup.key);
+        } catch (re) {
+          Log.error('restore backup failed: ${backup.value}\nerror: $re');
+        }
+      }
+      await _discardStaging(targetRoot, sourceId);
+      Log.warning('swap staging into target failed: $sourceId\nerror: $e');
+      return false;
+    }
+
+    // 3. 删除备份并清理空父目录
+    for (final backup in backups.values) {
+      try {
+        await Directory(backup).delete(recursive: true);
+        await NavidromeOrganizer.cleanupEmptyParentsUpTo(
+          Directory(backup),
+          rootDir,
+        );
+      } catch (e) {
+        Log.warning('delete backup failed: $backup\nerror: $e');
+      }
+    }
+    await _discardStaging(targetRoot, sourceId);
+    return true;
   }
 
   /// 缓存优先拉取 workInfo（供汉化版原版 circle 跟踪等场景复用）。
