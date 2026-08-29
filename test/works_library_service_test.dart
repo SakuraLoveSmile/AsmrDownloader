@@ -270,9 +270,8 @@ void main() {
     File(p.join(inner.path, '01.wav')).writeAsStringSync('a');
     File(p.join(inner.path, '02.wav')).writeAsStringSync('b');
 
-    final items = await makeContainer()
-        .read(worksLibraryServiceProvider)
-        .listWorks();
+    final items =
+        await makeContainer().read(worksLibraryServiceProvider).listWorks();
     expect(items, hasLength(1));
     expect(items.single.sourceId, 'RJ12345678');
     expect(items.single.trackCount, 2);
@@ -285,9 +284,8 @@ void main() {
     File(p.join(flat.path, '01.wav')).writeAsStringSync('a');
     File(p.join(flat.path, '02.wav')).writeAsStringSync('b');
 
-    final items = await makeContainer()
-        .read(worksLibraryServiceProvider)
-        .listWorks();
+    final items =
+        await makeContainer().read(worksLibraryServiceProvider).listWorks();
     expect(items, hasLength(1));
     final item = items.single;
     expect(item.trackCount, 2);
@@ -295,16 +293,14 @@ void main() {
   });
 
   test('扫描基线：社团三层目录识别为真实音轨目录', () async {
-    final wrapper =
-        Directory(p.join(dlRoot.path, '社团', 'RJ12345678 - CV - 标题'))
-          ..createSync(recursive: true);
+    final wrapper = Directory(p.join(dlRoot.path, '社团', 'RJ12345678 - CV - 标题'))
+      ..createSync(recursive: true);
     final inner = Directory(p.join(wrapper.path, 'RJ12345678'))..createSync();
     File(p.join(inner.path, '01.wav')).writeAsStringSync('a');
     File(p.join(inner.path, '02.wav')).writeAsStringSync('b');
 
-    final items = await makeContainer()
-        .read(worksLibraryServiceProvider)
-        .listWorks();
+    final items =
+        await makeContainer().read(worksLibraryServiceProvider).listWorks();
     expect(items, hasLength(1));
     final item = items.single;
     expect(item.trackCount, 2);
@@ -338,9 +334,8 @@ void main() {
     File(p.join(newDir.path, '01.wav')).writeAsStringSync('a');
     File(p.join(newDir.path, '02.wav')).writeAsStringSync('b');
 
-    final items = await makeContainer()
-        .read(worksLibraryServiceProvider)
-        .listWorks();
+    final items =
+        await makeContainer().read(worksLibraryServiceProvider).listWorks();
     expect(items, hasLength(1));
     final item = items.single;
     // 立即用真实目录统计音轨，sourceDir 指向新目录
@@ -390,9 +385,8 @@ void main() {
     File(p.join(otherDir.path, 'e01.wav')).writeAsStringSync('b');
     File(p.join(otherDir.path, 'e02.wav')).writeAsStringSync('c');
 
-    final items = await makeContainer()
-        .read(worksLibraryServiceProvider)
-        .listWorks();
+    final items =
+        await makeContainer().read(worksLibraryServiceProvider).listWorks();
     expect(items, hasLength(1));
     final item = items.single;
     // 继续使用注册表路径，音轨只统计注册表目录

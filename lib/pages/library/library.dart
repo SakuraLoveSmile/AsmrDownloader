@@ -49,8 +49,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             const CompleteWorksButton(),
             if (repairableCount > 0)
               OutlinedButton(
-                onPressed: () =>
-                    _workListKey.currentState?.repairRepairable(),
+                onPressed: () => _workListKey.currentState?.repairRepairable(),
                 child: Text('修复缺陷（$repairableCount）'),
               ),
             TranscribeStatusIndicator(onStart: _onToolbarTranscribe),
