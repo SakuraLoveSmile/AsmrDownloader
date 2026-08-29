@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:asmr_downloader/services/organize/audio_tag_writer.dart';
 import 'package:asmr_downloader/services/organize/navidrome_organizer.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -937,6 +938,129 @@ void main() {
         sourceId: 'RJ00000000',
       );
       expect(deleted, 0);
+    });
+  });
+
+
+  /// 构造最小合法 wav（RIFF + WAVE 头），AudioTagWriter 可写入标签。
+  Uint8List buildMinimalWav({int fill = 0}) {
+    Uint8List u32le(int v) =>
+        Uint8List.fromList([v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF]);
+    final fmt = Uint8List.fromList([
+      0x01, 0x00, 0x01, 0x00, 0x40, 0x1F, 0x00, 0x00,
+      0x80, 0x3E, 0x00, 0x00, 0x02, 0x00, 0x10, 0x00,
+    ]);
+    final data = List<int>.filled(16, fill);
+    final body = <int>[
+      ...'fmt '.codeUnits, ...u32le(fmt.length), ...fmt,
+      ...'data'.codeUnits, ...u32le(data.length), ...data,
+    ];
+    return Uint8List.fromList([
+      ...'RIFF'.codeUnits, ...u32le(4 + body.length), ...'WAVE'.codeUnits, ...body,
+    ]);
+  }
+
+  group('扁平整理同名冲突（Phase 4）', () {
+    // disc1/01.wav + disc2/01.wav：扁平化会静默覆盖，必须自动回退树状布局
+    void createDiscWork() {
+      final d1 = Directory(p.join(sourceDir.path, 'disc1'))..createSync();
+      final d2 = Directory(p.join(sourceDir.path, 'disc2'))..createSync();
+      File(p.join(d1.path, '01.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 1)));
+      File(p.join(d2.path, '01.wav'))
+          .writeAsBytesSync(Uint8List.fromList(List.filled(100, 2)));
+    }
+
+    test('冲突时自动回退保留目录结构，不静默覆盖', () async {
+      createDiscWork();
+
+      final result = await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV',
+        title: '标题',
+        keepDirStructure: false,
+      );
+
+      final target = NavidromeOrganizer.targetDirPath(
+        targetRoot: targetRoot.path,
+        circleName: '社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV',
+        title: '标题',
+      );
+      // 两个同名文件都存在且内容各自正确（未发生覆盖）
+      final f1 = File(p.join(target, 'disc1', '01.wav'));
+      final f2 = File(p.join(target, 'disc2', '01.wav'));
+      expect(f1.existsSync(), isTrue);
+      expect(f2.existsSync(), isTrue);
+      expect(f1.readAsBytesSync()[0], 1);
+      expect(f2.readAsBytesSync()[0], 2);
+      // 无扁平根目录同名残留
+      expect(File(p.join(target, '01.wav')).existsSync(), isFalse);
+      expect(result.copied, 2);
+    });
+
+    test('hasExpectedFiles 与整理同一冲突回退规则', () async {
+      createDiscWork();
+      await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV',
+        title: '标题',
+        keepDirStructure: false,
+      );
+
+      // 冲突作品即使按扁平模式查询，也必须按树状布局校验
+      final ok = await NavidromeOrganizer.hasExpectedFiles(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV',
+        title: '标题',
+        keepDirStructure: false,
+      );
+      expect(ok, isTrue);
+    });
+  });
+
+  group('字幕匹配跨目录绑定（Phase 5）', () {
+    test('同名不同目录：disc1 字幕不会绑定 disc2 音频', () async {
+      final d1 = Directory(p.join(sourceDir.path, 'disc1'))..createSync();
+      final d2 = Directory(p.join(sourceDir.path, 'disc2'))..createSync();
+      File(p.join(d1.path, '01.wav')).writeAsBytesSync(buildMinimalWav(fill: 1));
+      File(p.join(d2.path, '01.wav')).writeAsBytesSync(buildMinimalWav(fill: 2));
+      // 只有 disc1 有字幕
+      File(p.join(d1.path, '01.lrc')).writeAsStringSync('[00:01.00]disc1歌词');
+
+      await NavidromeOrganizer.organize(
+        sourceDir: sourceDir.path,
+        targetRoot: targetRoot.path,
+        circleName: '社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV',
+        title: '标题',
+      );
+
+      final target = NavidromeOrganizer.targetDirPath(
+        targetRoot: targetRoot.path,
+        circleName: '社团',
+        sourceId: 'RJ12345678',
+        cvNames: 'CV',
+        title: '标题',
+      );
+      final embed1 =
+          await AudioTagWriter.readWavEmbed(p.join(target, 'disc1', '01.wav'));
+      final embed2 =
+          await AudioTagWriter.readWavEmbed(p.join(target, 'disc2', '01.wav'));
+      // disc1 有歌词；disc2 必须没有（旧实现会把 disc1 歌词串到 disc2）
+      expect(embed1.lyrics, isTrue);
+      expect(embed2.lyrics, isFalse);
     });
   });
 }

@@ -136,6 +136,36 @@ void main() {
           SubtitleGapDetector.countAudioFiles(workDir.path));
     });
 
+    test('同名不同目录：只有 disc1/01.vtt 时，disc2/01.wav 仍是缺口', () {
+      Directory(p.join(workDir.path, 'disc1')).createSync();
+      Directory(p.join(workDir.path, 'disc2')).createSync();
+      File(p.join(workDir.path, 'disc1', '01.wav'))
+          .writeAsBytesSync(List.filled(100, 1));
+      File(p.join(workDir.path, 'disc2', '01.wav'))
+          .writeAsBytesSync(List.filled(100, 2));
+      File(p.join(workDir.path, 'disc1', '01.vtt'))
+          .writeAsBytesSync(List.filled(10, 2));
+
+      final missing =
+          SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+      // disc1/01.wav 已有字幕；disc2/01.wav 不允许被 basename 回退误绑定
+      expect(missing.map((f) => p.basename(f.path)), ['01.wav']);
+      expect(p.dirname(missing.single.path), p.join(workDir.path, 'disc2'));
+    });
+
+    test('音频 stem 全作品唯一时，跨目录字幕仍可回退命中（兼容旧行为）', () {
+      Directory(p.join(workDir.path, 'disc1')).createSync();
+      Directory(p.join(workDir.path, 'text')).createSync();
+      File(p.join(workDir.path, 'disc1', 'ex01.wav'))
+          .writeAsBytesSync(List.filled(100, 1));
+      File(p.join(workDir.path, 'text', 'ex01.lrc'))
+          .writeAsBytesSync(List.filled(10, 2));
+
+      final missing =
+          SubtitleGapDetector.findMissingSubtitleTracks(workDir.path);
+      expect(missing, isEmpty);
+    });
+
     test('目录不存在时返回空', () async {
       expect(
         await SubtitleGapDetector.findMissingSubtitleTracksAsync(
