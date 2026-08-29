@@ -8,6 +8,7 @@ import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/download/download_queue.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:asmr_downloader/utils/json_storage.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -163,7 +164,7 @@ void main() {
       circleNameProvider.overrideWith((ref) async {
         // 先让出 provider 构建帧，再切换搜索状态（riverpod 禁止构建期改状态）
         await Future<void>.delayed(Duration.zero);
-        onCircleNameResolve(ref.container as ProviderContainer);
+        onCircleNameResolve(ref.container);
         await Future<void>.delayed(const Duration(milliseconds: 20));
         return '社团A';
       }),
@@ -189,6 +190,20 @@ void main() {
   Directory workDirOf(String title) =>
       Directory(p.join(tempDir.path, 'downloads', title));
 
+  /// 后处理已解耦为后台任务：等待本 run 产生的任务队列清空
+  Future<void> waitPostProcessDone(ProviderContainer container) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (DateTime.now().isBefore(deadline)) {
+      final tasks = container.read(backgroundTaskProvider);
+      if (tasks.isNotEmpty && !tasks.any((t) => t.isActive)) {
+        // 后处理完成后再断言产物
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    fail('后处理后台任务超时未完成');
+  }
+
   test('下载 A 的快照间隙搜索切到 B：任务、封面、注册表、自动整理全部属于 A', () async {
     var flipped = false;
     final container = await createContainer(onCircleNameResolve: (c) {
@@ -200,6 +215,8 @@ void main() {
     addTearDown(container.dispose);
 
     await container.read(downloadManagerProvider).run();
+    // 自动整理已解耦为后台任务：等它完成再断言产物
+    await waitPostProcessDone(container);
 
     // 下载状态与指示器属于 A
     expect(container.read(dlStatusProvider), DownloadStatus.completed);
@@ -270,6 +287,7 @@ void main() {
     }
     switchToWorkB(container);
     await runFuture;
+    await waitPostProcessDone(container);
 
     expect(container.read(dlStatusProvider), DownloadStatus.completed);
     expect(container.read(lastDownloadSourceIdProvider), 'RJ00001');

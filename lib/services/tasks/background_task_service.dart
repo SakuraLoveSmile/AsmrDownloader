@@ -5,8 +5,11 @@ import 'package:asmr_downloader/services/cache/batch_cache_service.dart';
 import 'package:asmr_downloader/services/cache/cache_library_providers.dart';
 import 'package:asmr_downloader/services/cache/cache_providers.dart';
 import 'package:asmr_downloader/services/cache/media_library_settings.dart';
+import 'package:asmr_downloader/services/download/download_work_context.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
+import 'package:asmr_downloader/common/config_providers.dart';
 import 'package:asmr_downloader/services/ui/system_notifier.dart';
+import 'package:asmr_downloader/services/ui/ui_providers.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,6 +18,7 @@ enum BackgroundTaskKind {
   completeMediaLibrary,
   completeWorksLibrary,
   batchCache,
+  postProcessDownloadedWork,
 }
 
 enum BackgroundTaskStatus {
@@ -208,6 +212,72 @@ class BackgroundTaskNotifier extends Notifier<List<BackgroundTask>> {
       ),
     );
     return id;
+  }
+
+  /// 下载完成作品的后台后处理：自动整理 + AI 字幕。
+  /// 使用下载上下文快照，与下载循环解耦——作品 B 无需等待作品 A 的
+  /// 后处理即可开始下载；后处理失败不回写下载状态（状态独立）。
+  String startPostProcessDownloadedWork(DownloadWorkContext ctx) {
+    final id = _newId('post-process');
+    _enqueue(
+      BackgroundTask(
+        id: id,
+        kind: BackgroundTaskKind.postProcessDownloadedWork,
+        title: '后处理 ${ctx.sourceId}',
+        description: '自动整理 / AI 字幕',
+        createdAt: DateTime.now(),
+      ),
+      () => _runPostProcess(id, ctx),
+    );
+    return id;
+  }
+
+  Future<void> _runPostProcess(String id, DownloadWorkContext ctx) async {
+    final ui = ref.read(uiServiceProvider);
+    final autoOrganize = ref.read(autoOrganizeProvider);
+    final autoTranscribe = ref.read(autoTranscribeProvider);
+
+    if (autoOrganize) {
+      _update(id, detail: '正在整理 ${ctx.sourceId}…');
+      try {
+        await ui.autoOrganizeDownloadedWork(ctx);
+      } catch (e) {
+        Log.warning('post-process organize failed: ${ctx.sourceId}\n'
+            'error: $e');
+        _update(
+          id,
+          status: BackgroundTaskStatus.failed,
+          finishedAt: DateTime.now(),
+          error: '自动整理失败：$e',
+        );
+        // 整理失败不继续 AI 字幕（产物未就绪）
+        return;
+      }
+    }
+
+    if (autoTranscribe) {
+      _update(id, detail: '正在 AI 字幕 ${ctx.sourceId}…');
+      try {
+        await ui.autoTranscribe(ctx.sourceId, ctx.sourceDir);
+      } catch (e) {
+        Log.warning('post-process transcribe failed: ${ctx.sourceId}\n'
+            'error: $e');
+        _update(
+          id,
+          status: BackgroundTaskStatus.failed,
+          finishedAt: DateTime.now(),
+          error: 'AI 字幕失败：$e',
+        );
+        return;
+      }
+    }
+
+    _update(
+      id,
+      status: BackgroundTaskStatus.completed,
+      finishedAt: DateTime.now(),
+      detail: '后处理完成',
+    );
   }
 
   void cancelTask(String id) {

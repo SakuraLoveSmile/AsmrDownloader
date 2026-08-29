@@ -14,6 +14,7 @@ import 'package:asmr_downloader/services/library/media_library_service.dart';
 import 'package:asmr_downloader/services/library/work_library_status.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
 import 'package:asmr_downloader/services/organize/works_index.dart';
+import 'package:asmr_downloader/services/tasks/background_task_service.dart';
 import 'package:asmr_downloader/services/asmr_repo/providers/tracks_providers.dart';
 import 'package:asmr_downloader/services/ui/system_notifier.dart';
 import 'package:asmr_downloader/services/ui/ui_providers.dart';
@@ -336,16 +337,18 @@ class DownloadManager {
 
     ref.read(currentDownloadingSourceIdProvider.notifier).state = null;
 
-    // auto organize to navidrome（使用下载上下文快照，不读当前搜索状态）
-    if (ref.read(autoOrganizeProvider)) {
-      await ref.read(uiServiceProvider).autoOrganizeDownloadedWork(ctx);
-    }
-
-    // auto AI subtitle translate (ChickenRice)（显式传入快照目录）
-    if (ref.read(autoTranscribeProvider)) {
-      await ref
-          .read(uiServiceProvider)
-          .autoTranscribe(ctx.sourceId, ctx.sourceDir);
+    // 后处理（自动整理 / AI 字幕）投入后台任务队列，与下载循环解耦：
+    // 队列中的作品 B 无需等待 A 的整理/字幕即可开始下载。
+    // 下载状态到此为止 = 文件全部下载完成；后处理状态由后台任务独立展示，
+    // 后处理失败不回写下载成功状态。
+    if (ref.read(autoOrganizeProvider) || ref.read(autoTranscribeProvider)) {
+      try {
+        ref
+            .read(backgroundTaskProvider.notifier)
+            .startPostProcessDownloadedWork(ctx);
+      } catch (e) {
+        Log.warning('enqueue post-process task failed: $sourceId\nerror: $e');
+      }
     }
 
     return _RunOutcome.completed;
