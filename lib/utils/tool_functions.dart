@@ -58,14 +58,93 @@ String smartTruncate(String name, {int maxChars = 80, int maxUtf8Bytes = 240}) {
 /// 应用数据目录：
 /// macOS 使用 ~/Library/Application Support/AsmrDownloader（CWD 是 /，相对路径写不进去）
 /// Windows 保持相对路径（应用目录内）
+String? _cachedAppDataDir;
+
+/// 应用数据目录。
+///
+/// - macOS：`~/Library/Application Support/AsmrDownloader`；
+/// - Windows：程序目录存在 `portable.flag` 时为便携模式，数据随程序目录；
+///   否则使用 `%APPDATA%/AsmrDownloader`。旧版本默认把数据写在程序目录，
+///   首次切换到系统目录时会自动复制旧数据（原目录保留，不删除）。
 String getAppDataDir() {
+  final cached = _cachedAppDataDir;
+  if (cached != null) return cached;
+
+  final dir = _resolveAppDataDir();
+  _cachedAppDataDir = dir;
+  return dir;
+}
+
+String _resolveAppDataDir() {
   if (Platform.isMacOS) {
     final home = Platform.environment['HOME'];
     if (home != null) {
       return p.join(home, 'Library', 'Application Support', 'AsmrDownloader');
     }
+    return '.';
+  }
+  if (Platform.isWindows) {
+    final exeDir = p.dirname(Platform.resolvedExecutable);
+    if (File(p.join(exeDir, 'portable.flag')).existsSync()) {
+      return exeDir;
+    }
+    final appData = Platform.environment['APPDATA'];
+    if (appData == null || appData.isEmpty) return exeDir;
+    final systemDir = p.join(appData, 'AsmrDownloader');
+    // 旧版本数据在程序目录：首次迁移到系统目录（旧文件保留）
+    migrateLegacyAppDataSync(legacyDir: exeDir, targetDir: systemDir);
+    return systemDir;
   }
   return '.';
+}
+
+/// 旧版应用数据迁移（Windows 程序目录 → 系统数据目录）。
+///
+/// 仅当旧目录存在 `config.json` 且新目录尚无 `config.json` 时执行；
+/// 复制 config.json / library / cache / download_queue.json / debug，
+/// 旧数据原样保留，绝不删除。失败静默（新目录照常使用，不阻断启动）。
+void migrateLegacyAppDataSync({
+  required String legacyDir,
+  required String targetDir,
+}) {
+  try {
+    final legacyConfig = File(p.join(legacyDir, 'config.json'));
+    if (!legacyConfig.existsSync()) return;
+    if (File(p.join(targetDir, 'config.json')).existsSync()) return;
+
+    const entries = [
+      'config.json',
+      'library',
+      'cache',
+      'download_queue.json',
+      'debug',
+    ];
+    for (final name in entries) {
+      final src = p.join(legacyDir, name);
+      final dst = p.join(targetDir, name);
+      if (File(src).existsSync()) {
+        File(dst).parent.createSync(recursive: true);
+        File(src).copySync(dst);
+      } else if (Directory(src).existsSync()) {
+        _copyDirectorySync(Directory(src), Directory(dst));
+      }
+    }
+  } catch (_) {
+    // 迁移失败不阻断启动
+  }
+}
+
+void _copyDirectorySync(Directory src, Directory dst) {
+  for (final entity in src.listSync(recursive: true)) {
+    final rel = p.relative(entity.path, from: src.path);
+    final target = p.join(dst.path, rel);
+    if (entity is Directory) {
+      Directory(target).createSync(recursive: true);
+    } else if (entity is File) {
+      File(target).parent.createSync(recursive: true);
+      entity.copySync(target);
+    }
+  }
 }
 
 String getLegalWindowsName(String name) {
