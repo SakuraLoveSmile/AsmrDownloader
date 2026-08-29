@@ -354,7 +354,8 @@ class WorksIndex {
   /// 统一写回校验状态（整理/批量校验/对话框共用，不依赖 VerifyWorkResult）。
   ///
   /// - [verifiedAt] 固定为当前时间；
-  /// - [verifyNote] 为 null 表示「最近校验通过」，会清除旧的缺陷摘要；
+  /// - [verifyNote] 为 null 表示「最近校验通过」，会清除旧的缺陷摘要
+  ///   （真正写回 NULL，不能用 copyWith 的 null-合并语义）；
   /// - [verifyRepairable] 标识缺陷是否可通过重新整理修复。
   /// 写回后再读取注册表返回最新 [WorkEntry]（含持久化校验字段）。
   Future<WorkEntry> updateVerifyState(
@@ -362,10 +363,24 @@ class WorksIndex {
     required String? verifyNote,
     required bool verifyRepairable,
   }) async {
-    final updated = entry.copyWith(
-      verifiedAt: DateTime.now(),
+    // 直接构造新条目而非 copyWith：copyWith(verifyNote: null) 会保留旧值，
+    // 导致「校验通过后缺陷摘要永远清不掉」。
+    final updated = WorkEntry(
+      sourceId: entry.sourceId,
+      dlPath: entry.dlPath,
+      dirName: entry.dirName,
+      title: entry.title,
+      cvNames: entry.cvNames,
+      circleName: entry.circleName,
+      releaseDate: entry.releaseDate,
+      tags: entry.tags,
+      coverUrl: entry.coverUrl,
+      organizedAt: entry.organizedAt,
+      manuallyEditedAt: entry.manuallyEditedAt,
+      sourceDirOverride: entry.sourceDirOverride,
       verifyNote: verifyNote,
       verifyRepairable: verifyRepairable,
+      verifiedAt: DateTime.now(),
     );
     await upsert(updated);
     // 回读以确保持久化字段（含其他并发更新）一致
