@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:asmr_downloader/services/download/download_retry.dart';
 import 'package:asmr_downloader/utils/log.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
@@ -188,6 +189,7 @@ class ChunkDownloader {
   // ------------------------------------------------------------- single
 
   /// 单连接顺序下载（不支持 Range 的服务器），支持断点续传。
+  /// 网络失败按 [maxDownloadRetries] 有限重试（断点有进展则重置预算）。
   Future<bool> _downloadSingle({
     required String url,
     required String savePath,
@@ -197,6 +199,9 @@ class ChunkDownloader {
   }) async {
     final fileName = p.basename(savePath);
     final tmpFile = File(_singleTmpPath(savePath));
+
+    var attempts = 0;
+    var lastProgressBytes = 0;
 
     while (true) {
       if (cancelToken?.isCancelled == true) {
@@ -209,6 +214,17 @@ class ChunkDownloader {
         downloadedBytes = 0;
       }
       if (downloadedBytes >= fileSize) break;
+
+      // 重试预算：断点有进展则重置计数
+      if (downloadedBytes > lastProgressBytes) {
+        attempts = 0;
+        lastProgressBytes = downloadedBytes;
+      }
+      if (attempts > maxDownloadRetries) {
+        Log.error('chunk download failed: $fileName\n'
+            'error: retry limit exceeded (no progress in $attempts retries)');
+        return false;
+      }
 
       try {
         await _dio.download(
@@ -225,13 +241,22 @@ class ChunkDownloader {
             onProgress?.call(downloadedBytes + received, fileSize);
           },
         );
+        attempts = 0;
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) {
           Log.warning('chunk download canceled: $fileName');
           return false;
         }
-        Log.warning('chunk download failed: $fileName\nerror: $e');
-        await Future.delayed(retryDelay);
+        if (isPermanentDownloadFailure(e)) {
+          Log.error('chunk download failed: $fileName\n'
+              'statusCode = ${e.response?.statusCode} (permanent)\n'
+              'error: $e');
+          return false;
+        }
+        attempts++;
+        Log.warning('chunk download failed (attempt $attempts): $fileName\n'
+            'error: $e');
+        await Future.delayed(downloadRetryDelay(e, attempts, retryDelay));
       } catch (e) {
         Log.error('chunk download failed: $fileName\nunhandled error: $e');
         return false;
@@ -394,6 +419,9 @@ class ChunkDownloader {
     final partFile = File(partPath);
     await partFile.create(recursive: true);
 
+    var attempts = 0;
+    var lastProgressBytes = segment.completedBytes;
+
     while (true) {
       if (token.isCancelled) return _SegmentResult.canceled;
 
@@ -403,6 +431,18 @@ class ChunkDownloader {
         segment.done = true;
         notify(force: true);
         return _SegmentResult.completed;
+      }
+
+      // 重试预算：断点有进展则重置计数
+      if (resumeFrom > lastProgressBytes) {
+        attempts = 0;
+        lastProgressBytes = resumeFrom;
+      }
+      if (attempts > maxDownloadRetries) {
+        Log.error('segment download failed: $fileName part ${segment.index}\n'
+            'error: retry limit exceeded (no progress in $attempts retries)');
+        onPermanentFailure();
+        return _SegmentResult.failed;
       }
 
       final rangeStart = segment.start + resumeFrom;
@@ -439,6 +479,9 @@ class ChunkDownloader {
         }
         // 响应提前结束且未抛错：保留已下部分，稍后继续
         segment.completedBytes = len;
+        attempts++;
+        Log.warning('segment download ended early (attempt $attempts): '
+            '$fileName part ${segment.index} ($len/${segment.size})');
         await Future.delayed(retryDelay);
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) return _SegmentResult.canceled;
@@ -455,9 +498,18 @@ class ChunkDownloader {
           onPermanentFailure();
           return _SegmentResult.failed;
         }
-        Log.warning('segment download failed: $fileName part '
-            '${segment.index}\nerror: $e');
-        await Future.delayed(retryDelay);
+        if (isPermanentDownloadFailure(e)) {
+          Log.error('segment download failed: $fileName part '
+              '${segment.index}\nstatusCode = ${e.response?.statusCode} '
+              '(permanent)\nerror: $e');
+          onPermanentFailure();
+          return _SegmentResult.failed;
+        }
+        attempts++;
+        Log.warning('segment download failed (attempt $attempts): '
+            '$fileName part ${segment.index}\n'
+            'error: $e');
+        await Future.delayed(downloadRetryDelay(e, attempts, retryDelay));
       } catch (e) {
         Log.error('segment download failed: $fileName part '
             '${segment.index}\nunhandled error: $e');

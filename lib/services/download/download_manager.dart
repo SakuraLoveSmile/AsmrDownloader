@@ -796,6 +796,7 @@ class DownloadManager {
 
   /// 单文件下载入口：按用户配置的线程数走多线程分段下载，
   /// 服务器不支持 Range 时由 MultiThreadDownloader 自动回退单线程。
+  /// API 未给出大小的任务传 null（未知），0 保留给真实空文件。
   Future<bool> _resumableDownload(
     String url,
     String savePath,
@@ -806,7 +807,7 @@ class DownloadManager {
     return MultiThreadDownloader(ref.read(asmrApiProvider)).download(
       url: url,
       savePath: savePath,
-      fileSize: fileSize,
+      fileSize: fileSize > 0 ? fileSize : null,
       threadCount: _perFileThreads(),
       cancelToken: cancelToken,
       onProgress: onReceiveProgress,

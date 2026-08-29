@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -15,6 +16,7 @@ class _TestServer {
     this.ignoreRange,
     this.ignoreRangeAfterProbe,
     this.cutSegment0Once,
+    this.etag,
   );
 
   final HttpServer server;
@@ -30,6 +32,12 @@ class _TestServer {
   final bool cutSegment0Once;
   bool _cutDone = false;
 
+  /// 所有响应附带（含 HEAD）；null 表示不发送 ETag。
+  final String? etag;
+
+  /// 注入式错误：状态码 → 剩余注入次数，优先于正常内容响应。
+  final Map<int, int> failNext = {};
+
   final List<Map<String, String?>> requests = [];
 
   static Future<_TestServer> start({
@@ -37,6 +45,7 @@ class _TestServer {
     bool ignoreRange = false,
     bool ignoreRangeAfterProbe = false,
     bool cutSegment0Once = false,
+    String? etag,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final testServer = _TestServer._(
@@ -45,6 +54,7 @@ class _TestServer {
       ignoreRange,
       ignoreRangeAfterProbe,
       cutSegment0Once,
+      etag,
     );
     server.listen(testServer._handle);
     return testServer;
@@ -52,9 +62,42 @@ class _TestServer {
 
   String get url => 'http://127.0.0.1:${server.port}/test.bin';
 
-  void _handle(HttpRequest request) async {
+  void failNextTimes(int statusCode, int times) {
+    failNext[statusCode] = (failNext[statusCode] ?? 0) + times;
+  }
+
+  void _applyCommonHeaders(HttpResponse response) {
+    if (etag != null) {
+      response.headers.set('etag', etag!);
+    }
+  }
+
+  Future<void> _handle(HttpRequest request) async {
     final range = request.headers.value('range');
-    requests.add({'range': range});
+    requests.add({'range': range, 'method': request.method});
+
+    // HEAD 探测：只返回头（Content-Length / ETag），不写响应体
+    if (request.method == 'HEAD') {
+      request.response
+        ..statusCode = HttpStatus.ok
+        ..headers.contentLength = content.length;
+      _applyCommonHeaders(request.response);
+      await request.response.close();
+      return;
+    }
+
+    // 注入式错误（404/503 等场景）
+    final failEntry =
+        failNext.entries.where((e) => e.value > 0).toList(growable: false);
+    if (failEntry.isNotEmpty) {
+      final status = failEntry.first.key;
+      failNext[status] = status == failEntry.first.key
+          ? failEntry.first.value - 1
+          : failEntry.first.value;
+      request.response.statusCode = status;
+      await request.response.close();
+      return;
+    }
 
     final isProbe = range == 'bytes=0-0';
     if (!ignoreRange && !(ignoreRangeAfterProbe && !isProbe) && range != null) {
@@ -83,20 +126,23 @@ class _TestServer {
         response
           ..statusCode = HttpStatus.partialContent
           ..headers.set('content-range', 'bytes $start-$end/${content.length}');
+        _applyCommonHeaders(response);
         response.add(bytes.sublist(0, bytes.length ~/ 2));
         await response.close();
         return;
       }
-      request.response
+      final response = request.response
         ..statusCode = HttpStatus.partialContent
         ..headers.contentLength = bytes.length
         ..headers.set('content-range', 'bytes $start-$end/${content.length}');
-      request.response.add(bytes);
+      _applyCommonHeaders(response);
+      response.add(bytes);
     } else {
-      request.response
+      final response = request.response
         ..statusCode = HttpStatus.ok
         ..headers.contentLength = content.length;
-      request.response.add(content);
+      _applyCommonHeaders(response);
+      response.add(content);
     }
     await request.response.close();
   }
@@ -110,6 +156,19 @@ Uint8List _makeContent(int size) {
     bytes[i] = i % 251;
   }
   return bytes;
+}
+
+/// 预写断点身份 manifest（模拟上一会话留下的断点）
+Future<void> _writeManifest(
+  String savePath,
+  _TestServer server, {
+  String? etag,
+}) async {
+  await File('$savePath.downloading.meta.json').writeAsString(json.encode({
+    'url': server.url,
+    'size': server.content.length,
+    if (etag != null) 'etag': etag,
+  }));
 }
 
 void main() {
@@ -185,6 +244,7 @@ void main() {
         .writeAsBytes(content.sublist(0, partSize));
     await File('$savePath.downloading.part1')
         .writeAsBytes(content.sublist(partSize, partSize * 2));
+    await _writeManifest(savePath, server);
 
     final ok = await downloader.download(
       url: server.url,
@@ -269,6 +329,7 @@ void main() {
     // dio.download 默认截断已有文件，若续传未用 append 会永远补不满该段
     await File('$savePath.downloading')
         .writeAsBytes(content.sublist(0, partSize ~/ 2));
+    await _writeManifest(savePath, server);
 
     final ok = await downloader.download(
       url: server.url,
@@ -330,6 +391,139 @@ void main() {
     expect(ok, isTrue);
     expect(await File(savePath).exists(), isTrue);
     expect(await File(savePath).length(), 0);
+  });
+
+  test('大小未知：HEAD 探测大小后单线程下载成功', () async {
+    final content = _makeContent(4096);
+    final server = await _TestServer.start(content: content);
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'unknown_size.bin');
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: null,
+      threadCount: 1,
+    );
+
+    expect(ok, isTrue);
+    expect(await File(savePath).readAsBytes(), content);
+    // HEAD 探测 1 次 + 单连接下载 1 次
+    expect(server.requests, hasLength(2));
+    expect(server.requests.first['method'], 'HEAD');
+    expect(server.requests.last['range'], isNull);
+  });
+
+  test('永久错误 404：立即失败，不无限重试', () async {
+    final content = _makeContent(4096);
+    final server = await _TestServer.start(content: content);
+    server.failNextTimes(404, 100);
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'not_found.bin');
+    final stopwatch = Stopwatch()..start();
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: content.length,
+      threadCount: 1,
+    );
+    stopwatch.stop();
+
+    expect(ok, isFalse);
+    // 永久错误不应重试：只发出 1 次请求且快速返回
+    expect(server.requests, hasLength(1));
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+    expect(File(savePath).existsSync(), isFalse);
+  });
+
+  test('临时错误 503：自动重试并在服务恢复后成功', () async {
+    final content = _makeContent(4096);
+    final server = await _TestServer.start(content: content);
+    server.failNextTimes(503, 2);
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'server_error.bin');
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: content.length,
+      threadCount: 1,
+    );
+
+    expect(ok, isTrue);
+    expect(await File(savePath).readAsBytes(), content);
+    // 两次 503 + 一次成功
+    expect(server.requests, hasLength(3));
+  });
+
+  test('断点后服务器 ETag 改变：旧分段被丢弃，重新下载新内容', () async {
+    const partSize = MultiThreadDownloader.minPartSize;
+    final oldContent = _makeContent(partSize * 4);
+    final newContent = _makeContent(partSize * 4);
+    for (var i = 0; i < newContent.length; i++) {
+      newContent[i] = (i * 7 + 3) % 251;
+    }
+    final server =
+        await _TestServer.start(content: newContent, etag: 'new-etag');
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'etag_changed.bin');
+    // 模拟上一会话：part0 为旧内容，manifest 记录旧 ETag
+    await File('$savePath.downloading')
+        .writeAsBytes(oldContent.sublist(0, partSize));
+    await _writeManifest(savePath, server, etag: 'old-etag');
+
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: newContent.length,
+      threadCount: 4,
+    );
+
+    expect(ok, isTrue);
+    // 最终文件必须是新内容，而不是旧断点与新数据的拼接
+    expect(await File(savePath).readAsBytes(), newContent);
+  });
+
+  test('最终文件长度与已知大小不符：不视为已完成，重新下载', () async {
+    final content = _makeContent(4096);
+    final server = await _TestServer.start(content: content);
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'wrong_length.bin');
+    // 残留的最终文件长度不符（如上次异常写入）
+    await File(savePath).writeAsBytes([1, 2, 3]);
+
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: content.length,
+      threadCount: 1,
+    );
+
+    expect(ok, isTrue);
+    expect(await File(savePath).readAsBytes(), content);
+  });
+
+  test('大小未知时最终文件已存在：不凭存在性直接宣告完成', () async {
+    final content = _makeContent(4096);
+    final server = await _TestServer.start(content: content);
+    addTearDown(server.close);
+
+    final savePath = p.join(tempDir.path, 'unknown_exists.bin');
+    // 大小未知时无法验证残留文件的完整性：应重新下载覆盖
+    await File(savePath).writeAsBytes([9, 9, 9]);
+
+    final ok = await downloader.download(
+      url: server.url,
+      savePath: savePath,
+      fileSize: null,
+      threadCount: 1,
+    );
+
+    expect(ok, isTrue);
+    expect(await File(savePath).readAsBytes(), content);
   });
 
   test('最终文件已存在：直接完成并清理残留 part', () async {
