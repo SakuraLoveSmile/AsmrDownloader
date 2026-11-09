@@ -1,7 +1,7 @@
 # ad20261109：应用内截图反馈 + 发布 v0.15.0
 
 - 项目 / 任务编号：personal-asmrdownloader / ad20261109
-- 状态：待体验（已发布，等待用户确认）
+- 状态：待体验（已发布 v0.15.0，等待用户确认）
 - 创建日期（Asia/Taipei）：2026-11-09
 - 权威记录：本文件
 - 主仓库 / 当前工作目录：`/Users/sakurasep/Documents/Code/Project/Personal Project/AsmrDownloader`
@@ -32,7 +32,7 @@
 | T1 | 设置面板出现「反馈」按钮 | 点按钮弹出截图标注浮层，文案为中文 | `test/feedback_button_test.dart` 通过（浮层出现且中文文案正确） | 待体验 |
 | T2 | 提交后落盘截图与说明 | 目录含 `screenshot.png`、`feedback.txt`；同秒两次提交不覆盖 | `test/feedback_service_test.dart` 2 个用例通过 | 待体验 |
 | T3 | 保存成功提示 + 「打开目录」 | 记录路径、平台与版本信息，Windows/macOS 均可打开目录 | 代码路径核对；真机按钮点击未在 Windows 验证 | 实现中 |
-| T4 | 发布 `v0.15.0` | CI 构建 Windows + macOS 并生成 Release | 见“提交与集成” | 实现中 |
+| T4 | 发布 `v0.15.0` | CI 构建 Windows + macOS 并生成 Release | Release 已发布，两个平台产物 + SHA256SUMS 齐备 | 待体验 |
 
 ## 执行与验证记录
 
@@ -42,6 +42,8 @@
 | 2026-11-09 | 同上 | 同上 | `flutter test` | 510 个用例全部通过（无失败） |
 | 2026-11-09 | 同上 | 同上 | `flutter build macos --release` | 构建成功，`AsmrDownloader.app` 52.8MB |
 | 2026-11-09 | 同上 | 同上 | 启动 Release 构建，检查进程与日志 | 应用正常启动，日志无 feedback 相关报错 |
+| 2026-11-09 | `b921d57`（含 v0.15.0 tag） | GitHub Actions（ubuntu / windows-latest / macos-latest） | `git push origin main`、`git push origin v0.15.0` | CI 运行 42611725042 成功；Release 运行 42611788174 全绿（quality-gate / build-windows / build-macos / release） |
+| 2026-11-09 | Release `v0.15.0` | GitHub Release | `gh release view v0.15.0` | 产物：Windows.zip 15.0MB、macOS.zip 21.6MB、SHA256SUMS |
 
 说明：截图提交链路在 widget 测试中依赖组件内部真实异步截屏，测试仅覆盖入口与落盘服务边界；完整“标注 + 提交 + 打开目录”需真机人工体验确认。
 
@@ -49,5 +51,5 @@
 
 | 提交 | 行为变化与原因 | 验证 | 合并 / 发布情况 |
 | --- | --- | --- | --- |
-| `feat(feedback): 接入应用内截图反馈入口` | 新增反馈入口与落盘服务；修复 Windows 打开目录 | analyze / test / macOS 构建 | 提交到 `main` |
-| `chore: release v0.15.0` | 版本号 0.14.1 → 0.15.0 | 同上 | tag `v0.15.0` 触发 Release 构建 |
+| `feat(feedback): 接入应用内截图反馈入口`（`4aef193`） | 新增反馈入口与落盘服务；修复 Windows 打开目录 | analyze / test / macOS 构建 | 已推送到 `main` |
+| `chore: release v0.15.0` | 版本号 0.14.1 → 0.15.0 | 同上 | 已推送到 `main`；签名 tag `v0.15.0` 触发 Release 构建并发布成功 |
