@@ -485,6 +485,59 @@ void main() {
       tmp.deleteSync();
     });
   });
+
+  // 回归：Windows 上本应用默认用相对路径表达下载目录，而 ChickenRice
+  // 启动后会 os.chdir 到 infer.exe 目录。若把相对路径原样传给子进程，
+  // PyAV/FFmpeg 在中文 Windows 上会以 EINVAL 崩掉整批任务
+  // （av.error.ArgumentError: Invalid argument: '...' returned 22）。
+  group('run：子进程路径绝对化', () {
+    const relativeTrack =
+        '伊ヶ崎綾香&湯木ちゆり-生徒会/RJ01722913/01_勃起したら予算可決! .wav';
+
+    test('exe 模式：相对 base_dirs 解析为绝对路径后再传给子进程', () async {
+      final tmp = createTempScript('infer.exe');
+      final runner = _CapturingRunner();
+      final svc = ChickenRiceService(
+        ChickenRiceConfig(scriptPath: tmp.path),
+        skipPlatformCheck: true,
+        runner: runner,
+      );
+      final result = await svc.run(dirs: [relativeTrack]);
+      expect(result.success, true);
+      expect(runner.command, isNotNull);
+      expect(runner.command!.last, p.absolute(relativeTrack));
+      expect(p.isAbsolute(runner.command!.last), true);
+      // 工作目录同样绝对化（ChickenRice 在其中 os.chdir 找模型）
+      expect(runner.workingDirectory, isNotNull);
+      expect(p.isAbsolute(runner.workingDirectory!), true);
+      tmp.deleteSync();
+    });
+
+    test('bat 模式（解析直调 exe）：同样传出绝对路径', () async {
+      final bat = createBatScript(_officialBatTemplate);
+      // bat 同目录放一个 infer.exe 才会走直调路径
+      File('${bat.parent.path}${p.separator}infer.exe').writeAsStringSync('x');
+      final runner = _CapturingRunner();
+      final svc = ChickenRiceService(
+        ChickenRiceConfig(scriptPath: bat.path),
+        skipPlatformCheck: true,
+        runner: runner,
+      );
+      await svc.run(dirs: [relativeTrack]);
+      expect(runner.command, isNotNull);
+      expect(runner.command!.last, p.absolute(relativeTrack));
+      bat.parent.deleteSync(recursive: true);
+    });
+
+    test('resolveDirs：相对路径按应用目录解析，绝对路径保持原样', () {
+      final abs =
+          p.join(Directory.current.path, 'asmr', 'RJ01722913', 'e01.wav');
+      expect(ChickenRiceService.resolveDirs([abs]), [p.normalize(abs)]);
+      final resolved = ChickenRiceService.resolveDirs(['rel/e01.wav']).single;
+      expect(p.isAbsolute(resolved), true);
+      expect(resolved, p.absolute('rel/e01.wav'));
+    });
+  });
 }
 
 /// 官方 release bat 的结构模板（UTF-8）。
@@ -542,6 +595,23 @@ class _FakeRunner implements ProcessRunner {
   Future<ProcessHandle> start(List<String> command,
       {String? workingDirectory, Map<String, String>? environment}) {
     return Future.value(onStart(command, environment));
+  }
+}
+
+/// 记录子进程调用参数（命令行 / 工作目录 / 环境变量），用于断言传给
+/// ChickenRice 的路径形态。
+class _CapturingRunner implements ProcessRunner {
+  List<String>? command;
+  String? workingDirectory;
+  Map<String, String>? environment;
+
+  @override
+  Future<ProcessHandle> start(List<String> command,
+      {String? workingDirectory, Map<String, String>? environment}) async {
+    this.command = command;
+    this.workingDirectory = workingDirectory;
+    this.environment = environment;
+    return _completedHandle();
   }
 }
 
