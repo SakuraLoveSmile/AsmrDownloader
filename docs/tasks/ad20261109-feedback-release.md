@@ -1,7 +1,7 @@
 # ad20261109：应用内截图反馈 + 发布 v0.15.0
 
 - 项目 / 任务编号：personal-asmrdownloader / ad20261109
-- 状态：待体验（已发布 v0.15.0，等待用户确认）
+- 状态：待体验（已发布 v0.15.1，等待用户确认）
 - 创建日期（Asia/Taipei）：2026-11-09
 - 权威记录：本文件
 - 主仓库 / 当前工作目录：`/Users/sakurasep/Documents/Code/Project/Personal Project/AsmrDownloader`
@@ -29,7 +29,7 @@
 
 | 步骤 | 用户效果 / 实现范围 | 验收情形与预期 | 当前结果及证据 | 状态 |
 | --- | --- | --- | --- | --- |
-| T1 | 设置面板出现「反馈」按钮 | 点按钮弹出截图标注浮层，文案为中文 | `test/feedback_button_test.dart` 通过（浮层出现且中文文案正确） | 待体验 |
+| T1 | 侧边栏底部固定「反馈」按钮 | 点按钮弹出截图标注浮层，文案为中文；默认窗口无需滚动即可见 | `test/feedback_button_widget_test.dart`（侧边栏 hitTestable + 面板无重复入口）、`test/feedback_button_test.dart` | 待体验 |
 | T2 | 提交后落盘截图与说明 | 目录含 `screenshot.png`、`feedback.txt`；同秒两次提交不覆盖 | `test/feedback_service_test.dart` 2 个用例通过 | 待体验 |
 | T3 | 保存成功提示 + 「打开目录」 | 记录路径、平台与版本信息，Windows/macOS 均可打开目录 | 代码路径核对；真机按钮点击未在 Windows 验证 | 实现中 |
 | T4 | 发布 `v0.15.0` | CI 构建 Windows + macOS 并生成 Release | Release 已发布，两个平台产物 + SHA256SUMS 齐备 | 待体验 |
@@ -44,6 +44,9 @@
 | 2026-11-09 | 同上 | 同上 | 启动 Release 构建，检查进程与日志 | 应用正常启动，日志无 feedback 相关报错 |
 | 2026-11-09 | `b921d57`（含 v0.15.0 tag） | GitHub Actions（ubuntu / windows-latest / macos-latest） | `git push origin main`、`git push origin v0.15.0` | CI 运行 42611725042 成功；Release 运行 42611788174 全绿（quality-gate / build-windows / build-macos / release） |
 | 2026-11-09 | Release `v0.15.0` | GitHub Release | `gh release view v0.15.0` | 产物：Windows.zip 15.0MB、macOS.zip 21.6MB、SHA256SUMS |
+| 2026-11-10 | 1040×690 / 1280×800 模拟窗口 | widget 测量（临时探针，已删除） | 测设置面板内容与视口高度 | v0.15.0 入口不可见：视口 408 高、内容 585 高，「反馈」y=636，`hitTestable=false` |
+| 2026-11-10 | `2e9d4a4` | macOS，Flutter 3.41.3 | `flutter analyze` / `flutter test` / `flutter build macos --release` | analyze 无问题；512 用例通过；构建成功 52.8MB |
+| 2026-11-10 | `d764984` + tag `v0.15.1` | GitHub Actions | `git push origin main`、`git push origin v0.15.1` | Release 运行 42653473009 全绿；产物 Windows.zip 15.0MB、macOS.zip 21.6MB、SHA256SUMS |
 
 说明：截图提交链路在 widget 测试中依赖组件内部真实异步截屏，测试仅覆盖入口与落盘服务边界；完整“标注 + 提交 + 打开目录”需真机人工体验确认。
 
@@ -53,3 +56,5 @@
 | --- | --- | --- | --- |
 | `feat(feedback): 接入应用内截图反馈入口`（`4aef193`） | 新增反馈入口与落盘服务；修复 Windows 打开目录 | analyze / test / macOS 构建 | 已推送到 `main` |
 | `chore: release v0.15.0` | 版本号 0.14.1 → 0.15.0 | 同上 | 已推送到 `main`；签名 tag `v0.15.0` 触发 Release 构建并发布成功 |
+| `fix(feedback): 反馈入口移到侧边栏底部`（`2e9d4a4`） | v0.15.0 的入口藏在设置面板首屏之外，用户找不到；改为侧边栏底部固定入口，面板不留重复项 | analyze / test / macOS 构建 | 已推送到 `main` |
+| `chore: release v0.15.1`（`d764984`） | 版本号 0.15.0 → 0.15.1 | 同上 | 已推送到 `main`；签名 tag `v0.15.1` 发布成功 |
