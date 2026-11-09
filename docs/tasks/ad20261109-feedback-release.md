@@ -1,60 +1,64 @@
-# ad20261109：应用内截图反馈 + 发布 v0.15.0
+# ad20261109：接入个人灵感球反馈组件 + 发布
 
 - 项目 / 任务编号：personal-asmrdownloader / ad20261109
-- 状态：待体验（已发布 v0.15.1，等待用户确认）
+- 状态：待体验（已发布 v0.16.1，等待用户确认）
 - 创建日期（Asia/Taipei）：2026-11-09
 - 权威记录：本文件
 - 主仓库 / 当前工作目录：`/Users/sakurasep/Documents/Code/Project/Personal Project/AsmrDownloader`
 - 基线 / 分支 / 合入目标：`main`（`248a2c7`）→ `main`
-- 当前 HEAD / 未提交差异或快照：基线 `248a2c7` + 本次 feedback 改动（未提交部分见“提交与集成”）
-- 运行资源：无端口/常驻服务；验证产物在 `build/macos/Build/Products/Release/`，反馈落盘到应用数据目录 `feedback/<时间戳>/`
+- 当前 HEAD / 未提交差异或快照：`f9e9b38`（v0.16.1）；本次改动均已提交
+- 运行资源：无端口/常驻服务；验证产物在 `build/macos/Build/Products/Release/`；反馈提交到 Feedback 服务（生产地址）
 
 ## 目标与范围
 
-用户能在下载页「设置 → 常规与调试」点「反馈」，在应用内对当前界面做截图标注 + 写文字说明，提交后保存到应用数据目录，并可一键打开该目录，把截图作为附件提交到 GitHub Issues。本次同时发布 `v0.15.0`（Windows + macOS）。
+用户能在应用内用个人「灵感球」反馈组件提交反馈：点球或拖球到问题位置截图，在面板里写说明并提交到 Feedback 服务，由后台 AI 整理后归档到 Kaneo。
 
-范围：`feedback` 3.2.0 依赖接入、`BetterFeedback` 包裹根 `MaterialApp`、设置面板入口、落盘服务与 UI 动作、对应测试、版本号与 tag 发布。
-排除：反馈的自动上传（仍走人工 GitHub Issue）、与本次无关的未提交改动（`AGENTS.md`、`docs/*.md`、`.agent-teams/`）。
+**范围变更（2026-11-10）**：最初误接了 pub.dev 第三方 `feedback` 3.2.0（普通按钮 + 本地落盘 + 手动传 GitHub Issue），经用户指出后改接个人 Feedback 项目的 `feedback_widget`，本地落盘方案整体移除。
+
+范围：`feedback_widget` 0.9.0 接入（`MaterialApp` 外侧挂载 + 根持有 `FeedbackController`）、灵感球、`captureAndOpen()` 宿主入口、服务身份配置、对应测试、版本号与 tag 发布。
+排除：与本次无关的未提交改动（`AGENTS.md`、`docs/*.md`、`.agent-teams/`）。
 
 ## 已确认决定
 
-- 组件选型：`feedback` 3.2.0（pub 最新版），用法为 `BetterFeedback` 包裹 `MaterialApp`。
-- 落盘格式：每次提交写 `<应用数据目录>/feedback/<yyyyMMdd_HHmmssSSS>/`，含 `screenshot.png` 与 `feedback.txt`（说明 + 版本 + 平台 + 时间 + Issue 入口）；时间戳带毫秒，避免同秒覆盖。
-- 主题与文案：`BetterFeedback` 的 `themeMode` 跟随应用 `themeModeProvider`；`localeOverride` 锁定 `zh`（应用界面文案全中文，组件自带中文翻译）。
-- 入口位置：随「日志」按钮放入设置面板「常规与调试」分组。
-- 版本号：新功能 → `0.15.0`（沿用 0.13.0/0.14.0 的 minor 递增惯例）。
-- 顺带修复（本次必需前置）：`openFolderForDir` 在 Windows 上把 `explorer "$dir"` 整条当作可执行名，`Process.run` 不走 shell 导致打不开目录；改为 `Process.run('explorer', [dir])`。「打开目录」是该功能的用户出口，故纳入本次。
+- 组件选型：个人 Feedback 项目的 `feedback_widget`（git 依赖 + `flutter/feedback` 子目录，不发布 pub.dev），与 Music / MediaPlayer 一致。
+- 挂载位置：`FeedbackWidget` 包在 `MaterialApp` 外侧——截图边界提升到根 Navigator/Overlay 之上，`showDialog` 默认的根弹窗也入图。
+- 控制器：`FeedbackController` 由根 provider 持有，容器 dispose 时释放；页面只读取调用。
+- 配置：显式 `launcherMode: orb` + `captureMode: viewport`（包默认 tab/off）；`launcherBottom: 30%` 避开右下角任务浮条；`themeMode` 跟随 `themeModeProvider`；`pageLabel` 由页面索引收敛为固定分类，不上报路由/搜索词。
+- 服务身份：`--dart-define` 可覆盖，默认 `https://feedback.xn--fhqths51enha.cn` + appId `asmrdownloader`；debug 与测试构建默认不挂载。
+- 入口：侧边栏底部固定「反馈」按钮调用 `captureAndOpen()`（灵感球本身也是常驻入口）。
+- 版本号：`0.15.0`（误接版本）→ `0.15.1`（入口位置修正）→ `0.16.0`（换灵感球）→ `0.16.1`（依赖 commit 修正）。
+- 顺带修复（已作废）：`openFolderForDir` 的 Windows 参数修复随本地落盘方案一并移除后仍保留在代码中，作为独立缺陷修复有效。
 
 ## 实现与验收
 
 | 步骤 | 用户效果 / 实现范围 | 验收情形与预期 | 当前结果及证据 | 状态 |
 | --- | --- | --- | --- | --- |
-| T1 | 侧边栏底部固定「反馈」按钮 | 点按钮弹出截图标注浮层，文案为中文；默认窗口无需滚动即可见 | `test/feedback_button_widget_test.dart`（侧边栏 hitTestable + 面板无重复入口）、`test/feedback_button_test.dart` | 待体验 |
-| T2 | 提交后落盘截图与说明 | 目录含 `screenshot.png`、`feedback.txt`；同秒两次提交不覆盖 | `test/feedback_service_test.dart` 2 个用例通过 | 待体验 |
-| T3 | 保存成功提示 + 「打开目录」 | 记录路径、平台与版本信息，Windows/macOS 均可打开目录 | 代码路径核对；真机按钮点击未在 Windows 验证 | 实现中 |
-| T4 | 发布 `v0.15.0` | CI 构建 Windows + macOS 并生成 Release | Release 已发布，两个平台产物 + SHA256SUMS 齐备 | 待体验 |
+| T1 | 灵感球常驻右侧，可拖拽指出问题 | 球在场、56dp、停靠右侧；拖球松手进入局部选区 | `test/feedback_orb_mount_test.dart`（3 用例）；应用内元素树探针实测 `feedback-orb-body` 56×56 @ (964, 404.6) | 待体验 |
+| T2 | 点球/按钮呼出面板并截当前视口 | 面板打开、截图带敏感区遮挡、提交到服务 | 组件自带 668 用例通过；真实提交未验证 | 实现中 |
+| T3 | 侧边栏「反馈」按钮作为显式入口 | 默认窗口下可见可点，未启用时隐藏 | `test/feedback_button_widget_test.dart`（2 用例） | 待体验 |
+| T4 | 发布 v0.16.1（Windows + macOS） | CI 两平台构建通过并生成 Release | Release run 42668385310 全绿，产物齐备 | 待体验 |
 
 ## 执行与验证记录
 
 | 日期 | 代码版本 / 候选差异 | 环境与运行对象 | 命令或实际操作 | 结果 / 证据位置 |
 | --- | --- | --- | --- | --- |
-| 2026-11-09 | 基线 `248a2c7` + feedback 改动 | macOS 26.x，Flutter 3.41.3 | `flutter analyze` | No issues found |
-| 2026-11-09 | 同上 | 同上 | `flutter test` | 510 个用例全部通过（无失败） |
-| 2026-11-09 | 同上 | 同上 | `flutter build macos --release` | 构建成功，`AsmrDownloader.app` 52.8MB |
-| 2026-11-09 | 同上 | 同上 | 启动 Release 构建，检查进程与日志 | 应用正常启动，日志无 feedback 相关报错 |
-| 2026-11-09 | `b921d57`（含 v0.15.0 tag） | GitHub Actions（ubuntu / windows-latest / macos-latest） | `git push origin main`、`git push origin v0.15.0` | CI 运行 42611725042 成功；Release 运行 42611788174 全绿（quality-gate / build-windows / build-macos / release） |
-| 2026-11-09 | Release `v0.15.0` | GitHub Release | `gh release view v0.15.0` | 产物：Windows.zip 15.0MB、macOS.zip 21.6MB、SHA256SUMS |
-| 2026-11-10 | 1040×690 / 1280×800 模拟窗口 | widget 测量（临时探针，已删除） | 测设置面板内容与视口高度 | v0.15.0 入口不可见：视口 408 高、内容 585 高，「反馈」y=636，`hitTestable=false` |
-| 2026-11-10 | `2e9d4a4` | macOS，Flutter 3.41.3 | `flutter analyze` / `flutter test` / `flutter build macos --release` | analyze 无问题；512 用例通过；构建成功 52.8MB |
-| 2026-11-10 | `d764984` + tag `v0.15.1` | GitHub Actions | `git push origin main`、`git push origin v0.15.1` | Release 运行 42653473009 全绿；产物 Windows.zip 15.0MB、macOS.zip 21.6MB、SHA256SUMS |
+| 2026-11-10 | `0e430a3`（换灵感球） | macOS，Flutter 3.41.3 | `flutter analyze` | No issues found |
+| 2026-11-10 | 同上 | 同上 | `flutter test` | 518 个用例通过（新增灵感球挂载 3 例） |
+| 2026-11-10 | 同上 | 同上 | `flutter build macos --release` | 成功 55.0MB |
+| 2026-11-10 | 同上 | 同机运行 release 构建 | 元素树探针（临时，已移除） | `feedback-orb-body` size=56×56 pos=(964, 404.6)，`feedback-launcher-slot` 同尺寸；控制台无异常 |
+| 2026-11-10 | `v0.16.0` tag | GitHub Actions | Release 构建 42664059960 | **build-windows 失败**：`flutter pub get` 报 `Error on line 2, column 21: Unexpected character`；build-macos 通过 |
+| 2026-11-10 | Sakura-Feedback `8edc2be` | 本地 worktree | 组件包 `flutter pub get` / `flutter analyze` / `flutter test` | 通过；包测试 668 用例全绿；pubspec 被解析值全部 ASCII |
+| 2026-11-10 | `b36ab70`（ref 指向 8edc2be） | macOS | `flutter pub get` / `flutter analyze` / `flutter test` | 锁定到 8edc2b；analyze 无问题；518 用例通过 |
+| 2026-11-10 | `v0.16.1` tag | GitHub Actions | Release 构建 42668385310 | quality-gate / build-windows / build-macos / release **全部成功**；产物 Windows 15.4MB、macOS 22.4MB、SHA256SUMS |
 
-说明：截图提交链路在 widget 测试中依赖组件内部真实异步截屏，测试仅覆盖入口与落盘服务边界；完整“标注 + 提交 + 打开目录”需真机人工体验确认。
+**Windows 构建失败的根因**：组件包 `flutter/feedback/pubspec.yaml` 的 `description` 为中文，Windows 下 Dart pub 按系统代码页（GBK）解码该字段后解析失败。与宿主无关（Music / MediaPlayer 未在 Windows CI 上跑到该依赖路径）。修复为 ASCII description 后 Windows 构建通过。
 
 ## 提交与集成
 
 | 提交 | 行为变化与原因 | 验证 | 合并 / 发布情况 |
 | --- | --- | --- | --- |
-| `feat(feedback): 接入应用内截图反馈入口`（`4aef193`） | 新增反馈入口与落盘服务；修复 Windows 打开目录 | analyze / test / macOS 构建 | 已推送到 `main` |
-| `chore: release v0.15.0` | 版本号 0.14.1 → 0.15.0 | 同上 | 已推送到 `main`；签名 tag `v0.15.0` 触发 Release 构建并发布成功 |
-| `fix(feedback): 反馈入口移到侧边栏底部`（`2e9d4a4`） | v0.15.0 的入口藏在设置面板首屏之外，用户找不到；改为侧边栏底部固定入口，面板不留重复项 | analyze / test / macOS 构建 | 已推送到 `main` |
-| `chore: release v0.15.1`（`d764984`） | 版本号 0.15.0 → 0.15.1 | 同上 | 已推送到 `main`；签名 tag `v0.15.1` 发布成功 |
+| `4aef193` feat(feedback) | 误接 pub `feedback` 3.2.0（本地落盘） | analyze / test / macOS 构建 | v0.15.0 已发布 |
+| `2e9d4a4` fix(feedback) | 入口从设置面板移到侧边栏底部（原位置在首屏外） | 新增 widget 测试 | v0.15.1 已发布 |
+| `0e430a3` feat(feedback) | 换用个人 `feedback_widget` 灵感球，移除本地落盘 | analyze / test 518 / macOS 构建 / 元素树实测 | v0.16.0（Windows 失败，未发布） |
+| `b36ab70` fix(feedback) | ref 指向修复 Windows pub get 的组件 commit `8edc2be` | analyze / test 518 | v0.16.1 已发布 |
+| Sakura-Feedback `8edc2be` | 组件包 pubspec description 改 ASCII | 包测试 668 / analyze | 已推送 Feedback main |
