@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:asmr_downloader/pages/app_shell.dart';
+import 'package:asmr_downloader/pages/downloader/config_settings/components/feedback_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
 import 'package:asmr_downloader/pages/downloader/settings_panel.dart';
 import 'package:asmr_downloader/pages/update/update_entry.dart';
@@ -184,8 +185,17 @@ class AppSidebar extends ConsumerWidget {
             padding: EdgeInsets.symmetric(horizontal: 14),
             child: Divider(height: 1),
           ),
+          // 反馈入口固定在侧边栏底部：设置面板内容高于面板高度，
+          // 放在「常规与调试」分组里默认窗口下要滚动才看得见。
+          const Padding(
+            padding: EdgeInsets.fromLTRB(10, 8, 10, 0),
+            child: SizedBox(
+              width: double.infinity,
+              child: FeedbackButton(),
+            ),
+          ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
             child: Column(
               children: [
                 // 设置与日志快捷按钮

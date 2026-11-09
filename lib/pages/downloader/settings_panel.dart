@@ -3,7 +3,6 @@ import 'package:asmr_downloader/pages/downloader/config_settings/components/auto
 import 'package:asmr_downloader/pages/downloader/config_settings/components/debug_mode_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/dl_cover_check.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/download_threads_selector.dart';
-import 'package:asmr_downloader/pages/downloader/config_settings/components/feedback_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/github_token_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/log_viewer_button.dart';
 import 'package:asmr_downloader/pages/downloader/config_settings/components/notify_on_complete_check.dart';
@@ -98,7 +97,6 @@ class DownloaderSettingsPanel extends StatelessWidget {
                         icon: Icons.tune_rounded,
                         children: [
                           LogViewerButton(),
-                          FeedbackButton(),
                           DebugModeCheck(),
                           AutoUpdateCheck(),
                           OnboardingButton(),
