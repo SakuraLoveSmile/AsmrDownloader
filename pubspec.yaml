@@ -13,7 +13,13 @@ dependencies:
   desktop_drop: ^0.7.1
   dio: ^5.7.0
   drift: ^2.18.0
-  feedback: ^3.2.0
+  # 个人反馈组件（灵感球 + 视口截图），不发布到 pub.dev：固定 Git 标签 +
+  # flutter/feedback 子目录。升级组件 = 改 ref + flutter pub get。
+  feedback_widget:
+    git:
+      url: https://github.com/SakuraLoveSmile/Sakura-Feedback.git
+      ref: v0.9.0
+      path: flutter/feedback
   ffi: ^2.1.3
   file_picker: ^8.1.2
   flutter:

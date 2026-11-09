@@ -8,9 +8,12 @@ import 'package:asmr_downloader/pages/downloader/search_box/search_box.dart';
 import 'package:asmr_downloader/pages/window_title_bar/move_window.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_title_bar.dart';
 import 'package:asmr_downloader/pages/window_title_bar/window_close_handler.dart';
+import 'package:asmr_downloader/services/feedback/feedback_config.dart';
+import 'package:asmr_downloader/services/feedback/feedback_providers.dart';
+import 'package:asmr_downloader/services/update/update_providers.dart';
 import 'package:asmr_downloader/services/ui/ui_service.dart';
 import 'package:asmr_downloader/ui/app_theme.dart';
-import 'package:feedback/feedback.dart';
+import 'package:feedback_widget/feedback_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -28,50 +31,62 @@ class MyApp extends ConsumerWidget {
       _ => ThemeMode.dark,
     };
 
-    return Initialization(
-      // 截图反馈组件：须位于 MaterialApp/Navigator 之上；
-      // 主题跟随应用 themeMode，界面文案锁定中文（应用文案均为中文）
-      child: BetterFeedback(
+    final app = Initialization(
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        navigatorKey: navigatorKey,
+        scaffoldMessengerKey: scaffoldMessengerKey,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('en', 'US'), // English
+          Locale('zh', 'CN'), // Chinese
+        ],
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
         themeMode: themeMode,
-        localeOverride: const Locale('zh'),
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          navigatorKey: navigatorKey,
-          scaffoldMessengerKey: scaffoldMessengerKey,
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [
-            Locale('en', 'US'), // English
-            Locale('zh', 'CN'), // Chinese
-          ],
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          themeMode: themeMode,
-          scrollBehavior: MyCustomScrollBehavior(),
-          home: AppGlobalShortcuts(
-            child: Scaffold(
-              // 背景色由主题的 scaffoldBackgroundColor 统一控制
-              // Windows: MoveWindow 整窗可拖拽 + 自绘标题栏
-              // macOS: 原生标题栏（红绿灯）自带拖拽，不需要 MoveWindow 和自绘标题栏
-              body: WindowCloseHandler(
-                child: Platform.isWindows
-                    ? MoveWindow(
-                        child: Column(
-                          children: [
-                            WindowTitleBar(),
-                            Expanded(child: AppShell()),
-                          ],
-                        ),
-                      )
-                    : AppShell(),
-              ),
+        scrollBehavior: MyCustomScrollBehavior(),
+        home: AppGlobalShortcuts(
+          child: Scaffold(
+            // 背景色由主题的 scaffoldBackgroundColor 统一控制
+            // Windows: MoveWindow 整窗可拖拽 + 自绘标题栏
+            // macOS: 原生标题栏（红绿灯）自带拖拽，不需要 MoveWindow 和自绘标题栏
+            body: WindowCloseHandler(
+              child: Platform.isWindows
+                  ? MoveWindow(
+                      child: Column(
+                        children: [
+                          WindowTitleBar(),
+                          Expanded(child: AppShell()),
+                        ],
+                      ),
+                    )
+                  : AppShell(),
             ),
           ),
         ),
       ),
+    );
+
+    final service = ref.watch(feedbackServiceConfigProvider);
+    if (service == null) return app;
+
+    return FeedbackWidget(
+      config: buildFeedbackConfig(
+        service: service,
+        pageLabel: feedbackPageLabelForIndex(ref.watch(currentPageProvider)),
+        appVersion: ref.watch(appVersionProvider).valueOrNull,
+        theme: switch (themeMode) {
+          ThemeMode.light => FeedbackThemeMode.light,
+          ThemeMode.dark => FeedbackThemeMode.dark,
+          ThemeMode.system => FeedbackThemeMode.system,
+        },
+      ),
+      controller: ref.watch(feedbackControllerProvider),
+      child: app,
     );
   }
 }
