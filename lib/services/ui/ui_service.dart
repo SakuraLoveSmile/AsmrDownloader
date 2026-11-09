@@ -12,6 +12,7 @@ import 'package:asmr_downloader/services/download/download_providers.dart';
 import 'package:asmr_downloader/services/download/download_work_context.dart';
 import 'package:asmr_downloader/services/engine/chicken_rice_engine_service.dart';
 import 'package:asmr_downloader/services/engine/engine_providers.dart';
+import 'package:asmr_downloader/services/feedback/feedback_providers.dart';
 import 'package:asmr_downloader/services/library/library_providers.dart';
 import 'package:asmr_downloader/services/library/works_library_service.dart';
 import 'package:asmr_downloader/services/organize/organize_providers.dart';
@@ -27,6 +28,7 @@ import 'package:asmr_downloader/utils/asmr_url_parser.dart';
 import 'package:asmr_downloader/utils/system_proxy_config.dart';
 import 'package:asmr_downloader/utils/tool_functions.dart';
 import 'package:asmr_downloader/utils/log.dart';
+import 'package:feedback/feedback.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -893,13 +895,42 @@ class UIService {
     openFolderForDir(vkSourceIdPath);
   }
 
+  /// 保存 feedback 组件提交的用户反馈（标注截图 + 文字说明）到
+  /// <应用数据目录>/feedback/<时间戳>/，成功后提示并给出「打开目录」入口，
+  /// 供用户把附件提交到 GitHub Issue。
+  Future<void> submitFeedback(UserFeedback feedback) async {
+    String version = '';
+    try {
+      version = await ref.read(appVersionProvider.future);
+    } catch (_) {
+      // 版本号读取失败不阻断反馈保存
+    }
+    try {
+      final dir = await ref
+          .read(feedbackServiceProvider)
+          .save(feedback, appVersion: version);
+      showSnack(
+        '反馈已保存，可连同截图提交到 GitHub Issues',
+        action: SnackBarAction(
+          label: '打开目录',
+          onPressed: () => openFolderForDir(dir),
+        ),
+      );
+    } catch (e) {
+      Log.warning('save feedback failed\nerror: $e');
+      showSnack('反馈保存失败：$e');
+    }
+  }
+
   /// 在系统文件管理器中打开指定目录（不存在时回退到下载根目录）。
   void openFolderForDir(String path) {
     final dir =
         Directory(path).existsSync() ? path : ref.read(downloadPathProvider);
 
     if (Platform.isWindows) {
-      Process.run('explorer "$dir"', []);
+      // 目录须作为独立参数传入：Process.run 不走 shell，
+      // 'explorer "$dir"' 整条会被当作可执行名而失败
+      Process.run('explorer', [dir]);
     } else {
       Process.run('open', [dir]);
     }
