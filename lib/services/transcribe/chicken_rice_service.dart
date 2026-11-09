@@ -136,6 +136,8 @@ class _RealProcessHandle implements ProcessHandle {
 /// 关键设计：
 /// - **工作目录 = 脚本所在目录**（ChickenRice 运行时 os.chdir 到 exe 目录
 ///   查找 models/whisper_vad.onnx 与主模型，不设置会找不到模型）。
+/// - **base_dirs 一律绝对化后再传子进程**：本应用 Windows 默认用相对路径
+///   表达下载目录，子进程 chdir 后相对路径失效会直接崩（见 [run]）。
 /// - **base_dirs 传目录或文件均可**：UI 链路传的是本应用缺口检测算出的
 ///   「缺字幕音轨文件清单」（ChickenRice 自身跳过判据只认 foo.lrc，
 ///   不认官方字幕 foo.mp3.vtt 命名，传整个目录会重复翻译）；
@@ -181,7 +183,17 @@ class ChickenRiceService {
     return null;
   }
 
+  /// 把 base_dirs 解析为绝对路径（基准 = [Directory.current]，即应用目录）。
+  ///
+  /// ChickenRice 启动后会 `os.chdir` 到 infer.exe 所在目录，任何相对路径都会
+  /// 失效（见 [run] 的说明）。本应用在 Windows 上默认用相对路径表达下载目录，
+  /// 因此子进程边界必须显式绝对化。
+  static List<String> resolveDirs(List<String> dirs) =>
+      [for (final d in dirs) p.absolute(d)];
+
   /// 拼接传给 ChickenRice 的命令（base_dirs 为 [dirs]，每个目录独立参数）。
+  ///
+  /// 只做参数拼接：调用方 [run] 负责把 [dirs] 绝对化（[resolveDirs]）。
   List<String> buildCommand(List<String> dirs) {
     if (config.isBat) {
       // bat 模式按可靠性排序的三级回退：
@@ -270,8 +282,19 @@ class ChickenRiceService {
       return TranscribeResult(success: false, exitCode: -1, error: probe);
     }
 
-    final command = buildCommand(dirs);
-    final workDir = p.dirname(config.scriptPath);
+    // 目标路径必须在子进程边界绝对化。
+    //
+    // 背景（v0.14.x Windows 实测）：本应用在 Windows 上默认把下载根目录
+    // 保存为空串，作品目录/音轨用**相对路径**表达（相对应用当前工作目录，
+    // 见 initialization.dart 与 voiceWorkPathProvider）。而 ChickenRice
+    // 启动后会 os.chdir 到 infer.exe 所在目录，相对路径随之指向错误位置：
+    // PyAV/FFmpeg 打不开文件，Windows 上还会回退到 ANSI 代码页解析日文
+    // 路径，报 `av.error.ArgumentError: Invalid argument: '...' returned 22`
+    // 并让 PyInstaller 进程整体崩溃 —— 整批字幕直接中断。
+    // 绝对化的基准与缺口检测扫描时一致（Directory.current），因此配置的
+    // 下载根目录是相对路径时也能正确命中。
+    final command = buildCommand(resolveDirs(dirs));
+    final workDir = p.absolute(p.dirname(config.scriptPath));
     Log.info('chickenRice run: ${command.join(' ')}\n'
         'workingDir: $workDir');
 

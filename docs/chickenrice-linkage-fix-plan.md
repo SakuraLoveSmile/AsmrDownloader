@@ -148,3 +148,33 @@
 
 待确认：
 - ~~批量聚合（P1-5）~~ → **已确认并实施**（用户确认可一次请求多个选中作品，中途取消终止整批已接受）。
+
+---
+
+## 6. 补丁记录：子进程相对路径导致 AI 字幕整批崩溃（v0.14.x，Windows 实测）
+
+**现象**：Windows 上点「字幕」后实时日志停在 `VAD注入已停用`，随即整批中断：
+
+```
+av.error.ArgumentError: Invalid argument: '伊ヶ崎綾香&湯木ちゆり&逢坂成美-…\RJ01722913\01_勃起したら予算可決! .wav' returned 22
+[PYI-6148:ERROR] Failed to execute script 'infer' due to unhandled exception!
+```
+
+**根因（已由报错路径本身证实）**：
+
+1. 报错里的路径**没有盘符、直接从作品目录名开始**，形如 `<cv1>&<cv2>&<cv3>-<标题>\<RJ号>\<音轨>`，即 `p.join('', dirName, sourceId)` 的结果 —— 这是本应用在 Windows 上「下载目录 = 应用目录」的相对路径（`initialization.dart`：`// Windows 保持应用目录（相对路径）`），缺口检测返回的也是相对路径。
+2. `ChickenRiceService.run` 原样把相对路径作为 `base_dirs` 传给子进程；而 ChickenRice 启动时 `os.chdir(os.path.dirname(sys.executable))`（`infer.py` 第 18-22 行），相对路径随之解析到 **exe 目录**而不是应用目录 → 文件不存在。
+3. FFmpeg 打开该路径时报 **EINVAL（22）而不是 ENOENT**：Windows 上 `avpriv_open` → `_wsopen` 失败后回退 `_sopen`（按 ANSI/CP936 解释传入的 UTF-8 字节），日文路径在 CP936 下是非法多字节序列，最终 errno=EINVAL，PyAV 抛 `av.error.ArgumentError`。所以日志看起来像「路径非法」，实际是「相对路径基准被 chdir 换掉了」。
+4. 该异常在 ChickenRice 内未捕获 → PyInstaller 进程整体退出 → **整批字幕中断**（不会只跳过坏文件）。
+
+**修复**（`lib/services/transcribe/chicken_rice_service.dart`）：
+
+- 新增 `ChickenRiceService.resolveDirs()`：在**子进程边界**把 `base_dirs` 绝对化，基准 = `Directory.current`（与缺口检测扫描、下载写入的基准一致）。
+- `run()`：`buildCommand(resolveDirs(dirs))`；工作目录改为 `p.absolute(p.dirname(scriptPath))`。
+- 覆盖两个入口：批量「字幕所选 / 作品字幕」`transcribeWorks`，以及下载后自动翻译 `autoTranscribe`（经 `runOnDir`）。`buildCommand()` 保持纯参数拼接。
+
+**验证**：
+
+- `flutter analyze`：无告警。
+- `flutter test test/chicken_rice_service_test.dart`：32 项全通过（新增 3 项：exe 模式相对路径绝对化、bat 直调 exe 模式绝对化、`resolveDirs` 纯函数）。
+- 待 Windows 真机复验：含 `&` / `!` / 空格 / 日文标题的已下载作品重跑 AI 字幕，应正常产出 `.lrc`。
