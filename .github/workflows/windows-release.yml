@@ -1,13 +1,41 @@
 name: AsmrDownloader Release Build
 
+# KaneoPilot 通过 workflow_dispatch 触发本工作流，契约输入为
+# target_sha / release_batch_id / task_manifest_json / task_manifest_sha256 / tag_name。
+# Pilot 用运行的 display_title 认领运行，因此 dispatch 时 run-name 必须精确等于
+# pilot-release-<release_batch_id>；它同时要求 run.head_sha 等于冻结的工作流 ref 头。
+# 注意：这里不要加 concurrency 组 —— GitHub 会替换 pending run，Pilot 会丢失调度回执。
+# tag 推送（v*）仍按原方式构建并发布。
+run-name: "${{ inputs.release_batch_id != '' && format('pilot-release-{0}', inputs.release_batch_id) || format('Release {0}', github.ref_name) }}"
+
 on:
   push:
     tags:
       - 'v*'
   workflow_dispatch:
     inputs:
+      target_sha:
+        description: '要构建的完整 commit SHA（Pilot 冻结的构建源；构建 job 用它 checkout，而不是默认 ref）'
+        required: true
+        type: string
+      release_batch_id:
+        description: 'Pilot 冻结的发布批次标识；本次运行的标题固定为 pilot-release-<release_batch_id>'
+        required: true
+        type: string
+      task_manifest_json:
+        description: 'Pilot 发布清单（规范 UTF-8 JSON）；发布说明取其中的 changelog reporter/summary'
+        required: true
+        type: string
+      task_manifest_sha256:
+        description: 'task_manifest_json 原始字节的 SHA-256，用于核对清单未被改写'
+        required: true
+        type: string
+      tag_name:
+        description: '要指向 target_sha 创建并发布 Release 的 tag（如 v0.16.2）'
+        required: true
+        type: string
       version:
-        description: 'Release 版本号（如 v0.2.0），留空则不创建 Release'
+        description: '（兼容旧手动触发）版本号；新契约下版本由 tag_name 决定，仅在 tag_name 缺失时回退'
         required: false
         type: string
 
@@ -21,6 +49,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          # dispatch 构建冻结的 target_sha；tag 推送退回本轮 commit
+          ref: ${{ inputs.target_sha || github.sha }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -44,11 +75,13 @@ jobs:
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
-      VERSION: "${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
+      VERSION: "${{ inputs.tag_name || inputs.version || github.ref_name }}"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_sha || github.sha }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -81,11 +114,13 @@ jobs:
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
-      VERSION: "${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
+      VERSION: "${{ inputs.tag_name || inputs.version || github.ref_name }}"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.target_sha || github.sha }}
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -115,17 +150,23 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: [build-windows, build-macos]
-    # tag push 自动发布；手动触发时需填写 version 输入
-    if: github.event_name == 'push' || github.event.inputs.version != ''
+    # tag 推送自动发布；Pilot dispatch 必须带 tag_name 才发布
+    if: github.event_name == 'push' || inputs.tag_name != ''
 
     env:
       APP_NAME: "${{ github.event.repository.name }}"
-      VERSION: "${{ github.event_name == 'push' && github.ref_name || inputs.version }}"
+      TAG_NAME: "${{ inputs.tag_name || inputs.version || github.ref_name }}"
+      TARGET_SHA: "${{ inputs.target_sha || github.sha }}"
+      RELEASE_BATCH_ID: "${{ inputs.release_batch_id }}"
+      TASK_MANIFEST_JSON: "${{ inputs.task_manifest_json }}"
+      TASK_MANIFEST_SHA256: "${{ inputs.task_manifest_sha256 }}"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
         with:
+          # 工作流自身工具取冻结的工作流 commit，构建产物来自 target_sha
+          ref: ${{ github.workflow_sha }}
           fetch-depth: 0
 
       - name: Download Windows Artifact
@@ -146,8 +187,96 @@ jobs:
           sha256sum *.zip > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Generate Release Notes From Task Manifest
+        # 清单可能很大且含引号/换行，经 env 传入，避免拼进 shell
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+
+          tag = os.environ.get("TAG_NAME", "").strip()
+          target = os.environ.get("TARGET_SHA", "").strip()
+          batch = os.environ.get("RELEASE_BATCH_ID", "").strip()
+          raw = os.environ.get("TASK_MANIFEST_JSON", "")
+          expected = os.environ.get("TASK_MANIFEST_SHA256", "").strip().lower()
+
+          manifest = {}
+          if raw.strip():
+              actual = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+              if expected and actual != expected:
+                  # 清单只用于发布说明，不一致时告警而不是阻断发布
+                  print(
+                      "::warning::task_manifest_sha256 与清单内容不一致"
+                      f"（期望 {expected}，实际 {actual}）"
+                  )
+              try:
+                  manifest = json.loads(raw)
+              except json.JSONDecodeError as exc:
+                  print(f"::warning::task_manifest_json 无法解析（{exc}），发布说明回退为默认内容")
+                  manifest = {}
+
+          if not isinstance(manifest, dict):
+              manifest = {}
+
+          entries = []
+
+          # 前向兼容：清单顶层若直接带 changelog 对象
+          changelog = manifest.get("changelog")
+          if isinstance(changelog, dict):
+              entries.append(changelog)
+
+          # 当前 KaneoPilot 契约：changelog 的 reporter/summary 挂在对应成员上
+          members = manifest.get("members")
+          if isinstance(members, list):
+              root = manifest.get("root_task_id")
+              ordered = sorted(
+                  (item for item in members if isinstance(item, dict)),
+                  key=lambda item: 0 if root and item.get("task_id") == root else 1,
+              )
+              entries.extend(ordered)
+
+          lines = ["## 本次变更", ""]
+          seen = set()
+          for entry in entries:
+              summary = str(entry.get("summary") or "").strip()
+              reporter = str(entry.get("reporter") or "").strip()
+              if not summary:
+                  continue
+              if (summary, reporter) in seen:
+                  continue
+              seen.add((summary, reporter))
+              lines.append(f"- {summary}" + (f"（{reporter}）" if reporter else ""))
+
+          if len(lines) == 2:
+              lines.append(f"- {tag or '本次构建'} 的发布产物由发布流水线生成")
+
+          lines.extend(["", "## 构建信息", ""])
+          if tag:
+              lines.append(f"- 版本标签：`{tag}`")
+          if target:
+              lines.append(f"- 构建提交：`{target}`")
+          if batch:
+              lines.append(f"- 发布批次：`{batch}`")
+          lines.extend(
+              [
+                  "",
+                  "请下载对应平台的 zip，并用同批发布的 `SHA256SUMS` 校验完整性。",
+              ]
+          )
+
+          notes = "\n".join(lines) + "\n"
+          pathlib.Path("RELEASE_NOTES.md").write_text(notes, encoding="utf-8")
+          print(notes)
+          PY
+
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # gh release create 在 tag 不存在时会自动创建（workflow_dispatch 场景）
-        run: gh release create "$VERSION" dist/*.zip dist/SHA256SUMS --title "$APP_NAME $VERSION"
+        # tag_name 指向 target_sha：tag 不存在时由 gh 在该 commit 上创建，再挂 Release
+        run: |
+          gh release create "$TAG_NAME" dist/*.zip dist/SHA256SUMS \
+            --target "$TARGET_SHA" \
+            --title "$APP_NAME $TAG_NAME" \
+            --notes-file RELEASE_NOTES.md
