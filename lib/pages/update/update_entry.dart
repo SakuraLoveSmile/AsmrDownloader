@@ -3,7 +3,7 @@ import 'package:asmr_downloader/services/update/update_providers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// 版本号 + 检查更新入口：嵌入 Windows 自绘标题栏 / macOS 导航行。
+/// 版本号 + 检查更新入口：嵌入桌面侧栏底部。
 ///
 /// 显示当前版本号；发现新版本时图标高亮提示，点击打开更新对话框；
 /// 无已知新版时点击触发手动检查。
