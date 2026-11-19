@@ -6,6 +6,12 @@ name: AsmrDownloader Release Build
 # pilot-release-<release_batch_id>；它同时要求 run.head_sha 等于冻结的工作流 ref 头。
 # 注意：这里不要加 concurrency 组 —— GitHub 会替换 pending run，Pilot 会丢失调度回执。
 # tag 推送（v*）仍按原方式构建并发布。
+#
+# 发布产物名固定（不带版本号），与 KaneoPilot 发布策略的 required_assets 对应：
+#   AsmrDownloader-Windows.zip / AsmrDownloader-macOS.zip
+# 发布完成门还要求本次运行产出一个 artifact `kaneopilot-provenance`，压缩包内只有
+# 一个 `kaneopilot-release.json`；它由 .github/scripts/pilot_release.py prepare 生成，
+# 同一份字节再作为 Release 资产上传（Release 里必须有同名资产且字节完全一致）。
 run-name: "${{ inputs.release_batch_id != '' && format('pilot-release-{0}', inputs.release_batch_id) || format('Release {0}', github.ref_name) }}"
 
 on:
@@ -95,17 +101,17 @@ jobs:
 
       - name: Compress Release Folder
         shell: pwsh
+        # 产物名固定，KaneoPilot 的 required_assets 直接用这个名字
         run: |
-          $ZipFileName = "${{ env.APP_NAME }}-${{ env.VERSION }}-Windows.zip"
           Compress-Archive `
             -Path build/windows/x64/runner/Release/* `
-            -DestinationPath "$ZipFileName"
+            -DestinationPath "AsmrDownloader-Windows.zip"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: "*.zip"
+          path: AsmrDownloader-Windows.zip
           if-no-files-found: error
 
   build-macos:
@@ -136,15 +142,15 @@ jobs:
         run: flutter build macos --release
 
       - name: Compress Release Folder
+        # 产物名固定，KaneoPilot 的 required_assets 直接用这个名字
         run: |
-          ZipFileName="${{ env.APP_NAME }}-${{ env.VERSION }}-macOS.zip"
-          ditto -c -k --keepParent "build/macos/Build/Products/Release/AsmrDownloader.app" "$ZipFileName"
+          ditto -c -k --keepParent "build/macos/Build/Products/Release/AsmrDownloader.app" "AsmrDownloader-macOS.zip"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-release
-          path: "*.zip"
+          path: AsmrDownloader-macOS.zip
           if-no-files-found: error
 
   release:
@@ -154,7 +160,6 @@ jobs:
     if: github.event_name == 'push' || inputs.tag_name != ''
 
     env:
-      APP_NAME: "${{ github.event.repository.name }}"
       TAG_NAME: "${{ inputs.tag_name || inputs.version || github.ref_name }}"
       TARGET_SHA: "${{ inputs.target_sha || github.sha }}"
       RELEASE_BATCH_ID: "${{ inputs.release_batch_id }}"
@@ -173,19 +178,13 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: windows-release
-          path: dist/
+          path: release-files/
 
       - name: Download macOS Artifact
         uses: actions/download-artifact@v4
         with:
           name: macos-release
-          path: dist/
-
-      - name: Generate SHA256SUMS
-        run: |
-          cd dist
-          sha256sum *.zip > SHA256SUMS
-          cat SHA256SUMS
+          path: release-files/
 
       - name: Generate Release Notes From Task Manifest
         # 清单可能很大且含引号/换行，经 env 传入，避免拼进 shell
@@ -206,7 +205,7 @@ jobs:
           if raw.strip():
               actual = hashlib.sha256(raw.encode("utf-8")).hexdigest()
               if expected and actual != expected:
-                  # 清单只用于发布说明，不一致时告警而不是阻断发布
+                  # prepare 会再严格校验一次；这里只提示，不打断发布说明生成
                   print(
                       "::warning::task_manifest_sha256 与清单内容不一致"
                       f"（期望 {expected}，实际 {actual}）"
@@ -262,7 +261,8 @@ jobs:
           lines.extend(
               [
                   "",
-                  "请下载对应平台的 zip，并用同批发布的 `SHA256SUMS` 校验完整性。",
+                  "请下载对应平台的 zip，并用同批发布的 `kaneopilot-release.json` 校验完整性"
+                  "（其中记录每个资产的 size 与 sha256）。",
               ]
           )
 
@@ -271,12 +271,25 @@ jobs:
           print(notes)
           PY
 
-      - name: Create GitHub Release
+      - name: Prepare Provenance Manifest
+        # 用本次运行落盘的两个 zip 生成 kaneopilot-release.json：assets 声明 size/sha256，
+        # 同时核对 inputs 身份与 task_manifest 的规范字节（不通过就在发布前失败）
+        run: python3 .github/scripts/pilot_release.py prepare release-files
+
+      - name: Preserve Exact Release Provenance
+        # artifact 名与内部文件名都被 KaneoPilot 的发布完成门精确匹配；单一文件路径会让
+        # 压缩包里只有一个顶层条目 kaneopilot-release.json（无目录前缀）
+        uses: actions/upload-artifact@v4
+        with:
+          name: kaneopilot-provenance
+          path: release-files/kaneopilot-release.json
+          if-no-files-found: error
+          retention-days: 90
+          overwrite: true
+
+      - name: Publish Release
+        # 创建/复用 draft Release → 上传两个 zip 与同一份 kaneopilot-release.json → 回读
+        # 校验 size/sha256 digest 后取消 draft；tag 必须指向 target_sha
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # tag_name 指向 target_sha：tag 不存在时由 gh 在该 commit 上创建，再挂 Release
-        run: |
-          gh release create "$TAG_NAME" dist/*.zip dist/SHA256SUMS \
-            --target "$TARGET_SHA" \
-            --title "$APP_NAME $TAG_NAME" \
-            --notes-file RELEASE_NOTES.md
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/pilot_release.py publish release-files --notes-file RELEASE_NOTES.md

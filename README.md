@@ -101,7 +101,18 @@
 
 - **Windows**：`flutter build windows --release`
 - **macOS**：`flutter build macos --release`（要求 Xcode 27+，部署目标 macOS 12.0+）
-- **CI**：推送 `v*` tag 自动构建 Windows + macOS 并发布到 GitHub Release（tag 触发在 fork 仓库可能不生效，可用 `gh workflow run "AsmrDownloader Release Build" --ref main -f version=vX.Y.Z` 手动触发）
+- **CI**：推送 `v*` tag 自动构建 Windows + macOS 并发布到 GitHub Release（产物固定为 `AsmrDownloader-Windows.zip` / `AsmrDownloader-macOS.zip`，另附 `kaneopilot-release.json` 记录每个资产的 size 与 sha256）。tag 触发在 fork 仓库可能不生效，也可手动触发：
+
+  ```bash
+  MANIFEST='{}'  # 手动触发没有任务清单，内嵌为空对象；渠道与版本从 tag_name 推导
+  gh workflow run "AsmrDownloader Release Build" --ref main \
+    -f target_sha="$(git rev-parse HEAD)" \
+    -f release_batch_id="manual-$(date +%Y%m%d%H%M%S)" \
+    -f tag_name=vX.Y.Z \
+    -f task_manifest_json="$MANIFEST" \
+    -f task_manifest_sha256="$(printf '%s' "$MANIFEST" | shasum -a 256 | cut -d' ' -f1)"
+  ```
+
 - macOS 产物未签名，首次打开需右键 → 打开
 
 # 已知问题
