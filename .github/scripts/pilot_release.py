@@ -165,11 +165,13 @@ def gh(args, payload=None, binary=False, allow_404=False):
     return process.stdout if binary else process.stdout.decode('utf-8')
 
 
-def api_json(path, method=None, payload=None, allow_404=False):
+def api_json(path, method=None, payload=None, allow_404=False, headers=()):
     args = ['api']
     if method:
         args += ['--method', method]
     args.append(path)
+    for header in headers:
+        args += ['-H', header]
     if payload is not None:
         args += ['--input', '-']
     text = gh(args, payload=payload, allow_404=allow_404)
@@ -206,6 +208,19 @@ def tag_commit(repository, tag):
 
 def release_by_tag(repository, tag):
     return api_json('repos/' + repository + '/releases/tags/' + quote(tag), allow_404=True)
+
+
+def draft_by_tag(repository, tag):
+    """draft 不出现在 releases/tags 端点（这是 404 而不是空结果），只能从 Release 列表里找。"""
+    for page in range(1, 11):
+        rows = api_json('repos/' + repository + '/releases?per_page=100&page=' + str(page))
+        require(isinstance(rows, list), '无法读取 Release 列表')
+        for row in rows:
+            if isinstance(row, dict) and row.get('tag_name') == tag and row.get('draft') is True:
+                return row
+        if len(rows) < 100:
+            return None
+    raise ValueError('Release 列表分页超过上限')
 
 
 def list_assets(repository, release_id):
@@ -289,6 +304,55 @@ def verify_release(repository, release, provenance, path):
                 release_url=release.get('html_url'), release_id=release.get('id'), assets=verified)
 
 
+def create_draft(repository, provenance, notes):
+    """POST 直接拿回 Release 身份：draft 无法按 tag 读回，不能让发布依赖第二次查询。"""
+    path, generated = notes_file(notes, provenance)
+    try:
+        body = path.read_text(encoding='utf-8')
+    finally:
+        if generated:
+            path.unlink(missing_ok=True)
+    tag = provenance['tag']
+    value = api_json('repos/' + repository + '/releases', method='POST',
+                     payload=canonical(dict(tag_name=tag, target_commitish=provenance['target_sha'],
+                                            name=repository.split('/')[-1] + ' ' + tag, body=body,
+                                            draft=True,
+                                            prerelease=provenance['channel'] == 'prerelease')),
+                     headers=('Content-Type: application/json',))
+    require(isinstance(value, dict) and type(value.get('id')) is int and value['id'] > 0,
+            '创建 draft Release 后没有返回可用的 Release id')
+    return value
+
+
+def delete_asset(repository, asset_id):
+    gh(['api', '--method', 'DELETE', 'repos/' + repository + '/releases/assets/' + str(asset_id)])
+
+
+def upload_asset(repository, release_id, path, name):
+    text = gh(['api', '--method', 'POST',
+               'repos/' + repository + '/releases/' + str(release_id) + '/assets?name=' + quote(name),
+               '-H', 'Content-Type: application/octet-stream', '--input', str(path)])
+    value = json.loads(text.strip() or 'null')
+    require(isinstance(value, dict) and type(value.get('id')) is int and value.get('name') == name,
+            '上传发布资产后没有返回可核对的资产身份：' + name)
+    return value
+
+
+def ensure_assets(repository, release_id, uploads):
+    """同一份字节重跑时只补缺失或替换不一致的资产，不重建 Release。"""
+    rows = assets_by_name(repository, release_id)
+    for name, path in uploads:
+        size = path.stat().st_size
+        digest = 'sha256:' + sha256_file(path)
+        current = rows.get(name)
+        if isinstance(current, dict) and current.get('size') == size and current.get('digest') == digest:
+            continue
+        if isinstance(current, dict):
+            require(type(current.get('id')) is int, '已有发布资产的 id 不可确认：' + name)
+            delete_asset(repository, current['id'])
+        upload_asset(repository, release_id, path, name)
+
+
 def publish(root, notes):
     path, provenance = write_or_check(root)
     repository = provenance['repository']
@@ -303,21 +367,21 @@ def publish(root, notes):
         # 已发布的 Release 不能重新打包；只有字节完全一致才算幂等重跑。
         return verify_release(repository, release, provenance, path)
     if not isinstance(release, dict):
-        notes_path, generated = notes_file(notes, provenance)
-        try:
-            gh(['release', 'create', tag, '--repo', repository, '--draft', '--target',
-                provenance['target_sha'], '--title', repository.split('/')[-1] + ' ' + tag,
-                '--notes-file', str(notes_path)] + (['--prerelease'] if prerelease else []))
-        finally:
-            if generated:
-                notes_path.unlink(missing_ok=True)
-        release = release_by_tag(repository, tag)
-        require(isinstance(release, dict), 'Release 创建后无法读回')
+        # 按 tag 读不到只证明它还不是已发布 Release；列表里同 tag 的 draft 必须复用而不是重建。
+        release = draft_by_tag(repository, tag)
+    if not isinstance(release, dict):
+        release = create_draft(repository, provenance, notes)
     require(release.get('tag_name') == tag, 'draft Release 的 tag 不是 ' + tag)
-    uploads = [str(root / name) for name in ASSETS] + [str(path)]
-    gh(['release', 'upload', tag, *uploads, '--repo', repository, '--clobber'])
-    api_json('repos/' + repository + '/releases/' + str(release.get('id')), method='PATCH',
-             payload=canonical(dict(draft=False, prerelease=prerelease)))
+    require(release.get('draft') is True, 'Release 不是可继续发布的 draft，请先人工核对：' + tag)
+    require(release.get('target_commitish') == provenance['target_sha'],
+            '已有 draft Release 的 target 是 ' + repr(release.get('target_commitish'))
+            + '，不是本次 target_sha；拒绝复用')
+    ensure_assets(repository, release['id'], [(name, root / name) for name in ASSETS]
+                  + [(MANIFEST_NAME, path)])
+    value = api_json('repos/' + repository + '/releases/' + str(release['id']), method='PATCH',
+                     payload=canonical(dict(draft=False, prerelease=prerelease)),
+                     headers=('Content-Type: application/json',))
+    require(isinstance(value, dict) and value.get('id') == release['id'], '发布 Release 后身份不可确认')
     final = release_by_tag(repository, tag)
     return verify_release(repository, final, provenance, path)
 
