@@ -1,7 +1,7 @@
 # asmr-ci01：修复 KaneoPilot 发布脚本的 draft 回读失败
 
 - 项目 / 任务编号：personal-asmrdownloader / asmr-ci01
-- 状态：实现中（本地验证通过，等待 PR 合入与真实 Actions 复核）
+- 状态：实现中（两轮修复已通过本地与真实 GitHub 端到端验证，等待合入 main 后由 KaneoPilot 重新派发）
 - 创建日期（Asia/Taipei）：2026-11-20
 - 权威记录：本文件
 - 基线 / 分支 / 合入目标：`main`（`ebc8384`）→ `fix/20261120-asmr-ci01-pilot-release-draft-readback` → `main`
@@ -48,6 +48,21 @@ quality-gate、build-macos、build-windows 全绿，只有 release job 的 Publi
 | 逻辑（拒绝误用） | 桩内 draft 的 target 是别的 SHA → 明确报错，不覆盖 | 通过 |
 | 逻辑（重复发布） | 已发布且字节一致 → 幂等返回 | 通过 |
 | 真实 Actions 运行 | 未运行（需合入 main 后由 KaneoPilot 重新派发） | 未验证 |
+
+## 第二轮：资产上传固定 404（run 44671441424）
+
+第一轮合并后在 `main@638ceaf` 重新派发（批次 `93124053-90b9-4f1a-aad9-f316033c5f3d`，
+tag `v0.16.2-pilot.1795147044`）：draft 创建成功，但资产上传报 `gh api ... Not Found (HTTP 404)`。
+
+- 根因：GitHub 的资产上传端点在 `uploads.github.com`，`gh api` 只打 `api.github.com`，
+  对新上传固定 404（与 draft、权限无关）。
+- 实测（临时 draft，验证后已删除）：`gh api --method POST .../releases/{id}/assets` → 404；
+  `gh release upload <tag> --clobber` → 成功，且能按 tag 解析到 draft。
+- 修正：资产改走 `gh release upload --clobber`；draft 创建（REST 拿 id）与 PATCH 发布保留；
+  `gh` 报错补上子命令，便于下次定位。
+
+真实端到端验证（临时 tag `v0.0.0-probe-ci01b.<ts>`，验证后 Release 与 tag 均已删除）：
+`prepare` → `POST /releases` 建 draft → 上传 3 个资产 → `PATCH` 发布 → `verify_release` 通过。
 
 ## 遗留
 

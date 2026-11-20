@@ -161,7 +161,8 @@ def gh(args, payload=None, binary=False, allow_404=False):
         message = process.stderr.decode('utf-8', 'replace').strip()
         if allow_404 and 'HTTP 404' in message:
             return None
-        raise ValueError('gh ' + args[0] + ' 失败：' + (message or '退出码 ' + str(process.returncode)))
+        raise ValueError('gh ' + ' '.join(args[:2]) + ' 失败：'
+                         + (message or '退出码 ' + str(process.returncode)))
     return process.stdout if binary else process.stdout.decode('utf-8')
 
 
@@ -324,33 +325,11 @@ def create_draft(repository, provenance, notes):
     return value
 
 
-def delete_asset(repository, asset_id):
-    gh(['api', '--method', 'DELETE', 'repos/' + repository + '/releases/assets/' + str(asset_id)])
-
-
-def upload_asset(repository, release_id, path, name):
-    text = gh(['api', '--method', 'POST',
-               'repos/' + repository + '/releases/' + str(release_id) + '/assets?name=' + quote(name),
-               '-H', 'Content-Type: application/octet-stream', '--input', str(path)])
-    value = json.loads(text.strip() or 'null')
-    require(isinstance(value, dict) and type(value.get('id')) is int and value.get('name') == name,
-            '上传发布资产后没有返回可核对的资产身份：' + name)
-    return value
-
-
-def ensure_assets(repository, release_id, uploads):
-    """同一份字节重跑时只补缺失或替换不一致的资产，不重建 Release。"""
-    rows = assets_by_name(repository, release_id)
-    for name, path in uploads:
-        size = path.stat().st_size
-        digest = 'sha256:' + sha256_file(path)
-        current = rows.get(name)
-        if isinstance(current, dict) and current.get('size') == size and current.get('digest') == digest:
-            continue
-        if isinstance(current, dict):
-            require(type(current.get('id')) is int, '已有发布资产的 id 不可确认：' + name)
-            delete_asset(repository, current['id'])
-        upload_asset(repository, release_id, path, name)
+def upload_assets(repository, tag, uploads):
+    """资产必须走 gh 的 release 上传：REST 上传端点在 uploads.github.com，
+    gh api 只打 api.github.com，对新上传固定 404。gh release upload 能按 tag 找到
+    draft；同一份字节重跑时用 --clobber 覆盖成同样的内容。"""
+    gh(['release', 'upload', tag, *[str(path) for path in uploads], '--repo', repository, '--clobber'])
 
 
 def publish(root, notes):
@@ -376,8 +355,7 @@ def publish(root, notes):
     require(release.get('target_commitish') == provenance['target_sha'],
             '已有 draft Release 的 target 是 ' + repr(release.get('target_commitish'))
             + '，不是本次 target_sha；拒绝复用')
-    ensure_assets(repository, release['id'], [(name, root / name) for name in ASSETS]
-                  + [(MANIFEST_NAME, path)])
+    upload_assets(repository, tag, [root / name for name in ASSETS] + [path])
     value = api_json('repos/' + repository + '/releases/' + str(release['id']), method='PATCH',
                      payload=canonical(dict(draft=False, prerelease=prerelease)),
                      headers=('Content-Type: application/json',))
